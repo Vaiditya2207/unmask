@@ -7,6 +7,37 @@ import { verifyAsset } from "./release-policy.mjs";
 
 const registry = "https://registry.npmjs.org/";
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const npmFailureCodes = new Set([
+  "EOTP",
+  "E401",
+  "E403",
+  "ENEEDAUTH",
+  "EPUBLISHCONFLICT",
+  "EPRIVATE",
+  "E400",
+  "E404",
+  "E409",
+  "E429",
+  "EUSAGE",
+  "ETIMEDOUT",
+  "ECONNRESET",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ECONNREFUSED",
+  "EINTEGRITY",
+]);
+function npmFailureCode(stderr) {
+  if (typeof stderr !== "string" && !Buffer.isBuffer(stderr)) return null;
+  const text = Buffer.isBuffer(stderr)
+    ? stderr.subarray(0, 65536).toString("utf8")
+    : stderr.slice(0, 65536);
+  for (const match of text.matchAll(
+    /^npm (?:ERR!|error) code (E[A-Z0-9_]+)\r?$/gm,
+  ))
+    if (npmFailureCodes.has(match[1])) return match[1];
+  return null;
+}
+
 function candidate(root, prepared, archive) {
   const pkg = JSON.parse(readFileSync(path.join(root, "package.json")));
   const config = JSON.parse(
@@ -146,6 +177,7 @@ export async function publishNpm(
     return receiptFor(info, prepared);
   }
   let failed = false;
+  let failureCode = null;
   try {
     execute(
       "npm",
@@ -163,12 +195,14 @@ export async function publishNpm(
       {
         cwd: root,
         env: { ...env, NPM_CONFIG_LOGLEVEL: "error" },
-        stdio: "ignore",
+        stdio: ["ignore", "ignore", "pipe"],
+        maxBuffer: 65536,
         timeout: 120000,
       },
     );
-  } catch {
+  } catch (error) {
     failed = true;
+    failureCode = npmFailureCode(error.stderr);
   }
   for (let attempt = 0; attempt < 5; attempt++) {
     if (await published(info, fetchImpl)) {
@@ -179,7 +213,7 @@ export async function publishNpm(
   }
   throw new Error(
     failed
-      ? "Npm publish failed; no exact public registry version verified"
+      ? `Npm publish failed${failureCode ? ` (${failureCode})` : ""}; no exact public registry version verified`
       : "Npm publish returned without a verified public registry version",
   );
 }

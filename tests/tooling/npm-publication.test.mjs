@@ -83,7 +83,8 @@ function fixture(t, { enabled = true, existing = false, scoped = false } = {}) {
       assert.ok(args.includes("--ignore-scripts"));
       assert.ok(args.includes("--access"));
       assert.equal(args[args.indexOf("--access") + 1], "public");
-      assert.equal(options.stdio, "ignore");
+      assert.deepEqual(options.stdio, ["ignore", "ignore", "pipe"]);
+      assert.equal(options.maxBuffer, 65536);
       assert.equal(
         args.some((arg) => arg.includes(env.NODE_AUTH_TOKEN)),
         false,
@@ -272,4 +273,56 @@ test("scoped first publication uses the encoded metadata route and canonical sco
     "https://registry.npmjs.org/@fixture/unmask/-/unmask-1.0.0.tgz",
   );
   assert.equal(f.calls.length, 1);
+});
+
+for (const code of ["EOTP", "E401", "E403", "ENEEDAUTH", "EPUBLISHCONFLICT"]) {
+  test(`npm failure exposes only allowlisted ${code}, never captured secrets`, async (t) => {
+    const f = fixture(t);
+    await assert.rejects(
+      run(f, {
+        execute(_command, _args, options) {
+          assert.deepEqual(options.stdio, ["ignore", "ignore", "pipe"]);
+          assert.equal(options.maxBuffer, 65536);
+          throw Object.assign(new Error("SYNTHETIC_SECRET_IN_MESSAGE"), {
+            stderr: Buffer.from(
+              `npm error code ${code}\nnpm error SYNTHETIC_SECRET_IN_STDERR ${f.env.NODE_AUTH_TOKEN}\n`,
+            ),
+            stdout: "SYNTHETIC_SECRET_IN_STDOUT",
+          });
+        },
+      }),
+      (error) => {
+        assert.equal(
+          error.message,
+          `Npm publish failed (${code}); no exact public registry version verified`,
+        );
+        assert.doesNotMatch(String(error), /SYNTHETIC_SECRET/);
+        assert.equal(String(error).includes(f.env.NODE_AUTH_TOKEN), false);
+        assert.equal(error.cause, undefined);
+        return true;
+      },
+    );
+  });
+}
+
+test("unrecognized npm code and raw output remain undisclosed", async (t) => {
+  const f = fixture(t);
+  await assert.rejects(
+    run(f, {
+      execute() {
+        throw Object.assign(new Error("SYNTHETIC_SECRET"), {
+          stderr:
+            "npm ERR! code ESECRET_TOKEN\nnpm ERR! E401 in a raw message SYNTHETIC_SECRET",
+        });
+      },
+    }),
+    (error) => {
+      assert.equal(
+        error.message,
+        "Npm publish failed; no exact public registry version verified",
+      );
+      assert.doesNotMatch(String(error), /ESECRET_TOKEN|E401|SYNTHETIC_SECRET/);
+      return true;
+    },
+  );
 });
