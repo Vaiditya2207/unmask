@@ -13,6 +13,10 @@ __pycache__/
 models/
 artifacts/
 gha-creds-*.json
+.next/
+next-env.d.ts
+*.tsbuildinfo
+.taste-skill/
 
 # Internal planning/research notes: never commit (keep them in ../unmask-research)
 internal/

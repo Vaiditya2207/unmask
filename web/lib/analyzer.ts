@@ -1,0 +1,89 @@
+import type { Report } from "./report.ts";
+
+// The analyzer service is separate from this site. Set UNMASK_API_URL to its
+// origin; without it the site serves the sample report and says so.
+export function analyzerUrl(): string | null {
+  const value = process.env.UNMASK_API_URL?.trim();
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:"
+      ? url.origin
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export const REPORT_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+export type JobStatus =
+  "queued" | "running" | "incomplete" | "failed" | "completed";
+
+export interface Job {
+  id: string;
+  nameAtExactVersion: string;
+  status: JobStatus;
+  createdAt: number;
+  finishedAt?: number;
+  reason?: string;
+  report?: Report;
+}
+
+const STATUSES: JobStatus[] = [
+  "queued",
+  "running",
+  "incomplete",
+  "failed",
+  "completed",
+];
+
+// The analyzer serves the job while it is pending and the schema 1 report itself
+// once it completes; that report is linked, not rendered, until a mapping exists.
+export type Fetched =
+  | { ok: true; kind: "job"; job: Job }
+  | { ok: true; kind: "report"; schemaVersion: string; analyzer: string }
+  | { ok: false; status: number };
+
+export async function fetchJob(id: string): Promise<Fetched> {
+  const base = analyzerUrl();
+  if (!base || !REPORT_ID.test(id)) return { ok: false, status: 404 };
+  try {
+    const response = await fetch(`${base}/r/${id}.json`, {
+      cache: "no-store",
+      headers: { accept: "application/json" },
+    });
+    if (!response.ok) return { ok: false, status: response.status };
+    const body = (await response.json()) as Record<string, unknown>;
+    if (typeof body.schemaVersion === "string")
+      return {
+        ok: true,
+        kind: "report",
+        schemaVersion: body.schemaVersion,
+        analyzer: base,
+      };
+    if (
+      typeof body.nameAtExactVersion === "string" &&
+      STATUSES.includes(body.status as JobStatus) &&
+      typeof body.createdAt === "number"
+    )
+      return {
+        ok: true,
+        kind: "job",
+        job: { ...(body as unknown as Job), id },
+      };
+    return { ok: false, status: 502 };
+  } catch {
+    return { ok: false, status: 502 };
+  }
+}
+
+export const checkErrors: Record<string, string> = {
+  invalid:
+    "That is not an exact npm release. Use a name and version, such as clsx@2.1.1.",
+  offline:
+    "The analyzer is not connected to this site yet. The sample report shows what a check returns.",
+  busy: "The analyzer is at its limit of six new checks per ten minutes. Try again shortly.",
+  failed:
+    "The analyzer did not accept the check. Try again, or open the sample report.",
+};

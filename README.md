@@ -77,6 +77,9 @@ queues analysis, and serves the same report format as the CLI. It accepts no
 uploads. Its development worker limits and temporary-file cleanup do not
 constitute an operating-system security sandbox.
 
+The Next.js frontend in [`web/`](web/README.md) can sit in front of that server.
+Start it with `UNMASK_API_URL=http://127.0.0.1:3000`; see its README.
+
 ## Inspection limits
 
 - File correspondence uses hashes and bounded byte comparisons. Transpilation,
