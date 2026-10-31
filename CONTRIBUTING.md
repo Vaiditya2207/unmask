@@ -16,11 +16,13 @@ request. Do not push directly to `main` or rewrite its history.
 
 ## Check and push
 
-Use Node.js 24.22.2, as pinned in `.nvmrc`. The `check` script checks formatting; `test` and `check:package` validate
-release tooling and archive contents. They do not validate product behavior.
+Use Node.js 24.22.2, as pinned in `.nvmrc`. The `check` script checks formatting.
+`test` covers product behavior and release tooling; `check:package` checks the
+actual archive contents. Build first so the archive includes the current code.
 
 ```bash
 npm ci --ignore-scripts
+npm run build
 npm run check
 npm test
 npm run check:package
@@ -59,9 +61,9 @@ write access. Every team member must be able to explain the implementation.
 
 Wait for CI and a teammate's approval before merging. Repository protection is
 configured on GitHub, not by these files; verify the current rules there. This
-scaffold does not configure required status checks. After the workflow has run,
+repository does not configure required status checks from source files. After the workflow has run,
 a maintainer should configure its `Repository checks` job as a required check.
-Product tests must become part of CI when implementation begins. See
+The test command includes product tests as well as tooling checks. See
 [release prerequisites](docs/releases.md) before enabling publication.
 
 ## Model and example changes
