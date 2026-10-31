@@ -252,8 +252,8 @@ function origin(value) {
   );
   return url.origin;
 }
-async function boundedJSON(response, cap = 4194304) {
-  assert(response.status === 200, "Preview API request failed");
+async function boundedJSON(response, cap = 4194304, expectedStatus = 200) {
+  assert(response.status === expectedStatus, "Preview API request failed");
   const reader = response.body?.getReader();
   assert(reader, "Missing API response");
   let size = 0;
@@ -272,31 +272,67 @@ async function boundedJSON(response, cap = 4194304) {
   return JSON.parse(Buffer.concat(chunks, size).toString("utf8"));
 }
 export function githubAPI({ token, fetchImpl = globalThis.fetch }) {
-  return async (route) => {
+  return async (route, options = {}) => {
+    const method = options.method ?? "GET";
     const baseRoute = route.startsWith(`/repos/${PREVIEW.repository}/`);
     const forkContent =
       /^\/repos\/(?:Pranay0083\/unmask|visheshrao17\/unmask)\/contents\/package\.json\?ref=[a-f0-9]{40}$/u.test(
         route,
       ) && !/\s/u.test(route);
+    const commentWrite =
+      method === "POST"
+        ? /^\/repos\/Vaiditya2207\/unmask\/issues\/[1-9][0-9]*\/comments$/u.test(
+            route,
+          )
+        : method === "PATCH" &&
+          /^\/repos\/Vaiditya2207\/unmask\/issues\/comments\/[1-9][0-9]*$/u.test(
+            route,
+          );
     assert(
-      (baseRoute || forkContent) && !route.includes(".."),
-      "Unexpected GitHub API route",
+      (method === "GET" ? baseRoute || forkContent : commentWrite) &&
+        !route.includes(".."),
+      "Unexpected GitHub API route or method",
     );
-    for (let attempt = 0; attempt < 2; attempt++) {
+    if (method !== "GET")
+      assert(
+        options.body &&
+          Object.keys(options.body).length === 1 &&
+          typeof options.body.body === "string" &&
+          Buffer.byteLength(options.body.body) <= 16000,
+        "Invalid preview comment body",
+      );
+    for (let attempt = 0; attempt < (method === "GET" ? 2 : 1); attempt++) {
+      let response;
       try {
+        response = await fetchImpl(`https://api.github.com${route}`, {
+          method,
+          redirect: "error",
+          signal: AbortSignal.timeout(30000),
+          headers: {
+            accept: "application/vnd.github+json",
+            authorization: `Bearer ${token}`,
+            "x-github-api-version": "2022-11-28",
+            connection: "close",
+            ...(method === "GET" ? {} : { "content-type": "application/json" }),
+          },
+          ...(method === "GET" ? {} : { body: JSON.stringify(options.body) }),
+        });
         return await boundedJSON(
-          await fetchImpl(`https://api.github.com${route}`, {
-            redirect: "error",
-            signal: AbortSignal.timeout(30000),
-            headers: {
-              accept: "application/vnd.github+json",
-              authorization: `Bearer ${token}`,
-              "x-github-api-version": "2022-11-28",
-              connection: "close",
-            },
-          }),
+          response,
+          4194304,
+          method === "POST" ? 201 : 200,
         );
-      } catch (error) {
+      } catch (caught) {
+        const error =
+          caught instanceof Error
+            ? caught
+            : new Error("Preview GitHub request failed");
+        if (method !== "GET") {
+          response?.body?.cancel().catch(() => {});
+          error.previewWriteUncertain =
+            !response || response.status < 400 || response.status >= 500;
+          throw error;
+        }
         if (
           attempt !== 0 ||
           !["UND_ERR_SOCKET", "ECONNRESET", "EPIPE"].includes(
@@ -308,6 +344,87 @@ export function githubAPI({ token, fetchImpl = globalThis.fetch }) {
       }
     }
   };
+}
+export const PREVIEW_COMMENT_MARKER = "<!-- unmask:web-preview:v1 -->";
+export async function upsertPreviewComment({ receipt, runId, api }) {
+  assert(
+    receipt?.status === "verified" &&
+      receipt.service === PREVIEW.service &&
+      integer(receipt.pr) &&
+      sha(receipt.commit) &&
+      version(receipt.version) &&
+      !/\s/u.test(receipt.version) &&
+      integer(runId) &&
+      /^[1-9][0-9]*$/u.test(String(runId)),
+    "Comment requires verified deployment identity",
+  );
+  const url = origin(receipt.url);
+  assert(
+    new URL(url).hostname.startsWith(`pr-${receipt.pr}---${PREVIEW.service}-`),
+    "Comment URL is not the exact PR preview service tag",
+  );
+  const base = `/repos/${PREVIEW.repository}`;
+  const issueURL = `https://api.github.com${base}/issues/${receipt.pr}`;
+  const owned = (item) =>
+    integer(item?.id) &&
+    item.user?.login === "github-actions[bot]" &&
+    item.user.type === "Bot" &&
+    typeof item.body === "string" &&
+    item.body.startsWith(PREVIEW_COMMENT_MARKER + "\n") &&
+    (item.issue_url === undefined || item.issue_url === issueURL);
+  const current = async () => {
+    const pull = validatePull(await api(`${base}/pulls/${receipt.pr}`));
+    assert(
+      pull.number === receipt.pr && pull.head.sha === receipt.commit,
+      "Comment tested head is stale",
+    );
+  };
+  await current();
+  const matches = [];
+  for (let page = 1; page <= 5; page++) {
+    const comments = await api(
+      `${base}/issues/${receipt.pr}/comments?per_page=100&page=${page}`,
+    );
+    assert(
+      Array.isArray(comments) && comments.length <= 100,
+      "Invalid PR comment listing",
+    );
+    matches.push(...comments.filter(owned));
+    if (comments.length < 100) break;
+    assert(page < 5, "Preview comment pagination limit reached");
+  }
+  assert(matches.length <= 1, "Ambiguous owned preview comments");
+  const body = `${PREVIEW_COMMENT_MARKER}\n**Frontend preview:** [Open preview](${url})\n\nTested commit: \`${receipt.commit}\`\n\nVersion: \`${receipt.version}\`\n\n[Verified deployment run](https://github.com/${PREVIEW.repository}/actions/runs/${runId})`;
+  const existing = matches[0];
+  if (existing)
+    assert(
+      owned(await api(`${base}/issues/comments/${existing.id}`)),
+      "Preview comment ownership changed",
+    );
+  await current();
+  if (existing?.body === body)
+    return { status: "unchanged", commentId: existing.id };
+  const operation = existing ? "update" : "create";
+  try {
+    const result = await api(
+      existing
+        ? `${base}/issues/comments/${existing.id}`
+        : `${base}/issues/${receipt.pr}/comments`,
+      { method: existing ? "PATCH" : "POST", body: { body } },
+    );
+    if (
+      !owned(result) ||
+      result.body !== body ||
+      (existing && result.id !== existing.id)
+    )
+      return { status: "uncertain", operation };
+    return { status: existing ? "updated" : "created", commentId: result.id };
+  } catch (error) {
+    return {
+      status: error?.previewWriteUncertain ? "uncertain" : "failed",
+      operation,
+    };
+  }
 }
 export async function preparePreview({ event, api, metadata }) {
   const trigger = event.workflow_run;
@@ -955,6 +1072,8 @@ async function main() {
       metadata = data;
     }
     const result = await mutatePreview({ mode, event, plan, metadata, api });
+    if (stage === "deploy")
+      writeFileSync(`${state}.deployment.json`, JSON.stringify(result));
     outputs({ url: result.url ?? "", revision: result.revision ?? "" });
     if (process.env.GITHUB_STEP_SUMMARY)
       appendFileSync(
@@ -962,8 +1081,47 @@ async function main() {
         `Frontend preview ${result.status}\n\n${result.url ? `[Open PR preview](${result.url})\n\n` : ""}\`\`\`json\n${JSON.stringify(result, null, 2)}\n\`\`\`\n`,
       );
     console.log(JSON.stringify(result));
+  } else if (stage === "comment") {
+    let result;
+    try {
+      const plan = JSON.parse(readFileSync(state, "utf8"));
+      const receipt = JSON.parse(
+        readFileSync(`${state}.deployment.json`, "utf8"),
+      );
+      assert(
+        plan.verified === true &&
+          receipt.pr === plan.pr &&
+          receipt.commit === plan.commit &&
+          receipt.version === plan.version,
+        "Comment receipt differs from verified plan",
+      );
+      result = await upsertPreviewComment({
+        receipt,
+        runId: process.env.GITHUB_RUN_ID,
+        api,
+      });
+    } catch {
+      result = {
+        status: "failed",
+        reason: "comment-precondition-or-read-failed",
+      };
+    }
+    outputs({
+      comment_status: result.status,
+      comment_id: result.commentId ?? "",
+    });
+    if (process.env.GITHUB_STEP_SUMMARY)
+      appendFileSync(
+        process.env.GITHUB_STEP_SUMMARY,
+        `\nPreview PR comment: ${result.status}. Deployment verification is reported separately.\n`,
+      );
+    if (!["created", "updated", "unchanged"].includes(result.status))
+      process.exitCode = 1;
+    console.log(JSON.stringify({ previewComment: result }));
   } else
-    throw new Error("Usage: web-preview.mjs prepare|verify|deploy|cleanup");
+    throw new Error(
+      "Usage: web-preview.mjs prepare|verify|deploy|comment|cleanup",
+    );
 }
 if (
   process.argv[1] &&
