@@ -68,7 +68,7 @@ const sample = lockfile({
   "node_modules/aliased": {
     name: "other",
     version: "1.0.0",
-    resolved: tgz("other", "1.0.0"),
+    resolved: tgz("aliased", "1.0.0"),
   },
   "node_modules/bundled": { version: "1.0.0", inBundle: true },
   "node_modules/unresolved": { version: "1.0.0" },
@@ -629,4 +629,76 @@ test("rejected lockfile rows explain why they are present, bounded like dependen
     complete: false,
     reasons: ["explanation-limit"],
   });
+});
+
+test("registry-bound npm aliases are screened as the real identity and integrity conflicts stay incomplete", async () => {
+  const lock = lockfile({
+    "node_modules/string-width-cjs": {
+      name: "string-width",
+      ...registry("string-width", "4.2.3"),
+    },
+    "node_modules/string-width": registry("string-width", "4.2.3"),
+    "node_modules/unbound": {
+      name: "real",
+      version: "1.0.0",
+      resolved: tgz("unbound", "1.0.0"),
+    },
+  });
+  lock.packages[""].dependencies = {
+    "string-width-cjs": "npm:string-width@^4.2.3",
+    "string-width": "4.2.3",
+  };
+  const graph = parseNpmLockfile(lock);
+  assert.deepEqual(
+    graph.identities.map((item) => [
+      item.spec,
+      item.locationCount,
+      item.installedAs,
+    ]),
+    [["string-width@4.2.3", 2, ["string-width-cjs"]]],
+  );
+  assert.deepEqual(
+    graph.rejected.map((item) => [item.location, item.reason]),
+    [["node_modules/unbound", "alias-identity"]],
+  );
+  const result = await screenDependencyGraph(graph, {
+    lookup: async (spec) =>
+      bound(spec, {
+        status: "found",
+        complete: true,
+        advisories: [{ id: "MAL-2026-9", aliases: [] }],
+      }),
+  });
+  const flagged = result.dependencies[0];
+  assert.equal(flagged.status, "found");
+  assert.deepEqual(
+    flagged.explanation.paths.map((path) => path.at(-1)),
+    [
+      {
+        location: "node_modules/string-width-cjs",
+        name: "string-width",
+        installedAs: "string-width-cjs",
+        version: "4.2.3",
+      },
+      {
+        location: "node_modules/string-width",
+        name: "string-width",
+        version: "4.2.3",
+      },
+    ],
+  );
+  const conflicting = await screenDependencyGraph(
+    parseNpmLockfile(
+      lockfile({
+        "node_modules/c": registry("c", "1.0.0"),
+        "node_modules/x/node_modules/c": registry("c", "1.0.0", {
+          integrity: "sha512-BBBB",
+        }),
+      }),
+    ),
+    { lookup: async (spec) => clean(spec) },
+  );
+  assert.equal(conflicting.summary.integrityConflicting, 1);
+  assert.equal(conflicting.coverage.registryComplete, false);
+  assert.equal(conflicting.status, "incomplete");
 });

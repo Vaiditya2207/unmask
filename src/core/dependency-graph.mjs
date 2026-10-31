@@ -64,20 +64,25 @@ function classify(key, entry) {
       ? { local: true, reason: "workspace-package" }
       : { reason: "invalid-location" };
   if (entry.link === true) return { name, local: true, reason: "linked-local" };
-  if (typeof entry.name === "string" && entry.name !== name)
-    return { name, reason: "alias-identity" };
   if (entry.inBundle === true) return { name, reason: "bundled-dependency" };
-  if (typeof entry.version !== "string") return { name, reason: "no-version" };
-  const claim = exact(name, entry.version);
-  if (!claim) return { name, reason: "non-exact-version" };
-  if (typeof entry.resolved !== "string")
-    return { name, reason: "missing-resolved" };
+  // An npm alias is screened as the real package only when its resolved tarball proves that exact identity.
+  const aliased = typeof entry.name === "string" && entry.name !== name;
+  const unbound = (reason) => ({
+    name,
+    reason: aliased ? "alias-identity" : reason,
+  });
+  if (typeof entry.version !== "string") return unbound("no-version");
+  const claim = exact(aliased ? entry.name : name, entry.version);
+  if (!claim) return unbound("non-exact-version");
+  if (typeof entry.resolved !== "string") return unbound("missing-resolved");
   if (!entry.resolved.startsWith(REGISTRY))
-    return { name, reason: "non-registry-resolved" };
-  const base = name.includes("/") ? name.split("/")[1] : name;
-  if (entry.resolved !== `${REGISTRY}${name}/-/${base}-${claim.version}.tgz`)
-    return { name, reason: "resolved-identity-mismatch" };
-  return { name, claim };
+    return unbound("non-registry-resolved");
+  const base = claim.name.split("/").at(-1);
+  if (
+    entry.resolved !== `${REGISTRY}${claim.name}/-/${base}-${claim.version}.tgz`
+  )
+    return unbound("resolved-identity-mismatch");
+  return { name, claim, ...(aliased ? { alias: name } : {}) };
 }
 
 // Parses npm lockfile v2/v3 package entries into exact registry identities without trusting non-registry claims.
@@ -134,6 +139,14 @@ export function parseNpmLockfile(input, { limits: overrides = {} } = {}) {
       dev: true,
       optional: true,
     };
+    if (result.alias) {
+      identity.installedAs ??= [];
+      if (
+        identity.installedAs.length < limits.locations &&
+        !identity.installedAs.includes(result.alias)
+      )
+        identity.installedAs.push(result.alias);
+    }
     identity.locationCount++;
     bySpec.set(spec, [...(bySpec.get(spec) ?? []), key]);
     if (identity.locations.length < limits.locations)
@@ -229,11 +242,17 @@ function describe(packages, location) {
   return {
     location,
     name:
-      location === ""
-        ? typeof entry?.name === "string"
-          ? entry.name
-          : null
-        : (nameFromKey(location) ?? entry?.name ?? null),
+      typeof entry?.name === "string"
+        ? entry.name
+        : location === ""
+          ? null
+          : nameFromKey(location),
+    ...(location &&
+    typeof entry?.name === "string" &&
+    nameFromKey(location) !== null &&
+    nameFromKey(location) !== entry.name
+      ? { installedAs: nameFromKey(location) }
+      : {}),
     version: typeof entry?.version === "string" ? entry.version : null,
   };
 }

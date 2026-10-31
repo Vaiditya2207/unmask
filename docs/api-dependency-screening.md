@@ -240,6 +240,8 @@ Each `packages` entry other than the root `""` becomes exactly one of the follow
 | `local`, `workspace-package` | Key without a `node_modules` segment, a `version`, and no `resolved`, `integrity` or `inBundle`                                                                                           |
 | `rejected`, with one reason  | `invalid-entry`, `invalid-location`, `alias-identity`, `bundled-dependency`, `no-version`, `non-exact-version`, `missing-resolved`, `non-registry-resolved`, `resolved-identity-mismatch` |
 
+An npm alias entry (`name` differs from the installed folder name) is screened as the real `name@version` only when `resolved` is exactly that package's registry tarball. The folder name is then listed in `installedAs`. Any other alias is rejected as `alias-identity`.
+
 Identities are deduplicated by `name@version`. `locations` lists the first 20 lockfile keys and `locationCount` gives the total. `integrity` is set only when every location carries the same valid SRI (`sha256`, `sha384` or `sha512`). Otherwise `integrityStatus` is `missing` or `conflicting` and `integrity` is `null`.
 
 ## Response contract (`schemaVersion: "1"`)
@@ -248,7 +250,7 @@ Identities are deduplicated by `name@version`. `locations` lists the first 20 lo
   - `advisories-found` when any dependency carries advisories, whatever that lookup's status.
   - Otherwise `none-reported` when `coverage.registryComplete` is true.
   - Otherwise `incomplete`.
-- `coverage.registryComplete` is true only when there are no rejected rows and every identity has `complete: true`. `coverage.projectScreened` is always `false`, and `root.status` is always `not-screened`.
+- `coverage.registryComplete` is true only when there are no rejected rows, no identity has `integrityStatus: conflicting` (counted in `summary.integrityConflicting`), and every identity has `complete: true`. `coverage.projectScreened` is always `false`, and `root.status` is always `not-screened`.
 - `advisoryBearing` lists the spec of every dependency with at least one advisory, including dependencies whose lookup was `incomplete`.
 - `dependencies[].status` and when each value applies:
 
