@@ -174,7 +174,13 @@ test("exact targets deduplicate locations and honour omitDev", () => {
       ["d@1.0.0", ["node_modules/d"]],
     ],
   );
-  assert.deepEqual(all.skipped, { "non-registry-source": 1 });
+  assert.deepEqual(all.skipped, {
+    "unresolved-dependency": 1,
+    "non-registry-source": 1,
+  });
+  assert.deepEqual(all.unresolved, [
+    { from: "node_modules/c", name: "missing", type: "peer" },
+  ]);
   assert.equal(
     exactTargets(lock, { omitDev: true }).targets.some((t) => t.name === "d"),
     false,
@@ -328,6 +334,89 @@ test("lockfile reads are bounded and reject FIFOs and identities parsePackageSpe
     [...lock.entries.values()].slice(1).map((e) => e.reason),
     ["inexact-version", null, "invalid-name"],
   );
+});
+
+test("lockfile compatibility: legacy names, unresolved, bundled, encoded and traversal entries", async () => {
+  const lock = parseLockfile(
+    text({
+      lockfileVersion: 3,
+      packages: {
+        "": {
+          dependencies: { JSONStream: "1.3.5", a: "1.0.0", gone: "1.0.0" },
+        },
+        "node_modules/JSONStream": pkg("JSONStream", "1.3.5"),
+        "node_modules/a": pkg("a", "1.0.0", {
+          optionalDependencies: { fsevents: "2" },
+          peerDependencies: { react: "18", vue: "3" },
+          peerDependenciesMeta: { react: { optional: true } },
+          dependencies: { z: "1" },
+        }),
+        "node_modules/a/node_modules/z": { version: "1.0.0", inBundle: true },
+        "node_modules/@s/e": pkg("@s/e", "1.0.0", {
+          resolved: "https://registry.npmjs.org/@s%2fe/-/e-1.0.0.tgz",
+        }),
+      },
+    }),
+  );
+  const kinds = [...lock.entries.values()].map((e) => [
+    e.key,
+    e.kind,
+    e.reason,
+  ]);
+  assert.deepEqual(kinds.slice(1), [
+    ["node_modules/JSONStream", "invalid", "invalid-name"],
+    ["node_modules/a", "registry", null],
+    ["node_modules/a/node_modules/z", "bundled", "bundled-dependency"],
+    ["node_modules/@s/e", "url", "non-registry-source"],
+  ]);
+  const { targets, skipped, unresolved } = exactTargets(lock);
+  assert.deepEqual(
+    targets.map((t) => t.spec),
+    ["a@1.0.0"],
+  );
+  assert.deepEqual(unresolved, [
+    { from: "", name: "gone", type: "prod" },
+    { from: "node_modules/a", name: "vue", type: "peer" },
+  ]);
+  assert.deepEqual(skipped, {
+    "unresolved-dependency": 2,
+    "invalid-name": 1,
+    "bundled-dependency": 1,
+    "non-registry-source": 1,
+  });
+  const result = await auditLock(lock, { check: async () => bound(0) });
+  assert.equal(result.coverage.complete, false);
+  assert.equal(result.exitCode, 2);
+  for (const key of [
+    "../node_modules/x",
+    "node_modules//x",
+    "node_modules/./x",
+  ])
+    assert.throws(
+      () =>
+        parseLockfile(
+          text({
+            lockfileVersion: 3,
+            packages: { "": {}, [key]: pkg("x", "1.0.0") },
+          }),
+        ),
+      { code: "lockfile-invalid" },
+    );
+  const conflict = parseLockfile(
+    text({
+      lockfileVersion: 3,
+      packages: {
+        "": { dependencies: { a: "1.0.0", b: "1.0.0" } },
+        "node_modules/a": pkg("a", "1.0.0"),
+        "node_modules/b": pkg("b", "1.0.0", { dependencies: { a: "1.0.0" } }),
+        "node_modules/b/node_modules/a": pkg("a", "1.0.0", {
+          integrity:
+            "sha512-" + createHash("sha512").update("other").digest("base64"),
+        }),
+      },
+    }),
+  );
+  assert.equal(exactTargets(conflict).targets[0].bound, false);
 });
 
 test("unmask audit CLI uses the real hosted transport against a local server", async (t) => {
