@@ -7,8 +7,11 @@ node src/cli/main.mjs doctor --offline --json
 ```
 
 The generated `offline.json` is actual diagnostic output from this command. It
-contains no environment values or credentials. `--offline` skips the service;
-without it, doctor makes a bounded GET to the fixed hosted service `/version`.
+contains no credentials. Doctor reads only the nonsecret `UNMASK_SERVER_URL`
+environment key; explicit `--server-url` wins, then that key, then the fixed
+default. Origins with credentials or query parameters are rejected before use
+or display. `--offline` skips the service;
+without it, doctor makes a bounded GET to the selected service `/version`.
 `--server-url https://service.example` explicitly selects another origin, and
 loopback HTTP is supported for local tests. Credentials, paths, queries and
 fragments in the origin are rejected. No package analysis or model is invoked.

@@ -21,8 +21,9 @@ function runtime(cwd) {
     env: new Proxy(
       {},
       {
-        get() {
-          throw new Error("Environment access forbidden");
+        get(_target, key) {
+          if (key === "UNMASK_SERVER_URL") return undefined;
+          throw new Error("Other environment access forbidden");
         },
       },
     ),
@@ -237,4 +238,147 @@ test("standalone doctor labels recognized fallback config as only partially vali
       .status,
     "unknown",
   );
+});
+
+test("doctor uses only the authorized service environment key unless a flag overrides it", async (t) => {
+  const rt = runtime(await fixture(t));
+  const reads = [],
+    urls = [];
+  rt.env = new Proxy(
+    {},
+    {
+      get(_target, key) {
+        reads.push(key);
+        assert.equal(key, "UNMASK_SERVER_URL");
+        return "https://configured.example";
+      },
+      ownKeys() {
+        assert.fail("Environment enumeration forbidden");
+      },
+    },
+  );
+  rt.fetchImpl = async (url) => {
+    urls.push(url);
+    return Response.json({
+      version: "0.1.2",
+      commit: "a".repeat(40),
+      tarballSha256: "b".repeat(64),
+    });
+  };
+  assert.equal(await main(["doctor", "--json"], rt), 0);
+  assert.deepEqual(reads, ["UNMASK_SERVER_URL"]);
+  assert.deepEqual(urls, ["https://configured.example/version"]);
+  assert.equal(
+    JSON.parse(rt.output.join("")).service.origin,
+    "https://configured.example",
+  );
+  reads.length = 0;
+  rt.output.length = 0;
+  assert.equal(
+    await main(
+      ["doctor", "--server-url", "https://explicit.example", "--json"],
+      rt,
+    ),
+    0,
+  );
+  assert.deepEqual(reads, []);
+  assert.equal(
+    JSON.parse(rt.output.join("")).service.origin,
+    "https://explicit.example",
+  );
+});
+
+test("normal CLI doctor diagnoses the environment origin used by check", async (t) => {
+  const { spawn } = await import("node:child_process");
+  const { fileURLToPath } = await import("node:url");
+  const { once } = await import("node:events");
+  const requests = [];
+  const origin = await serve(t, (req, res) => {
+    requests.push(req.url);
+    res.setHeader("content-type", "application/json");
+    res.end(
+      JSON.stringify({
+        version: "0.1.2",
+        commit: "a".repeat(40),
+        tarballSha256: "b".repeat(64),
+      }),
+    );
+  });
+  const cwd = await fixture(t);
+  const { writeFile } = await import("node:fs/promises");
+  const guard = path.join(cwd, "network-guard.mjs");
+  await writeFile(
+    guard,
+    `const fetch = globalThis.fetch; globalThis.fetch = (input, options) => { const url = new URL(input); if(url.hostname !== '127.0.0.1') throw new Error('Nonloopback network forbidden'); return fetch(input, options); };`,
+  );
+  const child = spawn(
+    process.execPath,
+    [
+      "--import",
+      guard,
+      fileURLToPath(new URL("../../src/cli/main.mjs", import.meta.url)),
+      "doctor",
+      "--json",
+    ],
+    {
+      cwd,
+      env: { UNMASK_SERVER_URL: origin },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  t.after(() => child.kill());
+  let stdout = "",
+    stderr = "";
+  child.stdout.on("data", (chunk) => (stdout += chunk));
+  child.stderr.on("data", (chunk) => (stderr += chunk));
+  assert.equal((await once(child, "close"))[0], 0, stderr);
+  assert.deepEqual(requests, ["/version"]);
+  assert.equal(JSON.parse(stdout).service.origin, origin);
+});
+
+test("doctor missing project fails instead of appearing to use defaults", async (t) => {
+  const rt = runtime(await fixture(t));
+  rt.configInspector = null;
+  assert.equal(
+    await main(
+      [
+        "doctor",
+        "--project",
+        path.join(rt.cwd, "missing"),
+        "--offline",
+        "--json",
+      ],
+      rt,
+    ),
+    1,
+  );
+  assert.equal(
+    JSON.parse(rt.output.join("")).checks.find((item) => item.id === "config")
+      .status,
+    "error",
+  );
+});
+
+test("doctor warns for a different valid Node version than the exact package engine pin", async (t) => {
+  const rt = runtime(await fixture(t));
+  rt.nodeVersion = "v25.0.0";
+  assert.equal(await main(["doctor", "--offline", "--json"], rt), 0);
+  assert.equal(
+    JSON.parse(rt.output.join("")).checks.find((item) => item.id === "node")
+      .status,
+    "warning",
+  );
+});
+
+test("doctor rejects credential or query-bearing environment origins without displaying values", async (t) => {
+  for (const origin of [
+    "https://user:DO_NOT_PRINT@example.com",
+    "https://example.com?token=DO_NOT_PRINT",
+  ]) {
+    const rt = runtime(await fixture(t));
+    rt.env = { UNMASK_SERVER_URL: origin };
+    rt.fetchImpl = () => assert.fail("Invalid origin must not be contacted");
+    assert.equal(await main(["doctor", "--json"], rt), 2);
+    assert.doesNotMatch(rt.output.join(""), /DO_NOT_PRINT/);
+  }
 });

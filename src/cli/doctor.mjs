@@ -105,6 +105,16 @@ async function serviceJson(
   }
 }
 async function fallbackConfig(cwd) {
+  try {
+    if (!(await lstat(cwd)).isDirectory()) throw new Error();
+  } catch {
+    return {
+      id: "config",
+      status: "error",
+      message: "Project directory does not exist or is not a directory.",
+      action: "Use --project with an existing project directory.",
+    };
+  }
   const filename = path.join(cwd, ".unmask.json");
   let handle;
   try {
@@ -228,10 +238,18 @@ export async function inspectDoctor({
   const checks = [
     {
       id: "node",
-      status: supported ? "ok" : "error",
-      message: supported
-        ? "Node meets the 24.22.2 minimum."
-        : "Node does not meet the 24.22.2 minimum.",
+      status:
+        nodeVersion.replace(/^v/, "") === "24.22.2"
+          ? "ok"
+          : supported
+            ? "warning"
+            : "error",
+      message:
+        nodeVersion.replace(/^v/, "") === "24.22.2"
+          ? "Node matches the exact 24.22.2 package engine pin."
+          : supported
+            ? "Node differs from the exact 24.22.2 package engine pin; compatibility is unverified."
+            : "Node is older than the pinned 24.22.2 runtime or its version is invalid.",
       action:
         "Use the repository-pinned Node 24.22.2 for reproducible results.",
     },
@@ -247,7 +265,7 @@ export async function inspectDoctor({
     service: { origin },
     limitations: [
       "Diagnostics do not assess package safety or make a model request.",
-      "Shell startup files and environment values are not read; active shell guard interception is unverified.",
+      "Only the nonsecret UNMASK_SERVER_URL environment value is consulted; shell startup files are not read and active shell guard interception is unverified.",
     ],
   };
   if (offline)
@@ -311,7 +329,8 @@ export async function doctorCommand(argv, runtime = {}) {
     cwd: options["--project"] ?? runtime.cwd,
     nodeVersion: runtime.nodeVersion,
     offline: !!options["--offline"],
-    serverUrl: options["--server-url"],
+    serverUrl:
+      options["--server-url"] ?? (runtime.env ?? process.env).UNMASK_SERVER_URL,
     fetchImpl: runtime.fetchImpl,
     signal: runtime.signal,
     configInspector: runtime.configInspector,
