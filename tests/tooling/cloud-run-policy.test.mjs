@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   planCloudRunDeployment,
   verifyCloudRunDeployment,
+  verifyCloudRunRevision,
   releaseDeploymentOutputs,
   verifyDeployedModel,
 } from "../../scripts/cloud-run-policy.mjs";
@@ -541,3 +542,52 @@ test("existing runtime identity must match the intended configured service accou
     "other@fixture-project.iam.gserviceaccount.com";
   assert.throws(() => planCloudRunDeployment(f), /identity|service|config/i);
 });
+
+for (const representation of ["index", "resolved leaf"])
+  test(`provider revision may preserve ${representation} with exact resolved digest`, () => {
+    const f = fixture();
+    f.release.resolvedImageDigest = `ghcr.io/fixture/unmask@sha256:${"d".repeat(64)}`;
+    const observed = deployed(f);
+    observed.revision.status.imageDigest = f.release.resolvedImageDigest;
+    observed.revision.spec.containers[0].image =
+      representation === "index"
+        ? f.release.image
+        : f.release.resolvedImageDigest;
+    assert.equal(
+      verifyCloudRunRevision(f.release, observed.revision, f.configuration),
+      "unmask-fixture-new",
+    );
+    assert.equal(
+      verifyCloudRunDeployment({ ...f, ...observed }).resolvedImageDigest,
+      f.release.resolvedImageDigest,
+    );
+  });
+
+for (const mismatch of [
+  "unrelated leaf",
+  "same digest different repository",
+  "wrong observed digest",
+])
+  test(`canonical revision still rejects ${mismatch}`, () => {
+    const f = fixture();
+    f.release.resolvedImageDigest = `ghcr.io/fixture/unmask@sha256:${"d".repeat(64)}`;
+    const observed = deployed(f);
+    observed.revision.spec.containers[0].image = f.release.resolvedImageDigest;
+    observed.revision.status.imageDigest = f.release.resolvedImageDigest;
+    if (mismatch === "unrelated leaf")
+      observed.revision.spec.containers[0].image = `ghcr.io/fixture/unmask@sha256:${"e".repeat(64)}`;
+    if (mismatch === "same digest different repository")
+      observed.revision.spec.containers[0].image =
+        f.release.resolvedImageDigest.replace("fixture/unmask", "other/unmask");
+    if (mismatch === "wrong observed digest")
+      observed.revision.status.imageDigest = f.release.image;
+    assert.throws(
+      () =>
+        verifyCloudRunRevision(f.release, observed.revision, f.configuration),
+      /digest/,
+    );
+    assert.throws(
+      () => verifyCloudRunDeployment({ ...f, ...observed }),
+      /digest/,
+    );
+  });

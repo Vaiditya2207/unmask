@@ -399,3 +399,38 @@ test("candidate with a different runtime service account receives no traffic", a
     false,
   );
 });
+
+test("deployment promotes a provider-canonicalized leaf only after verifying its parent index", async () => {
+  const f = fixture();
+  const child = `sha256:${"d".repeat(64)}`;
+  const index = Buffer.from(
+    JSON.stringify({
+      manifests: [
+        { platform: { os: "linux", architecture: "amd64" }, digest: child },
+      ],
+    }),
+  );
+  const indexDigest = `sha256:${createHash("sha256").update(index).digest("hex")}`;
+  const requested = `ghcr.io/fixture/unmask@${indexDigest}`;
+  const resolved = `ghcr.io/fixture/unmask@${child}`;
+  f.env.RELEASE_IMAGE_DIGEST = requested;
+  f.after.spec.template.spec.containers[0].image = requested;
+  f.revision.spec.containers[0].image = resolved;
+  f.revision.status.imageDigest = resolved;
+  const result = await run(f, {
+    fetchImpl: async (url, options = {}) =>
+      url.includes("/token?")
+        ? Response.json({ token: "fixture-public" })
+        : options.method === "HEAD"
+          ? new Response(null, {
+              headers: {
+                "content-type": "application/vnd.oci.image.index.v1+json",
+                "docker-content-digest": indexDigest,
+              },
+            })
+          : new Response(index),
+  });
+  assert.equal(result.image, requested);
+  assert.equal(result.resolvedImageDigest, resolved);
+  assert.ok(f.calls.some((call) => call.args.includes("unmask-new=100")));
+});

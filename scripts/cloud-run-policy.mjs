@@ -186,7 +186,9 @@ export function verifyCloudRunDeployment({
     after.status.latestReadyRevisionName !== revision.metadata.name ||
     revision.status.imageDigest?.split("@").at(-1) !==
       plan.resolvedImageDigest.split("@").at(-1) ||
-    revision.spec?.containers?.[0]?.image !== plan.image ||
+    ![plan.image, plan.resolvedImageDigest].includes(
+      revision.spec?.containers?.[0]?.image,
+    ) ||
     after.spec?.template?.spec?.containers?.[0]?.image !== plan.image
   )
     throw new Error(
@@ -368,7 +370,9 @@ export function verifyCloudRunRevision(release, revision, configuration) {
     !ready(revision) ||
     !configuration?.runtimeServiceAccount ||
     revision.spec?.serviceAccountName !== configuration.runtimeServiceAccount ||
-    revision.spec?.containers?.[0]?.image !== release.image ||
+    ![release.image, release.resolvedImageDigest ?? release.image].includes(
+      revision.spec?.containers?.[0]?.image,
+    ) ||
     revision.status.imageDigest?.split("@").at(-1) !==
       (release.resolvedImageDigest ?? release.image).split("@").at(-1)
   )
