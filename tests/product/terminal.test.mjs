@@ -373,3 +373,165 @@ test("progress timer redraws elapsed time, ignores repeated phases and stop clea
     "\r\u001b[2K| Analyzing local artifact 0s\r\u001b[2K/ Analyzing local artifact 2s\r\u001b[2K",
   );
 });
+
+function advisoryOnlyRuntime(advisoryResult, env = {}, jobStatus = "failed") {
+  const id = "b".repeat(32);
+  return {
+    env: { UNMASK_SERVER_URL: "https://synthetic.invalid", ...env },
+    stdout: stream(false),
+    stderr: stream(false),
+    hostedLimits: { pollMs: 1, totalTimeoutMs: 2000, requestTimeoutMs: 1000 },
+    async fetchImpl(url) {
+      if (url.endsWith("/check"))
+        return new Response(null, {
+          status: 303,
+          headers: { location: `/r/${id}` },
+        });
+      return Response.json({ id, status: jobStatus, advisoryResult });
+    },
+  };
+}
+function advisoryResult(status, advisories, name = "ua-parser-js") {
+  const pkg = { ecosystem: "npm", name, version: "0.7.29" };
+  return {
+    schemaVersion: "1",
+    kind: "advisory-only",
+    package: pkg,
+    assessment:
+      status === "found" ? "advisories-reported" : "no-advisory-reported",
+    advisoryCount: advisories.length,
+    artifactVerification: {
+      status: "not-performed",
+      reason: "registry-http-error",
+    },
+    sourceComparison: {
+      status: "not-performed",
+      reason: "registry-http-error",
+    },
+    safetyVerdict: "not-provided",
+    notice: "The registry artifact was not inspected.",
+    vulnerabilityCheck: {
+      schemaVersion: "1",
+      source: "OSV",
+      package: pkg,
+      status,
+      complete: true,
+      reasons: [],
+      advisories,
+      pagesFetched: 1,
+    },
+  };
+}
+
+test("advisory-only hosted failure shows exact-version advisories with no verdict and exit 2", async () => {
+  const runtime = advisoryOnlyRuntime(
+    advisoryResult("found", [
+      {
+        id: "GHSA-pjwm-rvh2-c87w",
+        summary: "Embedded malware in ua-parser-js\u001b[2J",
+        databaseSeverity: "CRITICAL",
+      },
+    ]),
+  );
+  assert.equal(await main(["check", "ua-parser-js@0.7.29"], runtime), 2);
+  for (const pattern of [
+    /^UNMASK ua-parser-js@0\.7\.29$/m,
+    /Advisory-only: artifact not inspected; no verdict is claimed \(exit 2\)/,
+    /Artifact  not inspected \(registry-http-error\); source comparison not performed/,
+    /GHSA-pjwm-rvh2-c87w \[CRITICAL\] Embedded malware in ua-parser-js\\u001b\[2J/,
+    /AI        not run; no artifact evidence to explain/,
+    /do not install this version/,
+  ])
+    assert.match(runtime.stdout.text, pattern);
+  assert.doesNotMatch(runtime.stdout.text, /\u001b/);
+  assert.match(runtime.stderr.text, /^unmask error hosted-advisory-only: /m);
+});
+
+test("advisory-only without advisories is never presented as safe, and mismatched identity is rejected", async () => {
+  const quiet = advisoryOnlyRuntime(advisoryResult("none-reported", []));
+  assert.equal(await main(["check", "ua-parser-js@0.7.29"], quiet), 2);
+  assert.match(quiet.stdout.text, /Advisory  none reported by OSV/);
+  assert.match(
+    quiet.stdout.text,
+    /not evidence of safety; the artifact itself was not checked/,
+  );
+
+  const other = advisoryOnlyRuntime(
+    advisoryResult("found", [{ id: "GHSA-x" }], "other-package"),
+  );
+  assert.equal(await main(["check", "ua-parser-js@0.7.29"], other), 2);
+  assert.equal(other.stdout.text, "");
+  assert.match(other.stderr.text, /^unmask error hosted-report-failed: /m);
+});
+
+test("incomplete hosted job keeps partial advisories visible without claiming the lookup finished", async () => {
+  const result = advisoryResult("incomplete", [
+    { id: "GHSA-partial-0001", summary: "Partial page advisory" },
+  ]);
+  result.assessment = "advisory-lookup-incomplete";
+  result.vulnerabilityCheck.complete = false;
+  result.vulnerabilityCheck.reasons = ["page-limit"];
+  const runtime = advisoryOnlyRuntime(result, {}, "incomplete");
+  assert.equal(await main(["check", "ua-parser-js@0.7.29"], runtime), 2);
+  assert.match(
+    runtime.stdout.text,
+    /Advisory  1 known for this exact version so far; lookup incomplete \(page-limit\), more may exist \(OSV\)/,
+  );
+  assert.match(runtime.stdout.text, /GHSA-partial-0001 Partial page advisory/);
+  assert.match(runtime.stdout.text, /do not install this version/);
+});
+
+test("advisory-only results with contradictory, mismatched or unbounded fields are rejected", async () => {
+  const cases = {
+    "complete flag contradicts status": (r) => {
+      r.vulnerabilityCheck.complete = false;
+    },
+    "none-reported with advisories": (r) => {
+      r.vulnerabilityCheck.status = "none-reported";
+      r.assessment = "no-advisory-reported";
+    },
+    "OSV package identity differs": (r) => {
+      r.vulnerabilityCheck.package = { ...r.package, version: "0.7.30" };
+    },
+    "missing OSV package identity": (r) => {
+      r.vulnerabilityCheck.package = null;
+    },
+    "assessment contradicts status": (r) => {
+      r.assessment = "no-advisory-reported";
+    },
+    "advisory count mismatch": (r) => {
+      r.advisoryCount = 2;
+    },
+    "oversized summary": (r) => {
+      r.vulnerabilityCheck.advisories[0].summary = "x".repeat(2049);
+    },
+    "control characters in id": (r) => {
+      r.vulnerabilityCheck.advisories[0].id = "GHSA\u001b[2J";
+    },
+    "too many advisories": (r) => {
+      r.vulnerabilityCheck.advisories = Array.from({ length: 101 }, (_, i) => ({
+        id: `GHSA-${i}`,
+      }));
+      r.advisoryCount = 101;
+    },
+    "safety verdict provided": (r) => {
+      r.safetyVerdict = "safe";
+    },
+  };
+  for (const [name, mutate] of Object.entries(cases)) {
+    const result = advisoryResult("found", [{ id: "GHSA-pjwm-rvh2-c87w" }]);
+    mutate(result);
+    const runtime = advisoryOnlyRuntime(result);
+    assert.equal(
+      await main(["check", "ua-parser-js@0.7.29"], runtime),
+      2,
+      name,
+    );
+    assert.equal(runtime.stdout.text, "", name);
+    assert.match(
+      runtime.stderr.text,
+      /^unmask error hosted-report-failed: /m,
+      name,
+    );
+  }
+});

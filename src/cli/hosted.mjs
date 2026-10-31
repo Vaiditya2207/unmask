@@ -220,6 +220,11 @@ async function runHosted(
             status(value.status);
             return null;
           }
+          if (
+            ["failed", "incomplete"].includes(value?.status) &&
+            value.id === id
+          )
+            throw advisoryOnly(value.advisoryResult, claim);
           try {
             validateReport(value);
             if (
@@ -350,6 +355,71 @@ function validateDetails(value, report) {
       "hosted-details-invalid",
       "Hosted OSV details failed status or identity validation.",
     );
+}
+
+const ADVISORY_ASSESSMENTS = {
+  found: "advisories-reported",
+  "none-reported": "no-advisory-reported",
+  incomplete: "advisory-lookup-incomplete",
+  unavailable: "advisory-lookup-unavailable",
+};
+const bounded = (value, max, optional = false) =>
+  (optional && value === undefined) ||
+  (typeof value === "string" && Buffer.byteLength(value) <= max);
+const strings = (value, count, max) =>
+  Array.isArray(value) &&
+  value.length <= count &&
+  value.every((item) => bounded(item, max));
+function advisoryRecord(item) {
+  return (
+    item !== null &&
+    typeof item === "object" &&
+    !Array.isArray(item) &&
+    typeof item.id === "string" &&
+    /^[a-zA-Z0-9:_.-]{1,256}$/.test(item.id) &&
+    bounded(item.summary, 2048, true) &&
+    bounded(item.databaseSeverity, 64, true) &&
+    (item.aliases === undefined || strings(item.aliases, 16, 256))
+  );
+}
+function advisoryOnly(result, claim) {
+  const check = result?.vulnerabilityCheck;
+  const exact = (item) =>
+    item?.ecosystem === "npm" &&
+    item.name === claim.name &&
+    item.version === claim.version;
+  const complete = ["found", "none-reported"].includes(check?.status);
+  if (
+    result?.kind !== "advisory-only" ||
+    result.safetyVerdict !== "not-provided" ||
+    result.artifactVerification?.status !== "not-performed" ||
+    result.sourceComparison?.status !== "not-performed" ||
+    !bounded(result.artifactVerification.reason, 128, true) ||
+    !bounded(result.notice, 1024) ||
+    !exact(result.package) ||
+    !exact(check?.package) ||
+    check.source !== "OSV" ||
+    !Object.hasOwn(ADVISORY_ASSESSMENTS, check.status) ||
+    result.assessment !== ADVISORY_ASSESSMENTS[check.status] ||
+    check.complete !== complete ||
+    !strings(check.reasons, 16, 128) ||
+    !Array.isArray(check.advisories) ||
+    check.advisories.length > 100 ||
+    !check.advisories.every(advisoryRecord) ||
+    result.advisoryCount !== check.advisories.length ||
+    (check.status === "found" && check.advisories.length === 0) ||
+    (check.status === "none-reported" && check.advisories.length !== 0)
+  )
+    return failure(
+      "hosted-report-failed",
+      "The hosted analysis did not finish and returned no valid advisory-only result. No local fallback was attempted.",
+    );
+  const error = failure(
+    "hosted-advisory-only",
+    "The registry artifact could not be analyzed; only exact-version advisories are available. No verdict is claimed.",
+  );
+  error.advisoryResult = result;
+  return error;
 }
 
 export async function checkHosted(spec, options) {

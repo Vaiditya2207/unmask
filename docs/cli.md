@@ -31,7 +31,10 @@ escaped so it cannot inject terminal control sequences. Progress goes to stderr:
 an animated, self-clearing status line on an interactive terminal, or one plain
 `unmask:` line per phase when stderr is not a TTY or `TERM=dumb`. Color is used
 only on a TTY and is disabled by any nonempty `NO_COLOR`. Errors print as
-`unmask error CODE: message`, with a hint where one applies. `--out` is optional and
+`unmask error CODE: message`, with a hint where one applies. When the service
+could not analyze the registry artifact but returns an advisory-only result for
+the exact version, the terminal lists those advisories, states that the artifact
+and source were not inspected and that no verdict is claimed, and exits `2`. `--out` is optional and
 nothing is written without it; `--cache-dir` is optional and unused in hosted
 mode. Hosted mode validates the returned schema, requested name/version and
 policy against deterministic report evidence before printing or creating

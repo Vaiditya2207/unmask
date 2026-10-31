@@ -119,43 +119,49 @@ function modelLines(model) {
   ];
 }
 
+function advisoryItems(advisories) {
+  const lines = advisories.slice(0, 5).map((item) => {
+    const label =
+      typeof item?.databaseSeverity === "string"
+        ? ` [${item.databaseSeverity}]`
+        : "";
+    return `  - ${safeText(item?.id, 64)}${safeText(label, 24)} ${safeText(item?.summary ?? "", 120)}`.trimEnd();
+  });
+  if (advisories.length > 5)
+    lines.push(`  ... ${advisories.length - 5} more in the full details`);
+  return lines;
+}
+
+const knownAdvisories = (check) => list(check?.advisories).length > 0;
+
 function advisoryLines(details) {
   const check = details?.vulnerabilityCheck;
   if (!object(check)) return ["Advisory  not assessed in this check"];
   const advisories = list(check.advisories);
-  if (check.status === "found") {
-    const lines = [
-      `Advisory  ${advisories.length} known for this exact version (${safeText(check.source ?? "OSV", 20)})`,
-    ];
-    for (const item of advisories.slice(0, 5)) {
-      const label =
-        typeof item?.databaseSeverity === "string"
-          ? ` [${item.databaseSeverity}]`
-          : "";
-      lines.push(
-        `  - ${safeText(item?.id, 64)}${safeText(label, 24)} ${safeText(item?.summary ?? "", 120)}`.trimEnd(),
-      );
-    }
-    if (advisories.length > 5)
-      lines.push(`  ... ${advisories.length - 5} more in the full details`);
-    return lines;
-  }
+  const source = safeText(check.source ?? "OSV", 20);
   if (check.status === "none-reported")
-    return [
-      `Advisory  none reported by ${safeText(check.source ?? "OSV", 20)} for this exact version`,
-    ];
+    return [`Advisory  none reported by ${source} for this exact version`];
   const reasons = list(check.reasons)
     .slice(0, 3)
     .map((r) => safeText(r, 40));
-  return [
-    `Advisory  ${safeText(check.status ?? "unavailable", 30)}${reasons.length ? ` (${reasons.join(", ")})` : ""}`,
-  ];
+  const why = reasons.length ? ` (${reasons.join(", ")})` : "";
+  if (check.status === "found")
+    return [
+      `Advisory  ${advisories.length} known for this exact version (${source})`,
+      ...advisoryItems(advisories),
+    ];
+  if (advisories.length)
+    return [
+      `Advisory  ${advisories.length} known for this exact version so far; lookup ${safeText(check.status ?? "unavailable", 30)}${why}, more may exist (${source})`,
+      ...advisoryItems(advisories),
+    ];
+  return [`Advisory  ${safeText(check.status ?? "unavailable", 30)}${why}`];
 }
 
 function nextActions(report, { details, outDir }) {
   const actions = [];
   const exitCode = report.policy?.exitCode;
-  if (details?.vulnerabilityCheck?.status === "found")
+  if (knownAdvisories(details?.vulnerabilityCheck))
     actions.push(
       "Known advisories exist: do not install this version until each advisory is reviewed.",
     );
@@ -190,6 +196,37 @@ function nextActions(report, { details, outDir }) {
   return actions;
 }
 
+export function renderAdvisoryOnly(
+  result,
+  spec,
+  { style = terminalStyle() } = {},
+) {
+  const details = { vulnerabilityCheck: result.vulnerabilityCheck };
+  const reason = result.artifactVerification?.reason;
+  const found = knownAdvisories(result.vulnerabilityCheck);
+  const lines = [
+    `UNMASK ${safeText(spec, 120)}`,
+    style.paint(
+      found ? "yellow" : "red",
+      "Result    Advisory-only: artifact not inspected; no verdict is claimed (exit 2)",
+    ),
+    `${style.paint("bold", "Artifact")}  not inspected${reason ? ` (${safeText(reason, 80)})` : ""}; source comparison not performed`,
+    ...advisoryLines(details).map((line) =>
+      line.startsWith("Advisory")
+        ? style.paint("bold", "Advisory") + line.slice(8)
+        : line,
+    ),
+    `${style.paint("bold", "AI")}        not run; no artifact evidence to explain`,
+    `${style.paint("bold", "Notice")}    ${safeText(result.notice, 400)}`,
+    style.paint("bold", "Next"),
+    found
+      ? "  - Known advisories exist: do not install this version until each advisory is reviewed."
+      : "  - No current advisory is not evidence of safety; the artifact itself was not checked.",
+    "  - Prefer a different exact version that UNMASK can fully analyze.",
+  ];
+  return lines.join("\n") + "\n";
+}
+
 const codes = { bold: 1, red: 31, yellow: 33, cyan: 36, dim: 2 };
 const label =
   /^(UNMASK|Result|Coverage|Source|Findings|Failures|Advisory|AI|Next)\b/;
@@ -209,7 +246,7 @@ function resultColor(report, details) {
   if (report.policy?.exitCode === 2) return "red";
   if (
     report.policy?.exitCode === 3 ||
-    details?.vulnerabilityCheck?.status === "found"
+    knownAdvisories(details?.vulnerabilityCheck)
   )
     return "yellow";
   return "bold";

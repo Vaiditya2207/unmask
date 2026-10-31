@@ -12,6 +12,7 @@ import { getHostedDetails } from "./hosted.mjs";
 import { infoCommand } from "./info.mjs";
 import {
   createProgress,
+  renderAdvisoryOnly,
   renderCheckSummary,
   renderError,
   terminalStyle,
@@ -211,6 +212,12 @@ export async function main(argv = process.argv.slice(2), runtime = {}) {
     return report.policy.exitCode;
   } catch (error) {
     progress?.stop();
+    if (error instanceof LocalInputError && error.advisoryResult)
+      stdout.write(
+        renderAdvisoryOnly(error.advisoryResult, argv[1], {
+          style: terminalStyle(stdout, env),
+        }),
+      );
     if (error instanceof LocalInputError) {
       stderr.write(renderError(error.code, error.message, errorStyle));
       return 2;
