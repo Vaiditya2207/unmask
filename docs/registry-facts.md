@@ -1,0 +1,23 @@
+# Registry facts
+
+`GET /api/registry/facts?package=example%401.2.3` retrieves public npm metadata for an exact version, without downloading or executing its tarball. Scoped names are URL encoded, for example `?package=%40scope%2Fexample%401.2.3`. Tags, ranges, URLs, duplicate query keys and unknown parameters are rejected.
+
+The response separates `verifiedObservations` (the retrieved document identity matches the requested identity; the SHA-256 covers the retrieved bytes) from `unverifiedClaims` (registry-reported maintainers, publisher name, deprecation, license, engines and repository). `source` records the npm URL, retrieval time, byte count and document SHA-256. Claim pointers refer to that document. These observations do not authenticate the publisher, validate a license or repository, or establish safety. Maintainer names come from the exact-version document as returned now, not an independently verified ownership history. Email addresses and unrelated registry fields are excluded.
+
+Claim statuses distinguish `registry-reported-unverified`, `not-recorded`, `invalid-type` and `omitted-limit`. Missing deprecation does not imply ongoing maintenance. This metadata endpoint runs no AI assessment, source comparison, artifact inspection or advisory analysis; it does not create a completed package check. Use the existing package-details endpoint for manifest inventory from an analyzed artifact.
+
+Requests stay on `https://registry.npmjs.org`, refuse redirects, omit credentials and use a 1 MiB decoded-response limit and a 10 second deadline. Individual claims have an 8 KiB limit and maintainer lists are capped at 100 entries. Each app instance admits at most two concurrent lookups and thirty lookups per minute. These limits are separate from analysis admission. Deployments with multiple instances need their own aggregate admission policy.
+
+Errors return JSON: 400 invalid input, 405 unsupported method, 404 registry release unavailable, 429 admission limit, 502 invalid/unavailable upstream metadata, or 504 deadline exceeded. They never become empty successful metadata. A document larger than the cap remains unavailable. The app's `registryFacts` option supports injected `fetchImpl` and smaller byte, deadline and admission limits for local tests.
+
+See `examples/registry-facts/README.md` for a fully local reproducible fixture. Hosted deployment and live npm behavior remain unverified by these fixture checks. Temporal is not involved.
+
+## Release history and change indicators
+
+`GET /api/registry/history?package=example&limit=20` retrieves the current full public registry document for a package name. Scoped names work as in the facts endpoint, but an exact version is not included. `limit` defaults to 20 and accepts integers from 1 to 100. The history and facts endpoints share the same concurrency and per-minute admission counters.
+
+`timeline` lists newest dated version records first, ordered by registry publication time rather than semver. Each entry has a timestamp pointer, metadata status, bounded unverified claims and a `comparison` against the previous dated version in the entire accepted snapshot (including a predecessor outside the returned page). A difference in recorded publisher names or deprecation, license, engine or repository values is an indicator for review. Object key ordering alone is ignored. Missing/invalid/omitted fields produce `unassessedFields`; they never imply unchanged ownership or metadata. Equal timestamps make the affected comparisons unassessable.
+
+Registry dates may remain for removed versions whose metadata is unavailable. Those versions stay visible with `metadataStatus: not-recorded`. Invalid or absent dates are counted as undated; invalid version keys are counted separately. The API accepts canonical UTC ISO timestamps with optional three-digit milliseconds. `coverage` records the accepted dated and undated counts, returned count and omitted dated count. At most 5,000 candidate version keys are processed; excess records or an upstream document over 1 MiB return unavailable instead of a partial clean result. A snapshot with no usable dates returns `status: history-unavailable` and explicit coverage.
+
+A current registry snapshot is not an audit log. Publisher names are unverified registry declarations. Differences between version records do not establish a maintainer transfer, account compromise, the time a field was edited, or maliciousness. Undated or removed history can prevent knowledge of the real previous release. Popularity and unchanged metadata do not establish safety. No artifact or model assessment runs for this endpoint. The example under `examples/registry-history/` exercises the actual local API with a synthetic registry snapshot.

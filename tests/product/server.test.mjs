@@ -1282,3 +1282,283 @@ test("shared result lookups isolate release and routing identities as well as th
     assert.equal(store.findKey(key(build)), undefined);
   assert.equal(store.findKey(key(info, "cached@1.0.1")), undefined);
 });
+
+test("package details HTTP shares pending/terminal/expired jobs and leaves raw JSON unchanged", async (t) => {
+  const gate = deferred();
+  const clock = fakeClock();
+  let analysisCalls = 0;
+  let modelCalls = 0;
+  const input = syntheticAnalysis("changed");
+  const before = JSON.stringify(input);
+  const s = await start(t, {
+    clock,
+    limits: { reportTtlMs: 100 },
+    runAnalysis: async () => {
+      analysisCalls++;
+      await gate.promise;
+      modelCalls++;
+      return input;
+    },
+  });
+  assert.equal((await s.get(`/r/${"f".repeat(32)}.details.json`)).status, 404);
+  const response = await s.post("example@1.0.0");
+  const location = response.headers.get("location");
+  const pending = await s.get(location + ".details.json");
+  assert.equal(pending.status, 202);
+  assert.equal(pending.headers.get("retry-after"), "3");
+  assert.equal(pending.headers.get("cache-control"), "no-store");
+  assert.equal((await pending.json()).key, undefined);
+  gate.resolve();
+  const raw = await (await finished(s, location)).text();
+  assert.equal(raw, before);
+  const details = await s.get(location + ".details.json");
+  assert.equal(details.status, 200);
+  assert.equal(
+    details.headers.get("content-disposition"),
+    'attachment; filename="unmask-package-details.json"',
+  );
+  assert.match(details.headers.get("content-type"), /application\/json/u);
+  assert.equal((await details.json()).detailsVersion, "1");
+  clock.advance(99);
+  assert.equal((await s.get(location + ".details.json")).status, 200);
+  assert.equal(await (await s.get(location + ".json")).text(), raw);
+  assert.equal(analysisCalls, 1);
+  assert.equal(modelCalls, 1);
+  clock.advance(1);
+  assert.equal((await s.get(location + ".details.json")).status, 404);
+  assert.equal((await s.get(location + ".json")).status, 404);
+  assert.equal(analysisCalls, 1);
+  assert.equal(modelCalls, 1);
+});
+
+test("package details preserves incomplete reports and terminal jobs without reports", async (t) => {
+  for (const failed of [false, true]) {
+    const input = syntheticAnalysis("changed");
+    input.coverage.inventory.complete = false;
+    input.coverage.inventory.lowerBound = true;
+    input.coverage.complete = false;
+    input.policy = { exitCode: 2, findings: [] };
+    let calls = 0;
+    const s = await start(t, {
+      runAnalysis: async () => {
+        calls++;
+        if (failed) throw new Error("synthetic analysis failure");
+        return input;
+      },
+    });
+    const path = (await s.post("example@1.0.0")).headers.get("location");
+    const raw = await (await finished(s, path)).json();
+    const response = await s.get(path + ".details.json");
+    assert.equal(response.status, 200);
+    const details = await response.json();
+    if (failed) assert.deepEqual(details, raw);
+    else {
+      assert.equal(details.inventory.complete, false);
+      assert.equal(details.coverage.counters.inventory.lowerBound, true);
+    }
+    assert.equal(calls, 1);
+  }
+});
+
+function syntheticAdvisories(spec, status = "none-reported") {
+  const separator = spec.lastIndexOf("@");
+  return {
+    schemaVersion: "1",
+    source: "OSV",
+    package: {
+      ecosystem: "npm",
+      name: spec.slice(0, separator),
+      version: spec.slice(separator + 1),
+    },
+    queriedAt: "2026-11-01T00:00:00.000Z",
+    status,
+    complete: ["found", "none-reported"].includes(status),
+    reasons: [],
+    advisories:
+      status === "found"
+        ? [{ id: "OSV-SYNTHETIC", summary: "Synthetic advisory" }]
+        : [],
+    pagesFetched: 1,
+    limits: { responseBytes: 1048576 },
+  };
+}
+
+test("hosted enrichment coalesces exactly once, caches with the job and starts TTL after lookup", async (t) => {
+  const gate = deferred();
+  const started = deferred();
+  const clock = fakeClock();
+  let analysisCalls = 0,
+    lookupCalls = 0,
+    signal;
+  const input = syntheticAnalysis("changed");
+  const original = JSON.stringify(input);
+  const s = await start(t, {
+    clock,
+    limits: { reportTtlMs: 100, maxNewChecks: 2 },
+    runAnalysis: async (_spec, options) => {
+      analysisCalls++;
+      signal = options.signal;
+      return input;
+    },
+    enrichJob: async (spec, options) => {
+      lookupCalls++;
+      assert.equal(options.signal, signal);
+      started.resolve();
+      if (lookupCalls === 1) await gate.promise;
+      return syntheticAdvisories(spec, "found");
+    },
+  });
+  assert.equal((await s.get(`/r/${"e".repeat(32)}.details.json`)).status, 404);
+  assert.equal(lookupCalls, 0);
+  const first = await s.post("example@1.0.0");
+  const location = first.headers.get("location");
+  await started.promise;
+  clock.advance(50);
+  assert.equal((await s.get(location + ".details.json")).status, 202);
+  assert.equal(
+    (await s.post("example@1.0.0")).headers.get("location"),
+    location,
+  );
+  assert.equal(analysisCalls, 1);
+  assert.equal(lookupCalls, 1);
+  gate.resolve();
+  assert.equal(await (await finished(s, location)).text(), original);
+  let details = await (await s.get(location + ".details.json")).json();
+  assert.equal(details.vulnerabilityCheck.status, "found");
+  assert.equal(details.vulnerabilityCheck.package.name, "example");
+  assert.equal(
+    details.scope.knownVulnerabilities,
+    "queried-exact-package-only",
+  );
+  assert.equal(details.scope.safetyVerdict, "not-provided");
+  assert.equal(details.responseLimits.combinedBytes, 4194304);
+  for (let index = 0; index < 3; index++)
+    await s.get(location + ".details.json");
+  assert.equal(
+    (await s.post("example@1.0.0")).headers.get("location"),
+    location,
+  );
+  clock.advance(99);
+  assert.equal((await s.get(location + ".details.json")).status, 200);
+  clock.advance(1);
+  assert.equal((await s.get(location + ".details.json")).status, 404);
+  const fresh = (await s.post("example@1.0.0")).headers.get("location");
+  assert.notEqual(fresh, location);
+  await finished(s, fresh);
+  assert.equal(analysisCalls, 2);
+  assert.equal(lookupCalls, 2);
+  assert.equal(await (await s.get(fresh + ".json")).text(), original);
+});
+
+test("lookup failure, malformed identity and result/store caps preserve the core report", async (t) => {
+  for (const variant of ["throws", "identity", "oversized", "storage"]) {
+    const input = syntheticAnalysis("changed");
+    const original = JSON.stringify(input);
+    let calls = 0;
+    const s = await start(t, {
+      ...(variant === "storage"
+        ? { limits: { maxReportBytes: Buffer.byteLength(original) + 4000 } }
+        : {}),
+      runAnalysis: async () => input,
+      enrichJob: async (spec) => {
+        calls++;
+        if (variant === "throws") throw new Error("private provider details");
+        const result = syntheticAdvisories(
+          spec,
+          ["oversized", "storage"].includes(variant)
+            ? "found"
+            : "none-reported",
+        );
+        if (variant === "identity") result.package.name = "different-package";
+        if (variant === "oversized")
+          result.advisories = [{ summary: "x".repeat(2097152) }];
+        if (variant === "storage")
+          result.advisories = [{ summary: "x".repeat(100000) }];
+        return result;
+      },
+    });
+    const location = (await s.post("example@1.0.0")).headers.get("location");
+    assert.equal(await (await finished(s, location)).text(), original, variant);
+    const details = await (await s.get(location + ".details.json")).json();
+    assert.equal(details.vulnerabilityCheck.status, "unavailable", variant);
+    assert.equal(details.scope.knownVulnerabilities, "not-assessed", variant);
+    assert.equal(
+      details.vulnerabilityCheck.reasons[0],
+      {
+        throws: "lookup-failed",
+        identity: "invalid-result",
+        oversized: "result-byte-cap",
+        storage: "storage-byte-cap",
+      }[variant],
+    );
+    assert.equal(calls, 1);
+    assert.doesNotMatch(JSON.stringify(details), /private provider details/u);
+    assert.equal(
+      (await s.post("example@1.0.0")).headers.get("location"),
+      location,
+    );
+    assert.equal(calls, 1);
+  }
+});
+
+test("execution abort during enrichment retains completed core report and releases the queue", async (t) => {
+  const clock = fakeClock();
+  const started = deferred();
+  const input = syntheticAnalysis("changed");
+  const original = JSON.stringify(input);
+  let lookupCalls = 0,
+    aborted = false;
+  const s = await start(t, {
+    clock,
+    limits: { executionMs: 50 },
+    runAnalysis: async () => input,
+    enrichJob: async (_spec, { signal }) => {
+      lookupCalls++;
+      signal.addEventListener(
+        "abort",
+        () => {
+          aborted = true;
+        },
+        { once: true },
+      );
+      started.resolve();
+      return new Promise(() => {});
+    },
+  });
+  const location = (await s.post("example@1.0.0")).headers.get("location");
+  await started.promise;
+  clock.advance(50);
+  await tick();
+  assert.equal(aborted, true);
+  assert.equal(await (await s.get(location + ".json")).text(), original);
+  const details = await (await s.get(location + ".details.json")).json();
+  assert.equal(details.vulnerabilityCheck.status, "unavailable");
+  assert.equal(details.vulnerabilityCheck.reasons[0], "aborted");
+  assert.equal(details.scope.knownVulnerabilities, "not-assessed");
+  assert.equal(lookupCalls, 1);
+  const second = await s.post("another@1.0.0");
+  await tick();
+  assert.equal(second.status, 303);
+  assert.equal(lookupCalls, 2);
+  clock.advance(50);
+});
+
+test("incomplete or disabled advisory checks do not claim known-vulnerability completion", async (t) => {
+  for (const enabled of [false, true]) {
+    const input = syntheticAnalysis("changed");
+    const s = await start(t, {
+      runAnalysis: async () => input,
+      ...(enabled
+        ? { enrichJob: async (spec) => syntheticAdvisories(spec, "incomplete") }
+        : {}),
+    });
+    const location = (await s.post("example@1.0.0")).headers.get("location");
+    await finished(s, location);
+    const details = await (await s.get(location + ".details.json")).json();
+    assert.equal(
+      details.vulnerabilityCheck.status,
+      enabled ? "incomplete" : "not-assessed",
+    );
+    assert.equal(details.scope.knownVulnerabilities, "not-assessed");
+  }
+});

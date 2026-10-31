@@ -1,111 +1,87 @@
 # Stack and engineering decisions
 
-This page records the pending implementation inspected at the revision in the
-[documentation index](README.md). The main baseline is still a tooling scaffold.
-The [architecture](architecture.md) and [contracts](contracts.md) describe how the
-components fit together and what callers can rely on once those changes land.
+This page records source contracts and the live snapshot in the [documentation index](README.md). The [architecture](architecture.md) and [contracts](contracts.md) describe the components and observable behavior. Source configuration, a deployed revision and model usefulness are separate evidence.
 
 ## Selected stack
 
-| Layer                  | Pending implementation choice                                        | Boundary                                                                               |
-| ---------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Runtime                | Node.js `24.22.2`, pinned by package engines and `.nvmrc`            | Exact runtime matters for process and descriptor behavior                              |
-| Language               | Plain ESM JavaScript, `.mjs`                                         | No TypeScript migration, transpiler or bundler                                         |
-| Archive parsing        | `tar-stream` `3.2.2` plus Node gunzip                                | Parser only; application code owns path checks, budgets and inert inventory            |
-| Syntax parsing         | `acorn` `8.19.0`                                                     | Bounded supported JavaScript; unsupported syntax remains unknown                       |
-| HTTP                   | Built-in `node:http`                                                 | Form submission, status polling and reports; no uploads or account system              |
-| Process control        | Built-in child processes and Unix-domain leases                      | Hosted child only; pinned Node listening-descriptor access fails closed if unavailable |
-| Report and policy      | Explicit plain-object validation and deterministic functions         | No external schema or semantic-equivalence engine                                      |
-| Viewer                 | Shared escaped HTML and trusted static assets                        | Target strings never become executable page markup                                     |
-| Model                  | Hosted Google Gemma adapter                                          | Fixed endpoint host; provider access and quality need separate evidence                |
-| Tests and formatting   | `node:test`, strict assertions, Prettier `3.9.10`                    | Tooling checks and product checks are different evidence                               |
-| Distribution           | One npm tarball containing `dist`                                    | Selected identity `@xagents_in/unmask`; private `0.0.0` remains unpublished            |
-| Release/hosting design | GitHub Actions, GHCR and manual DigitalOcean App Platform deployment | Guarded tooling exists; no built image or deployed service is established here         |
+| Layer                | Implementation                                                 | Boundary                                                                                           |
+| -------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Runtime              | Node.js `24.22.2`, pinned by package engines and `.nvmrc`      | Process and descriptor behavior depend on the exact runtime                                        |
+| Backend language     | Plain ESM JavaScript, `.mjs`                                   | No backend TypeScript migration                                                                    |
+| Separate website     | Next.js `16.4.2`, React `19.3.1`, TypeScript `6.0.3` in `web/` | Already merged frontend; independent build and service                                             |
+| Archive parsing      | `tar-stream` `3.2.2` plus Node gunzip                          | Inert inventory, path checks and application budgets; no extraction or target execution            |
+| Syntax parsing       | `acorn` `8.19.0`                                               | Bounded supported JavaScript; unsupported syntax remains unknown                                   |
+| API HTTP             | Built-in `node:http`                                           | Registry form, job polling and reports; no uploads or account system                               |
+| Process control      | Built-in child processes and Unix-domain leases                | Hosted child lifetime and ownership checks; not a security sandbox                                 |
+| Report and policy    | Plain-object validation and deterministic functions            | No general semantic-equivalence engine                                                             |
+| Evidence viewer      | Shared escaped HTML plus the separate Next.js interface        | Live schema 1 reports currently link to the original API viewer                                    |
+| Advisory model       | Ordered Google Gemini/Gemma route                              | Fixed provider host, bounded evidence, no tools; quality and compliance need separate acceptance   |
+| Tests and formatting | `node:test`, strict assertions, Prettier `3.9.10`              | Local checks, live observations and user acceptance are different evidence                         |
+| Backend distribution | npm tarball containing `dist`                                  | Public registry metadata lists `@xagents_in/unmask@0.1.0`; install/artifact checks remain separate |
+| Hosting              | Separate Cloud Run API and Next.js services                    | Current public origins and serving revisions are recorded in the index                             |
 
-The production dependency list in the inspected package contains only Acorn and
-tar-stream. Exact-version parsing is implemented locally; there is no `semver`
-dependency. Citation validation lives in `model/client.mjs`; configuration is
-shared through `model/config.mjs`, without a separate citations module.
+Backend production dependencies are Acorn and tar-stream. Exact-version parsing is implemented locally. Model configuration is shared through `model/config.mjs`, with evidence bundling and citation validation in `model/client.mjs`.
 
-The selected hosting design is a single DigitalOcean App Platform service for
-both frontend and API. No deployment has been applied; image identity, serving
-routes and the normal end-to-end request still need deployment acceptance.
+The API image consumes a packed backend artifact and matching lockfile. The deployed Next.js candidate uses its own standalone build and container. This replaces the earlier single-service DigitalOcean proposal; the two surfaces have independent serving identities. Release source, artifact hashes, image digests and routing still need checking for each rollout.
 
 ## Resource defaults
 
-These are source-level budgets, not measured production capacity or an OS memory
-limit. Effective analysis limits are recorded in reports; accepted overrides may
-lower supported limits.
+These are source-level budgets, not measured production capacity or an OS memory limit. Effective analysis limits are recorded in reports; supported overrides can lower limits.
 
-| Area                          | Default                                                                                       |
-| ----------------------------- | --------------------------------------------------------------------------------------------- |
-| Each compressed archive       | 50 MiB                                                                                        |
-| Each expanded archive         | 250 MiB; ratio at most 100                                                                    |
-| Each archive inventory        | 20,000 entries; 64 path components; 4,096 path bytes; 40,000 path nodes                       |
-| Archive metadata record       | 64 KiB                                                                                        |
-| Retained regular-file content | 10 MiB per file; one shared 128 MiB budget across artifact and source                         |
-| Archive parse deadline        | 30 seconds                                                                                    |
-| Registry metadata capture     | 1 MiB                                                                                         |
-| Acquisition request deadline  | 30 seconds; redirects refused                                                                 |
-| JavaScript inspection         | 2 MiB per file; 8 MiB per side; 200,000 tokens; bounded cues and literals                     |
-| Hosted worker                 | 512 MiB V8 old-space cap; 120-second deterministic deadline                                   |
-| Hosted queue                  | One active and one waiting; 300-second queue TTL; 240-second execution deadline               |
-| Hosted admission              | Six new checks per ten minutes in one server process                                          |
-| Report output/store           | 64 MiB result cap; 64 MiB total store, 200 entries, 24-hour TTL                               |
-| HTTP form body                | 4,096 bytes; 10-second body deadline                                                          |
-| Model                         | At most two 45-second attempts within 90 seconds; at most 4,000 input and 1,000 output tokens |
+| Area                           | Default                                                                                                                                   |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Each compressed archive        | 50 MiB                                                                                                                                    |
+| Each expanded archive          | 250 MiB; ratio at most 100                                                                                                                |
+| Each archive inventory         | 20,000 entries; 64 path components; 4,096 path bytes; 40,000 path nodes                                                                   |
+| Archive metadata record        | 64 KiB                                                                                                                                    |
+| Retained regular-file content  | 10 MiB per file; one shared 128 MiB artifact/source budget                                                                                |
+| Archive parse deadline         | 30 seconds                                                                                                                                |
+| Registry metadata capture      | 1 MiB                                                                                                                                     |
+| Acquisition request            | 30 seconds; redirects refused                                                                                                             |
+| JavaScript inspection          | 2 MiB per file; 8 MiB per side; 200,000 tokens; bounded cues and literals                                                                 |
+| Hosted worker                  | 512 MiB V8 old-space cap; 120-second deterministic deadline                                                                               |
+| Hosted queue                   | One active and one waiting; 300-second queue TTL; 240-second outer execution deadline                                                     |
+| Hosted admission               | Six new checks per ten minutes in one API process                                                                                         |
+| Result/store                   | 64 MiB result cap; 64 MiB total, 200 entries; up to 30 minutes after completion, without read extension                                   |
+| HTTP form body                 | 4,096 bytes; 10-second body deadline                                                                                                      |
+| Model route                    | Default: at most two generations; explicit three-tier routes: at most three. Each attempt is at most 45 seconds, within 135 seconds total |
+| Model tokens                   | At most 4,000 input tokens; default output cap 4,096 for Gemini and 1,000 for Gemma                                                       |
+| Local model admission defaults | Three generations/minute, 12,000 input tokens/minute, 100 generations/day                                                                 |
 
-The V8 cap excludes native allocations, compressed buffers and other process
-memory. Overall resident memory and near-limit latency require measurement on
-the actual candidate and host. CLI parsing runs in its own process and does not
-inherit the hosted runner's child deadline or heap setting.
+The 240-second outer job deadline still applies when the deterministic and model stages share the same job; sub-budgets are not additive guarantees. V8 old-space excludes native allocations, compressed buffers and other process memory. Resident memory and near-limit latency need measurements on the actual host. Explicit offline CLI parsing runs in the CLI process and does not inherit the hosted child settings.
 
-## Model configuration and privacy
+## Model routing, configuration and privacy
 
-The reviewed adapter supports `gemma-4-26b-a4b-it` and `gemma-4-31b-it` on the fixed
-Google endpoint, defaulting to the former. A supported identifier is not proof
-of current account availability. There is no selected alternate provider path.
-Generation is explicit: temperature zero, one candidate, bounded output, and
-minimal thinking configuration. A minimal diagnostic succeeded for metadata
-lookup and token counting with `gemma-4-26b-a4b-it`, but hosted generation returned
-HTTP `403` `PERMISSION_DENIED`: the configured project's free tier is unavailable.
-No generated output was obtained. Successful generation, acceptance of the
-thinking configuration, quota behavior, latency and model quality remain
-unvalidated. This was not a normal package-analysis request; no billing changes
-or alternate-model calls were made.
+The default ordered route on `generativelanguage.googleapis.com` is:
 
-The shared factory is disabled unless `UNMASK_MODEL=on` and
-`UNMASK_MODEL_QUOTA_VERIFIED=true`. Positive integer request-per-minute,
-input-tokens-per-minute and daily request limits are mandatory. The preferred
-configured key is `GEMINI_API_KEY`; `UNMASK_MODEL_KEY` is an optional compatible
-alias, and conflicting values are rejected. API-key values are private
-server/CLI inputs, never browser assets or report fields.
+1. `gemini-3-flash-preview`, minimal thinking.
+2. `gemma-4-26b-a4b-it`, minimal thinking.
 
-The CLI separately requires `--allow-model`. Hosted explanation runs in the main
-process after deterministic child exit. The singleton retains local rate counters
-across jobs; those counters reset on process restart and cannot guarantee billing
-or replace upstream quotas. Responses disclose model identity, configuration,
-prompt hash, attempt counts and omissions when available. Evidence eligibility,
-token counting, output validation, failures and skips are visible model states.
-Citation checks establish exact supplied text, not the truth of a hypothesis.
+The hosted route uses `gemini-3-flash-preview` with minimal thinking first, then `gemma-4-26b-a4b-it` with minimal thinking. Set the non-secret `UNMASK_MODEL_ROUTE` value explicitly:
 
-## Decisions and remaining limits
+```json
+[
+  { "modelId": "gemini-3-flash-preview", "thinkingLevel": "minimal" },
+  { "modelId": "gemma-4-26b-a4b-it", "thinkingLevel": "minimal" }
+]
+```
 
-- Original tarball bytes remain authoritative. No registry copy silently replaces
-  a local input, and source claims never become build-origin proof.
-- File correspondence is byte based. Syntax/literal/capability observations can
-  prioritize review but cannot clear changes or certify semantic equivalence.
-- Model explanation is advisory and failure tolerant. Deterministic policy remains
-  separate, with bounded output on every terminal runner branch.
-- Hosted work has explicit process lifetime and directory ownership. Live leased
-  jobs survive competing startup; unmarked directories are preserved conservatively.
-- Build once and package one distribution. The image and deployed routing must
-  later be checked against that exact artifact and configuration.
-- npm is the implemented ecosystem scope. PyPI, release monitoring, rebuilds,
-  general deobfuscation and durable distributed service state are not implemented.
+This is also the upcoming source default; an older image requires the explicit override to select it. Do not combine a multi-tier override with `UNMASK_MODEL_ID`; the factory rejects conflicting configuration. The shared factory is used by the hosted parent process and explicitly consented offline model stage. Ordinary hosted CLI requests continue to use server configuration.
 
-Local source and tests do not establish provider-backed model usefulness,
-cryptographic provenance verification, customer validation, registry publication,
-container portability, deployed routing, uptime or production capacity. Those
-claims require separate, explicit evidence. This documentation adds none of
-those runtime or publication claims.
+The two-tier override has at most two generation attempts in total. Its existing per-attempt deadline, 135-second total budget, input/output caps and shared local admission limits remain unchanged. An invalid primary output can use the remaining attempt on that same primary, so a configured fallback is not a promise it will run. Model-scoped 429 fallthrough requires explicit minute or daily quota bindings for the exact current model. Every supplied quota/ErrorInfo binding must be model-scoped. Global/project, local-daily, hourly, unknown-window, authentication and input failures remain terminal. Daily exhaustion advances only to a later tier and never retries the exhausted tier. Model-scoped daily exhaustion moves immediately to an available next tier without waiting for that model’s daily reset; Retry-After remains in force for other retryable failures, and the total deadline still applies. The selected route still needs exact candidate/configuration and normal-path release verification; a direct model diagnostic is not production acceptance. See [deployment alignment](cloud-run-deployment.md#selected-hosted-route-override).
+
+The default budget is two generation attempts total. Explicit three-tier configurations retain a three-attempt total budget, not three attempts per tier. Invalid output can retry the same tier. Eligible model-scoped rate limits, transient server errors and timeouts can advance to the next tier; authentication, input and global/project/unknown quota failures do not authorize blind model shopping. Generation uses temperature zero and one candidate. Each attempt includes bounded tokenizer preflight; preflight is not another generation attempt.
+
+Model use requires explicit `UNMASK_MODEL=on` and configured provider access. The preferred server/offline-consented key is `GEMINI_API_KEY`; `UNMASK_MODEL_KEY` is a compatible alias, and conflicting values are rejected. No API key is needed in a browser or the default hosted CLI path.
+
+Upstream project quota remains **unknown**. The current default local controls are three generations/minute, 12,000 input tokens/minute and 100 generations/day. Local reservations and the singleton persist across jobs but reset on process restart; they are not provider quota verification, a billing guarantee or distributed admission. The factory also supports a separately validated legacy quota configuration. Model output records provider-quota uncertainty, local limits, tier/attempt information, prompt/configuration hashes and omissions.
+
+Registry CLI checks use the hosted API by default without reading a local provider key. Explicit offline local checks require `--allow-model` before the separate provider stage can send selected local excerpts. `--offline` disables acquisition; adding model consent deliberately permits that network stage. Hosted explanation runs in the API main process after deterministic child exit; credentials are not inherited by the child.
+
+## Observed model result and remaining acceptance
+
+The [recorded live zod run](README.md#model-evidence-and-acceptance) completed with three validated Gemini 3.5 Flash hypotheses. Prompt instructions were revised twice on non-fixture zod outputs; this is development evidence. Earlier Gemma generation returned permission denial in the configured project. Successful Gemini generation does not establish successful Gemma generation, useful reasoning, a study result or an independent holdout gate.
+
+Gemini is not open-weight. A configured Gemma fallback does not by itself demonstrate meaningful open-weight use. Hackathon compliance requires separate acceptance with this distinction disclosed.
+
+Original tarball bytes remain authoritative; source claims are not build-origin proof. Correspondence is byte based, and syntax/model observations cannot certify equivalence or package safety. PyPI, release monitoring, general rebuild equivalence and durable distributed state remain outside the implemented scope. The live service observations do not establish capacity, uptime, user validation or cryptographic provenance verification. Public npm metadata is observed separately; an installed release and its artifact identity need their own checks.

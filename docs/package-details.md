@@ -1,0 +1,62 @@
+# Package details API
+
+`GET /r/<id>.details.json` provides a versioned package breakdown derived from the existing schema-1 report plus any advisory result stored with its hosted job. It starts no check, fetch, model call or target execution. First submit an exact version through the [existing POST/303 flow](contracts.md#http-contract). The normal `/r/<id>.json` download and CLI output retain their existing schema and contents.
+
+This endpoint is locally implemented source behavior. Its availability on a hosted origin requires deployment and a representative request against that exact candidate.
+
+```sh
+# Use your chosen API origin; save the Location header from this response.
+curl -i -X POST "$UNMASK_ORIGIN/check" \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data-urlencode 'package=example@1.2.3'
+
+# Substitute the returned report ID. These reads never start another analysis.
+curl "$UNMASK_ORIGIN/r/$REPORT_ID.details.json"
+curl "$UNMASK_ORIGIN/r/$REPORT_ID.json"
+```
+
+Both JSON URLs use the same job, expiry and admission state. Queued/running jobs return HTTP 202 with the existing public job object and `Retry-After: 3`. A terminal job with a report returns HTTP 200, including incomplete reports. A failed/timed-out terminal job without a report returns HTTP 200 with the same public job object as the ordinary JSON route. Unknown, expired, evicted or restarted-away jobs return the existing HTTP 404 error page. All responses retain `Cache-Control: no-store`; reads never extend the 30-minute completion-based TTL. Successful details downloads use `application/json` and filename `unmask-package-details.json`.
+
+The terminal projection has `detailsVersion: "1"` and `reportSchemaVersion: "1"`. These are separate contracts; details fields are not added to the strict report. The [implementation](../src/core/package-details.mjs) is a pure `buildPackageDetails(report, limits?)` function and validates its report input. The [HTTP route](../src/server/app.mjs) reads the existing queue/store result.
+
+| Field                      | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `versions`, `identity`     | Recorded analyzer/policy/limits versions, requested identity and artifact SHA-256/SHA-512. Publisher name/version remain separate declarations.                                                                                                                                                                                                                                                                            |
+| `declarations`             | Artifact manifest description, license, homepage, keywords, runtime support and entrypoint fields. Values are **publisher declarations**, not verified purpose, licensing compliance or runtime support. `pointer` addresses the parsed manifest; `evidenceIds` locate the existing manifest evidence, which may have a bounded excerpt.                                                                                   |
+| `entrypoints.targets`      | String leaves of main/module/exports/bin/types/typings/browser declarations matched only against safe exact relative accepted file paths. Correspondence and available syntax cue/skip pointers accompany exact matches. No Node condition selection, wildcard expansion, extension inference or runtime resolution is performed. A miss is scoped to the accepted inventory.                                              |
+| `dependencies.categories`  | Direct runtime, optional, peer, development and both bundled field spellings, in that fixed order. Per-field `declaredCount` counts all declared entries, including invalid/omitted entries; `validEntryCount` counts entries having the expected string type, not package-name/range validity. Categories can overlap. Boolean bundled declarations have a null resolved count. Transitive dependencies are not assessed. |
+| `dependencies.comparisons` | Declared-value differences against source only when selection and source coverage are complete, and against registry only when its usable manifest has a recorded registry-document digest. Malformed fields remain unassessed; registry normalization is not evaluated. These comparisons do not resolve or install dependencies.                                                                                         |
+| `scripts`                  | Every accepted script declaration, with preinstall/install/postinstall marked as install hooks; prepare and publish scripts retain their exact names. Binding-gyp files, the gypfile declaration and existing implicit-gyp policy findings are reported separately. Nothing is executed and npm install behavior is not simulated.                                                                                         |
+| `inventory`                | Accepted artifact regular files with original correspondence states, byte sizes, digests and evidence IDs; lexical final-extension groups, top-level directories, the largest 20 files, source-only paths, inert links and nonregular counts. Exact aggregate counts describe the report inventory, not rejected or unread archive entries.                                                                                |
+| `capabilities`             | Recorded syntax references grouped by rule, with original evidence IDs and locations. `cueRef` is an exact JSON pointer into raw `/cues` or `/annotations`; cues without an ID are not assigned a fabricated ID. No execution or binding claim follows from syntax.                                                                                                                                                        |
+| `provenance`               | Source selection, artifact integrity/provenance, source archive and registry-document facts exactly as recorded, subject to projection caps. Claimed and verified statuses retain their original meaning; no new cryptographic provenance check occurs.                                                                                                                                                                    |
+| `ai`                       | Recorded model metadata and mechanically validated upstream hypotheses, preserved as advisory. Selection counts describe recorded prompt groups and omitted groups/evidence items, not full-file review or model attention. Null means no count was recorded. The original `coverage.modelReviewed` is unchanged.                                                                                                          |
+| `coverage`, `scope`        | Coverage counters, effective limits, failures, syntax skip/manifest scope observations and deterministic findings. Static bounds, unsupported syntax and incomplete inventory remain explicit. No safety verdict, vulnerability database scan, license scan or all-code-read claim is provided.                                                                                                                            |
+
+Each bounded list uses this shape:
+
+```json
+{
+  "items": [],
+  "total": 840,
+  "returned": 0,
+  "omitted": 840,
+  "omissionReasons": { "response-byte-cap": 840 }
+}
+```
+
+`total = returned + omitted`; counts are computed before projection omission. An omitted declaration is not an absent declaration. Each item is retained intact or omitted, including UTF-8 strings and evidence references. Reasons are `item-cap`, `value-byte-cap`, `section-byte-cap` or `response-byte-cap`. Default limits are 20,000 returned items per list, 32,768 serialized bytes per item, 262,144 per list and 2,097,152 for the complete response, with 32,768 reserved for fixed metadata. The pure helper permits only smaller positive limits and a response cap of at least 65,536 bytes. Manifest pointers carry at most 16 unique existing evidence IDs; `declarations.evidenceIdsOmitted` and the corresponding dependency/script count expose further omitted references. Every returned reference still points into the raw report. Entrypoint traversal has a separate fixed 4,096-node ceiling, exposed through `traversalOmitted`; when true, target-list totals cover only visited string leaves. The largest-files view intentionally contains at most 20 rows; the full accepted file list remains in `inventory.files` and in the raw report.
+
+Declaration fields, dependency/script names, paths, extensions and capability rules sort by JavaScript UTF-16 code-unit order. File ties use `originalPath`; largest-file ties use that file order. Bundled list entries sort by JSON-encoded name then original index. Export object member order and other raw declaration values are preserved. Other observation lists retain report order. Package text remains JSON data; consumers must escape it before rendering HTML or Markdown.
+
+These boundaries make a factual breakdown inspectable. They do not establish that a package is safe, that a declared entrypoint is what Node will load, or that every accepted file was syntax-inspected or model-reviewed. Use the [coverage and evidence contract](contracts.md) and the raw report for the underlying accepted detail.
+
+## Hosted exact-package vulnerability lookup
+
+The hosted `startServer` entry point enables one bounded OSV lookup for the submitted exact npm package/version after analysis completes and before the job finishes. `createApp` remains opt-in through `enrichJob(spec, { signal })`; `startServer({ enrichJob: null })` explicitly disables lookup for offline diagnostic runtimes. The callback receives the job abort signal; no dependency ranges or transitive graph are resolved. This enrichment is stored as `job.vulnerabilityCheck` in the same bounded report store. It is not inserted into the strict schema-1 report or run by the offline CLI.
+
+The details response exposes that stored `vulnerabilityCheck`, including source, exact package identity, query time, status, completeness, reasons, advisory records, pages and adapter limits. Statuses are `found`, `none-reported`, `incomplete` and `unavailable`; an app with no enrichment has `not-assessed`. `none-reported` means that this exact package query completed without returned advisories at the recorded time. It is not a safety verdict or proof that vulnerabilities do not exist. Only complete `found`/`none-reported` results move `scope.knownVulnerabilities` from `not-assessed` to `queried-exact-package-only`. Incomplete or unavailable results retain their explicit reasons; partial advisories are not silently presented as a complete scan.
+
+Concurrent identical requests share the lookup. Cached jobs reuse its stored result, including unavailable results, until the same completion-based TTL, eviction or restart as the report. All GET routes remain reads with zero lookup side effects. A lookup error, invalid identity, oversized result or abort produces bounded `unavailable` metadata without changing the core report or its policy exit code. If execution expires after core analysis completed, that completed report is retained with an aborted lookup result. An enrichment that exceeds the shared store budget is replaced with `storage-byte-cap` metadata before considering the existing core-report size failure path.
+
+The pure package projection remains capped at 2,097,152 bytes. The stored OSV envelope is capped at 2,096,128 UTF-8 JSON bytes, reserving wrapper space. The combined details response has an explicit 4,194,304-byte cap, including all wrapper metadata; `responseLimits` records these bounds. An oversized OSV envelope becomes `unavailable` with `result-byte-cap`, never `none-reported`. No raw provider error body is returned. The normal `/r/<id>.json` response remains byte-for-byte the schema-1 report without this enrichment.

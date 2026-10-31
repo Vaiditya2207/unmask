@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "1",
+  "scope": "artifact-source",
+  "file": {
+    "path": "index.js",
+    "originalPath": "artifact/index.js",
+    "state": "changed",
+    "comparisonState": "changed",
+    "size": 27,
+    "artifactSha256": "f1cf2bccc6058e9e49b2c7df87dcce95dd1c1106c720fad8e63080ecde436d6c",
+    "sourceSha256": "b940b39e1f082727ddc52377c883efdb6fb05b7ac133fd3917bc555dd741d634",
+    "reason": null
+  },
+  "recordedOnly": true,
+  "evidence": [
+    {
+      "id": "ev-127727f0228dfa0bc7f3c5700a774b0cc78689e8df0c23b1f12aedb5790428f4",
+      "side": "artifact",
+      "path": "index.js",
+      "originalPath": "artifact/index.js",
+      "fileSha256": "f1cf2bccc6058e9e49b2c7df87dcce95dd1c1106c720fad8e63080ecde436d6c",
+      "blobDigest": "a3ccf8790242b08144b3a8d4842b835e5a40abc9e6a027885c7dd3edad927739",
+      "size": 27,
+      "range": [21, 24],
+      "excerpt": "new",
+      "excerptRange": [21, 24],
+      "recordedExcerptRange": [21, 24],
+      "excerptTruncated": false,
+      "excerptStatus": "recorded"
+    },
+    {
+      "id": "ev-9352a6cedc7c786f5261a70e678dda57c255393faa3af3620806d874750aa196",
+      "side": "source",
+      "path": "index.js",
+      "originalPath": "source/index.js",
+      "fileSha256": "b940b39e1f082727ddc52377c883efdb6fb05b7ac133fd3917bc555dd741d634",
+      "blobDigest": "4d5a9a5bd2ba0b29e2b537866d1d87663534788358e6d5a5b0ea4f570c55c604",
+      "size": 27,
+      "range": [21, 24],
+      "excerpt": "old",
+      "excerptRange": [21, 24],
+      "recordedExcerptRange": [21, 24],
+      "excerptTruncated": false,
+      "excerptStatus": "recorded"
+    }
+  ],
+  "evidenceStatus": "recorded",
+  "evidenceOmitted": 0,
+  "invalidEvidenceOmitted": 0,
+  "limitations": [
+    "States compare artifact and selected source, not releases or version history.",
+    "Source-only paths are recorded observations; their hashes, file types and excerpts may be unavailable.",
+    "Incomplete inventories and unassessed files do not establish safety or absence.",
+    "Only previously recorded excerpts are returned; omitted text is not fetched or reconstructed. Hashes are recorded claims, not new artifact verification. Render excerpts as text, never HTML."
+  ]
+}

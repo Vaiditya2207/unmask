@@ -47,6 +47,7 @@ export async function startServer({
   runnerOptions = {},
   versionInfo,
   modelClient,
+  enrichJob,
 } = {}) {
   if (
     typeof host !== "string" ||
@@ -62,6 +63,14 @@ export async function startServer({
       : modelClient === undefined
         ? await modelClientFromEnv()
         : modelClient;
+  const enrichment =
+    enrichJob === null
+      ? undefined
+      : enrichJob === undefined
+        ? (await import("../core/advisories.mjs")).lookupNpmAdvisories
+        : enrichJob;
+  if (enrichment !== undefined && typeof enrichment !== "function")
+    throw new TypeError("enrichJob must be a function or null");
   const run = await createRunner({
     ...runnerOptions,
     tempRoot,
@@ -81,6 +90,13 @@ export async function startServer({
   };
   const server = createApp({
     runAnalysis,
+    enrichJob:
+      enrichment === undefined
+        ? undefined
+        : (spec, { signal }) =>
+            enrichment(spec, {
+              signal: AbortSignal.any([signal, shutdown.signal]),
+            }),
     versionInfo: {
       ...(versionInfo || (await loadVersionInfo())),
       modelConfigDigest:

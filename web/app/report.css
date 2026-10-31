@@ -1690,3 +1690,98 @@ body:has(.report-app) {
     animation: none;
   }
 }
+
+.package-details .detail-nav,
+.package-details .detail-downloads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  font-size: 13px;
+}
+.package-details .detail-downloads span {
+  flex-basis: 100%;
+  color: var(--faint);
+}
+.package-details .detail-body {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  overflow-wrap: anywhere;
+}
+.package-details .detail-note {
+  color: var(--soft);
+  font-size: 12.5px;
+  max-width: 80ch;
+}
+.package-details h3 {
+  font-size: 14px;
+  line-height: 22px;
+  letter-spacing: 0;
+}
+.package-details .detail-kv > div {
+  display: grid;
+  grid-template-columns: minmax(100px, 150px) minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.package-details dt {
+  color: var(--faint);
+}
+.package-details .detail-refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+.package-details .details-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.package-details .details-table {
+  width: 100%;
+  min-width: 480px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.package-details .details-table th,
+.package-details .details-table td {
+  max-width: 40ch;
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--rule);
+  font-weight: 400;
+}
+.package-details .details-table thead th {
+  color: var(--faint);
+}
+.package-details summary {
+  padding: 10px 0;
+  cursor: pointer;
+  font-weight: 600;
+}
+.package-details .detail-list {
+  display: grid;
+  gap: 12px;
+}
+.package-details .detail-list > li {
+  display: grid;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--rule);
+}
+.package-details blockquote {
+  padding: 8px 12px;
+  border-left: 2px solid var(--control);
+}
+.package-details section {
+  scroll-margin-top: 16px;
+}
+@media (max-width: 480px) {
+  .package-details .detail-kv > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

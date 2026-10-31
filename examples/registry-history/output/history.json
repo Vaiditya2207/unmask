@@ -1,0 +1,244 @@
+{
+  "schemaVersion": "1",
+  "status": "recorded-history",
+  "identity": {
+    "name": "example"
+  },
+  "source": {
+    "url": "https://registry.npmjs.org/example",
+    "retrievedAt": "2026-10-31T22:36:40.245Z",
+    "sha256": "a410e1d5864108147d1232524754829e14d2b3fedf996efec78e2f5ca1523834",
+    "bytes": 1115
+  },
+  "timeline": [
+    {
+      "version": "2.1.0",
+      "releasedAt": "2026-04-01T00:00:00.000Z",
+      "timePointer": "/time/2.1.0",
+      "metadataStatus": "registry-reported-unverified",
+      "claims": {
+        "maintainers": {
+          "pointer": "/versions/2.1.0/maintainers",
+          "status": "not-recorded"
+        },
+        "publisher": {
+          "pointer": "/versions/2.1.0/_npmUser",
+          "status": "registry-reported-unverified",
+          "value": {
+            "name": "fixture-third-publisher"
+          }
+        },
+        "deprecated": {
+          "pointer": "/versions/2.1.0/deprecated",
+          "status": "registry-reported-unverified",
+          "value": ""
+        },
+        "license": {
+          "pointer": "/versions/2.1.0/license",
+          "status": "registry-reported-unverified",
+          "value": "MIT"
+        },
+        "engines": {
+          "pointer": "/versions/2.1.0/engines",
+          "status": "registry-reported-unverified",
+          "value": {
+            "node": ">=24"
+          }
+        },
+        "repository": {
+          "pointer": "/versions/2.1.0/repository",
+          "status": "registry-reported-unverified",
+          "value": "https://example.test/repository"
+        }
+      },
+      "comparison": {
+        "status": "compared",
+        "againstVersion": "2.0.0",
+        "publisher": {
+          "status": "changed",
+          "before": "fixture-next-publisher",
+          "after": "fixture-third-publisher"
+        },
+        "metadataChanges": [
+          {
+            "field": "license",
+            "before": "Apache-2.0",
+            "after": "MIT"
+          },
+          {
+            "field": "engines",
+            "before": {
+              "node": ">=22"
+            },
+            "after": {
+              "node": ">=24"
+            }
+          }
+        ],
+        "unassessedFields": []
+      }
+    },
+    {
+      "version": "2.0.0",
+      "releasedAt": "2026-03-01T00:00:00.000Z",
+      "timePointer": "/time/2.0.0",
+      "metadataStatus": "registry-reported-unverified",
+      "claims": {
+        "maintainers": {
+          "pointer": "/versions/2.0.0/maintainers",
+          "status": "not-recorded"
+        },
+        "publisher": {
+          "pointer": "/versions/2.0.0/_npmUser",
+          "status": "registry-reported-unverified",
+          "value": {
+            "name": "fixture-next-publisher"
+          }
+        },
+        "deprecated": {
+          "pointer": "/versions/2.0.0/deprecated",
+          "status": "registry-reported-unverified",
+          "value": ""
+        },
+        "license": {
+          "pointer": "/versions/2.0.0/license",
+          "status": "registry-reported-unverified",
+          "value": "Apache-2.0"
+        },
+        "engines": {
+          "pointer": "/versions/2.0.0/engines",
+          "status": "registry-reported-unverified",
+          "value": {
+            "node": ">=22"
+          }
+        },
+        "repository": {
+          "pointer": "/versions/2.0.0/repository",
+          "status": "registry-reported-unverified",
+          "value": "https://example.test/repository"
+        }
+      },
+      "comparison": {
+        "status": "partial",
+        "againstVersion": "1.1.0",
+        "publisher": {
+          "status": "not-assessed"
+        },
+        "metadataChanges": [],
+        "unassessedFields": [
+          "deprecated",
+          "license",
+          "engines",
+          "repository"
+        ]
+      }
+    },
+    {
+      "version": "1.1.0",
+      "releasedAt": "2026-02-01T00:00:00.000Z",
+      "timePointer": "/time/1.1.0",
+      "metadataStatus": "not-recorded",
+      "claims": {
+        "maintainers": {
+          "pointer": "/versions/1.1.0/maintainers",
+          "status": "not-recorded"
+        },
+        "publisher": {
+          "pointer": "/versions/1.1.0/_npmUser",
+          "status": "not-recorded"
+        },
+        "deprecated": {
+          "pointer": "/versions/1.1.0/deprecated",
+          "status": "not-recorded"
+        },
+        "license": {
+          "pointer": "/versions/1.1.0/license",
+          "status": "not-recorded"
+        },
+        "engines": {
+          "pointer": "/versions/1.1.0/engines",
+          "status": "not-recorded"
+        },
+        "repository": {
+          "pointer": "/versions/1.1.0/repository",
+          "status": "not-recorded"
+        }
+      },
+      "comparison": {
+        "status": "partial",
+        "againstVersion": "1.0.0",
+        "publisher": {
+          "status": "not-assessed"
+        },
+        "metadataChanges": [],
+        "unassessedFields": [
+          "deprecated",
+          "license",
+          "engines",
+          "repository"
+        ]
+      }
+    },
+    {
+      "version": "1.0.0",
+      "releasedAt": "2026-01-01T00:00:00.000Z",
+      "timePointer": "/time/1.0.0",
+      "metadataStatus": "registry-reported-unverified",
+      "claims": {
+        "maintainers": {
+          "pointer": "/versions/1.0.0/maintainers",
+          "status": "not-recorded"
+        },
+        "publisher": {
+          "pointer": "/versions/1.0.0/_npmUser",
+          "status": "registry-reported-unverified",
+          "value": {
+            "name": "fixture-publisher"
+          }
+        },
+        "deprecated": {
+          "pointer": "/versions/1.0.0/deprecated",
+          "status": "registry-reported-unverified",
+          "value": ""
+        },
+        "license": {
+          "pointer": "/versions/1.0.0/license",
+          "status": "registry-reported-unverified",
+          "value": "MIT"
+        },
+        "engines": {
+          "pointer": "/versions/1.0.0/engines",
+          "status": "registry-reported-unverified",
+          "value": {
+            "node": ">=20"
+          }
+        },
+        "repository": {
+          "pointer": "/versions/1.0.0/repository",
+          "status": "registry-reported-unverified",
+          "value": "https://example.test/repository"
+        }
+      },
+      "comparison": {
+        "status": "not-assessed-no-predecessor"
+      }
+    }
+  ],
+  "coverage": {
+    "recordedVersions": 4,
+    "datedVersions": 4,
+    "undatedVersions": 0,
+    "invalidVersionKeys": 0,
+    "returned": 4,
+    "omitted": 0,
+    "recordLimit": 5000
+  },
+  "scope": {
+    "method": "adjacent-dated-version-records-in-current-registry-snapshot",
+    "historicalEdits": "not-assessed-single-snapshot",
+    "ownershipTransfers": "not-assessed",
+    "safetyVerdict": "not-provided",
+    "modelAssessment": "not-performed-metadata-only",
+    "limitation": "Publish times and declarations are registry-reported and unverified. Comparisons describe differences between adjacent dated records in this snapshot, not edits over time or proven ownership transfers. Missing, malformed or omitted fields remain unassessed. Removed releases may retain dates without metadata. Equal timestamps do not establish ordering. Changes, unchanged metadata and popularity do not establish safety."
+  }
+}

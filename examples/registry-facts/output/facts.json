@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "1",
+  "identity": {
+    "name": "example",
+    "version": "1.2.3"
+  },
+  "source": {
+    "url": "https://registry.npmjs.org/example/1.2.3",
+    "retrievedAt": "2026-10-31T22:33:54.686Z",
+    "sha256": "481fc0c22f5dccecc3045e988981dc2591a854ae1708b0ab3937331aae122958",
+    "bytes": 318
+  },
+  "verifiedObservations": {
+    "documentIdentity": "matches-exact-request",
+    "documentDigest": "sha256-of-retrieved-bytes"
+  },
+  "unverifiedClaims": {
+    "maintainers": {
+      "pointer": "/maintainers",
+      "status": "registry-reported-unverified",
+      "value": [
+        {
+          "name": "fixture-maintainer"
+        }
+      ]
+    },
+    "publisher": {
+      "pointer": "/_npmUser",
+      "status": "registry-reported-unverified",
+      "value": {
+        "name": "fixture-publisher"
+      }
+    },
+    "deprecated": {
+      "pointer": "/deprecated",
+      "status": "registry-reported-unverified",
+      "value": "Synthetic example only"
+    },
+    "license": {
+      "pointer": "/license",
+      "status": "registry-reported-unverified",
+      "value": "MIT"
+    },
+    "engines": {
+      "pointer": "/engines",
+      "status": "registry-reported-unverified",
+      "value": {
+        "node": ">=20"
+      }
+    },
+    "repository": {
+      "pointer": "/repository",
+      "status": "registry-reported-unverified",
+      "value": {
+        "type": "git",
+        "url": "https://example.test/repository"
+      }
+    }
+  },
+  "scope": {
+    "method": "bounded-public-npm-metadata",
+    "safetyVerdict": "not-provided",
+    "modelAssessment": "not-performed-metadata-only",
+    "artifactInspection": "not-performed",
+    "limitation": "Registry declarations only. Maintainers and publisher names are recorded metadata, not verified identities or ownership history. Repository, license and engine declarations are not independently verified. Missing deprecation does not establish support or safety. No popularity-based safety inference."
+  }
+}

@@ -15,6 +15,8 @@ import { verifyBuild } from "./build.mjs";
 import path from "node:path";
 import { checkPackage } from "./check-package.mjs";
 import { publishNpm, verifyNpmReceipt } from "./npm-publication.mjs";
+import { releaseDeploymentOutputs } from "./cloud-run-policy.mjs";
+import { releaseNotes } from "./release-notes.mjs";
 
 const mode = process.argv[2];
 if (
@@ -127,12 +129,17 @@ async function inventory(endpoint, field) {
   const names = [];
   for (let page = 1; page <= 100; page++) {
     const records = await api(`${endpoint}?per_page=100&page=${page}`);
-    names.push(...records.map((record) => record[field]));
+    names.push(...records.map((record) => (field ? record[field] : record)));
     if (records.length < 100) return names;
   }
   throw new Error("Version inventory exceeded pagination limit");
 }
 
+const existingReleases = ["build", "npm-preflight", "npm-publish"].includes(
+  mode,
+)
+  ? []
+  : await inventory("releases");
 const plan = planRelease({
   version: pkg.version,
   sha,
@@ -142,9 +149,7 @@ const plan = planRelease({
   tags: ["build", "npm-preflight", "npm-publish"].includes(mode)
     ? []
     : await inventory("tags", "name"),
-  releases: ["build", "npm-preflight", "npm-publish"].includes(mode)
-    ? []
-    : await inventory("releases", "tag_name"),
+  releases: existingReleases.map((release) => release.tag_name),
 });
 const image = `ghcr.io/${repository.toLowerCase()}`;
 const imageRef = `${image}:${plan.imageTag}`;
@@ -274,6 +279,12 @@ if (mode === "prepare") {
     throw new Error("Tested candidate image identity differs");
   verifyAsset(readFileSync("package-lock.json"), prepared.artifact.lockDigest);
   verifyBuild(process.cwd(), { expectedSha: sha, requireClean: true });
+  const commitNotes = await releaseNotes({
+    repository,
+    sha,
+    releases: existingReleases,
+    api,
+  });
   const reserved = await api("git/refs", {
     method: "POST",
     body: { ref: `refs/tags/${plan.tag}`, sha },
@@ -336,7 +347,7 @@ if (mode === "prepare") {
       target_commitish: sha,
       name: plan.tag,
       draft: true,
-      body: `Commit: ${sha}\nImage: ${image}@${digest}\nChecks and candidate smoke: ${manifest.workflow}\nDeploy manually by digest in DigitalOcean App Platform. See release-manifest.json for npm asset integrity.`,
+      body: `Commit: ${sha}\nImage: ${image}@${digest}\nChecks and candidate smoke: ${manifest.workflow}\nProduction deployment follows in this workflow after complete GitHub and verified npm publication. See release-manifest.json for artifact integrity and the deploy job for serving evidence.\n\n${commitNotes}`,
     },
   });
   for (const [name, content] of [
@@ -372,7 +383,21 @@ if (mode === "prepare") {
   });
   if (published.immutable !== true)
     throw new Error("Published release immutability was not confirmed");
+  const sealedTag = await api(`git/ref/tags/${plan.tag}`);
+  const deployment = releaseDeploymentOutputs({
+    repository,
+    manifest,
+    published,
+    sealedTag,
+  });
+  if (process.env.GITHUB_OUTPUT)
+    appendFileSync(
+      process.env.GITHUB_OUTPUT,
+      Object.entries(deployment)
+        .map(([key, value]) => `${key}=${value}\n`)
+        .join(""),
+    );
   console.log(
-    `Published immutable ${plan.tag}: ${image}@${digest}; deployment remains manual`,
+    `Published immutable ${plan.tag}: ${image}@${digest}; production deployment is handled by the dependent job`,
   );
 }

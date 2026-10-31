@@ -83,7 +83,8 @@ function fixture(t, { enabled = true, existing = false, scoped = false } = {}) {
       assert.ok(args.includes("--ignore-scripts"));
       assert.ok(args.includes("--access"));
       assert.equal(args[args.indexOf("--access") + 1], "public");
-      assert.equal(options.stdio, "ignore");
+      assert.deepEqual(options.stdio, ["ignore", "ignore", "pipe"]);
+      assert.equal(options.maxBuffer, 65536);
       assert.equal(
         args.some((arg) => arg.includes(env.NODE_AUTH_TOKEN)),
         false,
@@ -189,6 +190,69 @@ test("an exact existing registry version is verified without publishing it again
   assert.equal(f.calls.length, 0);
 });
 
+test("successful publish tolerates delayed public registry visibility without publishing twice", async (t) => {
+  const f = fixture(t, { scoped: true });
+  let elapsed = 0;
+  const waits = [];
+  const receipt = await run(f, {
+    now: () => elapsed,
+    pause: async (ms) => {
+      waits.push(ms);
+      elapsed += ms;
+    },
+    fetchImpl: async (...args) =>
+      f.calls.length === 0 || elapsed < 15000
+        ? new Response(null, { status: 404 })
+        : f.fetchImpl(...args),
+  });
+  assert.equal(receipt.registryPublished, true);
+  assert.equal(receipt.digest, f.prepared.artifact.digest);
+  assert.equal(f.calls.length, 1);
+  assert.equal(elapsed, 15000);
+  assert.deepEqual(waits, [5000, 5000, 5000]);
+});
+
+test("missing public version stops after a bounded two-minute observation window", async (t) => {
+  const f = fixture(t);
+  let elapsed = 0;
+  let reads = 0;
+  await assert.rejects(
+    run(f, {
+      now: () => elapsed,
+      pause: async (ms) => {
+        elapsed += ms;
+      },
+      fetchImpl: async () => {
+        reads++;
+        return new Response(null, { status: 404 });
+      },
+    }),
+    /without a verified public registry version/u,
+  );
+  assert.equal(elapsed, 120000);
+  assert.ok(reads <= 26);
+  assert.equal(f.calls.length, 1);
+});
+
+test("registry access and server errors remain terminal during publication observation", async (t) => {
+  for (const status of [401, 403, 429, 500]) {
+    const f = fixture(t);
+    let waits = 0;
+    await assert.rejects(
+      run(f, {
+        pause: async () => {
+          waits++;
+        },
+        fetchImpl: async () =>
+          new Response(null, { status: f.calls.length ? status : 404 }),
+      }),
+      /registry identity\/integrity verification failed/u,
+    );
+    assert.equal(waits, 0);
+    assert.equal(f.calls.length, 1);
+  }
+});
+
 test("an existing version with different bytes is refused before publication", async (t) => {
   const f = fixture(t);
   await assert.rejects(
@@ -272,4 +336,56 @@ test("scoped first publication uses the encoded metadata route and canonical sco
     "https://registry.npmjs.org/@fixture/unmask/-/unmask-1.0.0.tgz",
   );
   assert.equal(f.calls.length, 1);
+});
+
+for (const code of ["EOTP", "E401", "E403", "ENEEDAUTH", "EPUBLISHCONFLICT"]) {
+  test(`npm failure exposes only allowlisted ${code}, never captured secrets`, async (t) => {
+    const f = fixture(t);
+    await assert.rejects(
+      run(f, {
+        execute(_command, _args, options) {
+          assert.deepEqual(options.stdio, ["ignore", "ignore", "pipe"]);
+          assert.equal(options.maxBuffer, 65536);
+          throw Object.assign(new Error("SYNTHETIC_SECRET_IN_MESSAGE"), {
+            stderr: Buffer.from(
+              `npm error code ${code}\nnpm error SYNTHETIC_SECRET_IN_STDERR ${f.env.NODE_AUTH_TOKEN}\n`,
+            ),
+            stdout: "SYNTHETIC_SECRET_IN_STDOUT",
+          });
+        },
+      }),
+      (error) => {
+        assert.equal(
+          error.message,
+          `Npm publish failed (${code}); no exact public registry version verified`,
+        );
+        assert.doesNotMatch(String(error), /SYNTHETIC_SECRET/);
+        assert.equal(String(error).includes(f.env.NODE_AUTH_TOKEN), false);
+        assert.equal(error.cause, undefined);
+        return true;
+      },
+    );
+  });
+}
+
+test("unrecognized npm code and raw output remain undisclosed", async (t) => {
+  const f = fixture(t);
+  await assert.rejects(
+    run(f, {
+      execute() {
+        throw Object.assign(new Error("SYNTHETIC_SECRET"), {
+          stderr:
+            "npm ERR! code ESECRET_TOKEN\nnpm ERR! E401 in a raw message SYNTHETIC_SECRET",
+        });
+      },
+    }),
+    (error) => {
+      assert.equal(
+        error.message,
+        "Npm publish failed; no exact public registry version verified",
+      );
+      assert.doesNotMatch(String(error), /ESECRET_TOKEN|E401|SYNTHETIC_SECRET/);
+      return true;
+    },
+  );
 });

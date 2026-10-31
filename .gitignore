@@ -12,6 +12,7 @@ __pycache__/
 .DS_Store
 models/
 artifacts/
+gha-creds-*.json
 .next/
 next-env.d.ts
 *.tsbuildinfo

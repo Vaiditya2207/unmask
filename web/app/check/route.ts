@@ -8,16 +8,11 @@ export async function POST(request: Request) {
   const value = String(form?.get("package") ?? "")
     .trim()
     .slice(0, 300);
+  const redirect = (location: string) =>
+    new NextResponse(null, { status: 303, headers: { location } });
   const back = (error: string) =>
-    NextResponse.redirect(
-      new URL(
-        `/?check=${encodeURIComponent(value)}&error=${error}#check`,
-        request.url,
-      ),
-      303,
-    );
-  const toReport = (id: string) =>
-    NextResponse.redirect(new URL(`/r/${id}`, request.url), 303);
+    redirect(`/?check=${encodeURIComponent(value)}&error=${error}#check`);
+  const toReport = (id: string) => redirect(`/r/${id}`);
 
   const spec = parseSpec(value, { exact: true });
   if (!spec.ok) return back("invalid");
@@ -49,6 +44,9 @@ export async function POST(request: Request) {
   }
 }
 
-export function GET(request: Request) {
-  return NextResponse.redirect(new URL("/#check", request.url), 303);
+export function GET() {
+  return new NextResponse(null, {
+    status: 303,
+    headers: { location: "/#check" },
+  });
 }

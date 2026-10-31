@@ -1,9 +1,6 @@
 # Architecture
 
-This is the design and pending implementation described in the
-[documentation status](README.md). It is not a description of a deployed service.
-The [contracts](contracts.md) define observable behavior; the
-[stack](stack.md) records implementation choices and limits.
+This page describes the implemented process boundaries and the two-service deployment recorded in the [documentation status](README.md). The [contracts](contracts.md) define observable behavior; the [stack](stack.md) records model tiers, implementation choices and limits. A live snapshot does not establish every acceptance gate.
 
 ## Purpose and trust boundaries
 
@@ -16,16 +13,19 @@ with users.
 
 ```mermaid
 flowchart LR
-  Engineer[Dependency reviewer] --> CLI[Local CLI]
-  Visitor[Website visitor] --> HTTP[Hosted HTTP application]
-  CLI --> Core[Shared analysis core]
-  HTTP --> Runner[Queued hosted analysis]
-  Runner --> Core
-  Core --> Registry[Public npm registry]
-  Core --> Source[GitHub archive at full commit SHA]
+  Engineer[Dependency reviewer] --> CLI[CLI]
+  Visitor[Website visitor] --> Web[Next.js Cloud Run service]
+  CLI -->|Registry default| API[Analysis API Cloud Run service]
+  Web --> API
+  CLI -->|Explicit offline input| Offline[Local pipeline]
+  API --> Runner[Queued hosted analysis]
+  Runner --> Core[Shared analysis core]
+  Offline --> Core
+  Core --> Registry[Public npm registry, hosted acquisition only]
+  Core --> Source[GitHub archive at full SHA, hosted acquisition only]
   Core --> Report[Versioned JSON evidence]
-  Report --> Viewer[Shared escaped HTML viewer]
-  Report --> Model[Optional hosted model]
+  Report --> Viewer[Original escaped evidence viewer]
+  Report --> Model[Optional Google model route]
   Model --> Advisory[Separate advisory hypotheses]
   Advisory --> Viewer
 ```
@@ -39,34 +39,29 @@ and resource limits reduce failure impact; they are not a security sandbox.
 
 ## User flows
 
-A CLI user chooses either an exact registry release or a local tarball. The
-current local mode requires `--offline`; an optional local source archive needs a
-full commit claim and explicit archive root. The CLI writes JSON and HTML to an
-explicit output directory and returns the deterministic policy exit code. It runs
-the pipeline **inside the CLI process**, without the hosted queue or child runner.
+An exact registry CLI check uses the hosted API by default: submit the name/version, poll its random report location, validate the returned report and deterministic policy, then write escaped HTML and JSON locally. The caller needs no local provider key. The client does not silently switch to local acquisition when the service fails.
 
-A website visitor submits an exact `name@version`. POST admission returns a
-private report location, and subsequent GETs read its status or result. The
-website accepts neither tarball uploads nor arbitrary source URLs. Reports are
-in-memory, temporary and accessible to anyone holding their random URL; there is
-no account or durable report service.
+A local tarball check requires `--offline`; an optional local source archive needs a full commit claim and explicit archive root. This path runs the shared pipeline inside the CLI process, without the hosted queue or worker. Optional model transmission requires separate `--allow-model` consent and local provider configuration. Offline disables acquisition, while that consent deliberately enables the advisory network stage.
 
-Model use is optional. The CLI additionally requires `--allow-model`, including
-for registry input. Hosted configuration must explicitly enable the provider and
-supply verified quota limits. Missing configuration leaves deterministic analysis
-available. No eligible evidence means no provider request.
+A website visitor submits an exact `name@version` to the separate Next.js service, which proxies the API. The API returns a private report location, and subsequent GETs read status or results. The current Next frontend links schema 1 reports to the API's original viewer rather than treating its demonstration report shape as the live schema. Neither website nor API accepts tarball uploads or arbitrary source URLs.
+
+The API's in-memory results last up to 30 minutes after completion, subject to capacity eviction or restart; reads do not extend the lifetime. Anyone holding a report's random URL can read it. There is no account or durable report service. Browser and hosted CLI submissions can lead the API to send bounded public package/source excerpts to Google; model availability is not guaranteed.
+
+Model use is optional and cannot change deterministic findings. Hosted configuration explicitly enables provider access and enforces local admission controls while reporting upstream quota as unknown. Missing configuration or eligible evidence leaves an explicit disabled/skipped/unavailable state. Hosted CLI users do not supply `--allow-model`; that flag belongs to offline local evidence.
 
 ## Components and process boundaries
 
 ```mermaid
 flowchart TB
-  subgraph CLIProcess[CLI process]
-    CLI[cli/main.mjs] --> Local[core/pipeline.mjs]
-    CLI --> OnlineCLI[core/online.mjs]
-    OnlineCLI --> Local
-    CLI --> CLIModel[Optional model stage]
+  subgraph Website[Next.js service]
+    Web[web/app routes and server components]
   end
-  subgraph MainProcess[Hosted main process]
+  subgraph CLIProcess[CLI process]
+    CLI[cli/main.mjs] --> Hosted[cli/hosted.mjs]
+    CLI -->|Explicit offline| Local[core/pipeline.mjs]
+    Local --> CLIModel[Optional consented model stage]
+  end
+  subgraph MainProcess[API main process]
     HTTP[server/main.mjs and app.mjs] --> Queue[queue.mjs]
     Queue --> Runner[runner.mjs]
     Runner --> ParentModel[Singleton model client after child exit]
@@ -81,6 +76,8 @@ flowchart TB
     Compare --> Inspect[syntax.mjs and manifests.mjs]
     Inspect --> Policy[policy.mjs and report.mjs]
   end
+  Web --> HTTP
+  Hosted --> HTTP
   Runner --> Worker
   Worker --> Result[Bounded report.json]
   Result --> Runner
@@ -89,10 +86,7 @@ flowchart TB
 ```
 
 `core/acquire.mjs` fetches bounded registry metadata and archives;
-`core/resolve.mjs` interprets source claims. Registry orchestration calls the same
-local pipeline after capturing input bytes. The CLI preserves digest-addressed
-input copies in its explicit cache directory. Hosted jobs disable that duplicate
-cache and keep captured inputs in their private per-job directory.
+`core/resolve.mjs` interprets source claims. Hosted registry orchestration calls the same local pipeline after capturing input bytes. Explicit offline CLI analysis can preserve digest-addressed copies in its cache directory. Hosted CLI checks do not use that local cache. API jobs disable duplicate blob persistence and keep captured inputs only in the private per-job directory.
 
 The hosted runner creates a trusted Node child with a 512 MiB V8 old-space limit,
 minimal environment and deterministic deadline. The child writes a report
@@ -196,18 +190,25 @@ source correspondence, syntax inspection and model review.
 sequenceDiagram
   actor Reviewer
   participant CLI
+  participant API
   participant Core
   participant Model
   participant Viewer
-  Reviewer->>CLI: Explicit registry or offline local input
-  CLI->>Core: Capture original bytes and resolve source
-  Core->>Core: Inert inventory, comparison, syntax and policy
-  Core-->>CLI: Validated deterministic report
-  opt Explicit model consent and verified configuration
-    CLI->>Model: Bounded evidence, no tools
-    Model-->>CLI: Validated advisory section or unavailable status
+  Reviewer->>CLI: Exact registry spec or explicit offline tarball
+  alt Registry spec, hosted default
+    CLI->>API: POST name@version, then GET report status
+    API-->>CLI: Hosted report or bounded failure
+    CLI->>CLI: Validate schema, claim, evidence and policy
+  else Local tarball with offline flag
+    CLI->>Core: Read original local inputs
+    Core->>Core: Inert inventory, comparison, syntax and policy
+    Core-->>CLI: Validated deterministic report
+    opt Explicit local model consent and configuration
+      CLI->>Model: Bounded local evidence, no tools
+      Model-->>CLI: Advisory result or unavailable status
+    end
   end
-  CLI->>Viewer: Escape and render the same report
+  CLI->>Viewer: Escape and render the validated report
   CLI-->>Reviewer: report.json, report.html and policy exit code
 ```
 
@@ -220,30 +221,35 @@ without that consent the CLI does not construct or call a provider client.
 ```mermaid
 sequenceDiagram
   actor Visitor
-  participant HTTP
+  participant Web as Next.js service
+  participant HTTP as Analysis API
   participant Queue
   participant Parent as Runner in main process
   participant Child as Deterministic child
   participant Model
   participant Store
-  Visitor->>HTTP: POST exact name@version
+  Visitor->>Web: POST exact name@version
+  Web->>HTTP: Proxy form to API check route
   HTTP->>Queue: Validate, coalesce or admit
-  HTTP-->>Visitor: 303 report location
-  Queue->>Parent: Start job when active slot is free
+  HTTP-->>Web: 303 report location
+  Web-->>Visitor: Relative report redirect
+  Queue->>Parent: Start when active slot is free
   Parent->>Child: Minimal environment and JSON input
   Child->>Child: Acquire, inventory, compare and apply policy
   Child-->>Parent: Bounded report file, then exit
   Parent->>Parent: Wait for exit and validate report
   opt Model enabled with eligible evidence
-    Parent->>Model: Explain bounded evidence
-    Model-->>Parent: Advisory result or unavailable status
+    Parent->>Model: Bounded three-tier advisory route
+    Model-->>Parent: Validated result or unavailable status
   end
   Parent->>Parent: Remove owned temporary directory
   Parent-->>Queue: Report within output byte cap
   Queue->>Store: Save terminal job and report
-  Visitor->>HTTP: GET report location
+  Visitor->>Web: GET report page or JSON
+  Web->>HTTP: Read API report JSON
   HTTP->>Store: Read status or stored report
-  HTTP-->>Visitor: Status, escaped evidence or JSON
+  HTTP-->>Web: Job metadata or schema 1 report
+  Web-->>Visitor: Status, or link to API evidence viewer and JSON
 ```
 
 ```mermaid
@@ -274,10 +280,4 @@ fields are not cryptographically verified by the reviewed acquisition path.
 Syntax inspection supports bounded JavaScript, not general TS/JSX or all generated
 code. Model quotations validate locations, not reasoning quality.
 
-The current scope is npm only, without PyPI support, release monitoring or a
-watch service. There is no durable shared queue, distributed report store or
-multi-instance routing guarantee. No deployed image, successful hosted generation,
-production load result or user validation is established by these diagrams.
-The latest minimal provider diagnostic reached metadata and token counting, but
-generation is blocked by the configured project's unavailable free tier. See the
-[model status](../HACKATHON.md) for the acceptance boundary.
+The current scope is npm only, without PyPI support, release monitoring or a watch service. There is no durable shared queue, distributed report store or multi-instance routing guarantee. The [live snapshot](README.md) records two responding Cloud Run services and a completed Gemini-backed zod result. Diagrams do not establish serving image digests, production load capacity, usefulness or user validation. Prompt development on that same public package is not an independent study. Gemini is not open-weight, and the configured Gemma fallback has not established hackathon compliance; see the [model disclosure](../HACKATHON.md).
