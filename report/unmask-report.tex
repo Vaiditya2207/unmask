@@ -24,9 +24,9 @@
 \newcommand{\AuthorOneName}{Pranay Vishwakarma}
 \newcommand{\AuthorOneRole}{Team Leader}
 \newcommand{\AuthorTwoName}{Vaiditya Tanwar}
-\newcommand{\AuthorTwoRole}{Architecture \& CI Lead}
+\newcommand{\AuthorTwoRole}{Analyzer, Model \& CI Lead}
 \newcommand{\AuthorThreeName}{Vishesh Rao}
-\newcommand{\AuthorThreeRole}{Package \& Release Setup}
+\newcommand{\AuthorThreeRole}{CLI \& Release Setup}
 \newcommand{\AuthorFourName}{Sayan Bhattacharya}
 \newcommand{\AuthorFourRole}{Documentation \& Report}
 
@@ -36,9 +36,9 @@
 \newcommand{\ReportLine}{Hacktoberfest 2026, Hack Day Sonipat --- Team Cappybara Project Report}
 
 % Short roles used in the Individual Contributions table (Appendix B)
-\newcommand{\AuthorOneWork}{Project leadership; website shell foundation (\texttt{src/viewer/shell.mjs}) and its tests}
-\newcommand{\AuthorTwoWork}{Architecture and contract documentation; CI workflow; gated release, readiness and candidate tooling}
-\newcommand{\AuthorThreeWork}{Scoped npm package identity and metadata (\texttt{@xagents\_in/unmask})}
+\newcommand{\AuthorOneWork}{Project leadership; website shell (\texttt{src/viewer/shell.mjs}); Next.js website and report viewer (\texttt{web/})}
+\newcommand{\AuthorTwoWork}{Architecture and contracts; analysis core and bounded server; three-tier model route; CI and release verification}
+\newcommand{\AuthorThreeWork}{Package identity (\texttt{@xagents\_in/unmask}); hosted CLI with explicit offline checks; 0.1.0 release configuration}
 \newcommand{\AuthorFourWork}{Repository analysis and this IEEE-format project report}
 % =====================================================================
 
@@ -88,14 +88,19 @@ not-compared), binds each observation to a byte range in a digest-addressed
 blob, and derives a deterministic exit code from a small, versioned policy. An
 optional large language model (Google Gemma) may explain the evidence, but its
 output is advisory, must quote supplied evidence verbatim, and can never clear a
-deterministic finding. We present the threat model, the separated-facts design
+deterministic finding. The model stage uses an ordered three-tier route
+(Gemini~3.5 Flash, Gemini~3 Flash preview, Gemma~4 26B) with bounded retries and
+strict output validation. We present the threat model, the separated-facts design
 principle, the archive and correspondence algorithms, the hosted process model
 and the release pipeline that binds a source commit, an npm tarball and a
-container image digest. We report the state of the repository honestly: the
-merged main branch contains the engineering scaffold (CI, 43 test declarations
-across nine files, a gated release pipeline and the website shell), while the
-analyzer core is specified but pending merge, and hosted model generation is
-blocked by an HTTP~403 quota error. We close with a measurable evaluation plan.
+container image digest. The analyzer core, hosted CLI, HTTP server, Next.js
+website and 388 test declarations across 33 files are now merged, and version
+0.1.0 is deployed on Google Cloud Run. Hosted model generation, previously blocked
+by an HTTP~403 quota error, now succeeds at the provider (HTTP~200). In three live
+spot checks the deterministic core completed every time; the model was correctly
+skipped for two fully matching packages, and for the third the validator rejected
+the model's output rather than show an unchecked explanation. We close with a
+measurable evaluation plan.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -148,8 +153,9 @@ specified, bounded archive inventory and a four-state correspondence
 classification with byte-range evidence; (iii) a deterministic, versioned exit
 policy that is independent of the model; (iv) an advisory model contract with
 mandatory verbatim citations; (v) a CI and release pipeline that binds source
-commit, npm tarball and image digest; and (vi) an honest status audit and a
-measurable plan for evaluation.
+commit, npm tarball and image digest; and (vi) a working, deployed
+implementation with live spot checks, an honest status audit and a measurable
+plan for evaluation.
 
 The remainder of the report is organised as follows. Section~\ref{sec:lit}
 reviews related work. Section~\ref{sec:problem} states the problem and threat
@@ -199,9 +205,9 @@ equivalence; it measures byte correspondence only.
 \subsection{LLMs for Security Explanation}
 Large language models can summarise code and suggest hypotheses, but they
 hallucinate, including invented code and citations~\cite{ji2023}. Retrieval and
-citation grounding reduce, but do not remove, this risk~\cite{gao2023}. The
-selected model family, Gemma~\cite{gemma}, is open-weight, which aids
-inspectability. UNMASK therefore restricts the model to bounded evidence and
+citation grounding reduce, but do not remove, this risk~\cite{gao2023}. UNMASK routes
+explanation requests to Google's Gemini Flash models and falls back to the
+open-weight Gemma family~\cite{gemma}. UNMASK therefore restricts the model to bounded evidence and
 validates that every quotation exists at its claimed location.
 
 \subsection{Research Gap}
@@ -323,10 +329,14 @@ Release integrity & One tarball; image built from those exact bytes; digest pinn
 \section{System Architecture}\label{sec:arch}
 
 \subsection{Components}
-The pending implementation is plain ESM JavaScript on Node.js~24.22.2 with two
+The implementation is plain ESM JavaScript on Node.js~24.22.2 with two
 production dependencies, \code{tar-stream}~\cite{tarstream} and
-\code{acorn}~\cite{acorn}. Table~\ref{tab:modules} lists the modules and their
-interfaces as specified in \code{docs/contracts.md}.
+\code{acorn}~\cite{acorn}. Table~\ref{tab:modules} lists the core modules, now
+merged under \code{src/}. Two surfaces sit on top: a CLI whose public-package
+mode sends only the exact spec to the hosted service, with a separate
+\code{--offline} mode for local archives, and a Next.js~16 website
+(\code{web/}) that forwards \code{/check} to the analysis server and renders the
+report viewer.
 
 \begin{table}[t]
 \caption{Module interfaces of the analysis core}
@@ -495,7 +505,7 @@ summarises one check.
 \State $R \gets \textsc{CreateReport}(A, S, \sigma, K)$; $\textsc{Validate}(R)$
 \State $c \gets \textsc{Policy}(R)$ \Comment{fixed from here on}
 \If{model enabled \textbf{and} consent \textbf{and} eligible evidence}
-  \State $H \gets \textsc{Gemma}(\text{bounded evidence})$
+  \State $H \gets \textsc{ModelRoute}(\text{bounded evidence})$
   \State keep $h\in H$ only if every quotation matches its evidence span
 \EndIf
 \State \Return $R$, $H$, $c$
@@ -503,11 +513,26 @@ summarises one check.
 \end{algorithm}
 
 \subsection{Advisory Model Layer}
-The adapter targets \code{gemma-4-26b-a4b-it} on a fixed Google endpoint with
-temperature zero, one candidate, at most 4{,}000 input and 1{,}000 output
-tokens, and at most two 45\,s attempts. It is disabled unless
-\code{UNMASK\_MODEL=on} and verified positive quota limits are configured; the
-CLI additionally requires \code{--allow-model}. A hypothesis $h$ is accepted
+% The model finally stopped saying 403 to us; now it says things we can fact-check.
+The adapter calls a fixed Google endpoint through an ordered route
+(policy \code{ordered-fallback-1}):
+\begin{equation}
+\begin{aligned}
+&\text{Gemini 3.5 Flash}^{\text{high}} \rightarrow
+\text{Gemini 3 Flash}^{\text{min}}_{\text{preview}}\\
+&\quad\rightarrow \text{Gemma 4 26B}^{\text{min}},
+\end{aligned}
+\end{equation}
+where the superscript is the thinking level. Every tier runs at temperature
+zero with one candidate; Gemini tiers request JSON output with up to 4{,}096
+output tokens, and the Gemma tier up to 1{,}000. Input is packed into a
+conservative envelope of 4{,}000 tokens. A request moves to the next tier only
+on a model-scoped HTTP~429, a transient 5xx or a timeout; an invalid output is
+retried on the same tier. There are at most three generation attempts, each
+capped at 45\,s, within 135\,s overall. The stage is disabled unless
+\code{UNMASK\_MODEL=on} and quota limits are configured; offline CLI use
+additionally requires \code{--allow-model}, and requests are skipped when no
+evidence is eligible. A hypothesis $h$ is accepted
 only if each quotation $q$ it cites satisfies
 \begin{equation}
 q = \text{bytes}(\varepsilon)[k : k+|q|] \ \text{for some } k,
@@ -541,12 +566,12 @@ Hosted worker & 512\,MiB V8 heap; 120\,s\\
 Queue & 1 active + 1 waiting; 300\,s TTL\\
 Admission & 6 checks / 10\,min\\
 Report store & 200 entries; 64\,MiB; 24\,h TTL\\
-Model & 2$\times$45\,s; 4{,}000 in / 1{,}000 out tokens\\
+Model & 3 attempts; 45\,s each, 135\,s total; 4{,}000 in / 4{,}096 out\\
 \bottomrule
 \end{tabular}
 \vspace{1pt}
 
-\textit{Source:} \code{docs/stack.md}.
+\textit{Source:} \code{docs/stack.md}; model row from \code{src/model/client.mjs}.
 \end{table}
 
 \subsection{Continuous Integration}
@@ -566,34 +591,33 @@ version, Git tag, full source SHA, tarball name, size and SHA-256, and the GHCR
 image digest. Versions must be strictly greater than every existing stable
 version, compared numerically with \code{BigInt} segments; reruns of a used
 version are refused, and no step deletes or overwrites a published artifact.
-Publishing remains disabled (\code{release.config.json}) until real CLI, server
-and website artifacts exist.
+Release publication is now enabled for the 0.1.0 candidate, subject to these
+gates. The \code{Dockerfile} checks the SHA-256 of the packed tarball and the
+lockfile before installing, runs as a non-root user and labels the image with
+the release commit and tarball hash. The deployed service on Google Cloud Run
+(\code{asia-south1}) returns version \code{0.1.0}, commit \code{13f5504} and its
+tarball SHA-256 at \code{/version}.
 
 \subsection{Testing}
 Tests use the built-in \code{node:test} runner~\cite{nodetest}.
 Table~\ref{tab:tests} counts test declarations on the merged main branch; several
-are parameterised and expand into more cases at run time.
+are parameterised and expand into more cases at run time. \code{npm test} also
+installs the packed tarball into a temporary directory and invokes its real CLI
+binary.
 
 \begin{table}[t]
 \caption{Test declarations on main (static count)}
 \label{tab:tests}
 \centering
 \footnotesize
-\begin{tabular}{@{}p{3.4cm}cp{3.0cm}@{}}
+\begin{tabular}{@{}p{1.5cm}ccp{3.6cm}@{}}
 \toprule
-\textbf{File} & \textbf{Decl.} & \textbf{Covers}\\
+\textbf{Suite} & \textbf{Files} & \textbf{Decl.} & \textbf{Covers}\\
 \midrule
-\code{product/shell} & 7 & Escaping, CSP hashes, a11y\\
-\code{tooling/build} & 10 & Freshness, stale bytes\\
-\code{tooling/release-policy} & 10 & Version order, collisions\\
-\code{tooling/readiness} & 5 & Gate prerequisites\\
-\code{tooling/candidate} & 3 & Image/archive identity\\
-\code{tooling/toolchain} & 3 & Pinned versions\\
-\code{tooling/package} & 1 & Archive allowlist\\
-\code{tooling/entrypoints} & 2 & Declared entrypoints\\
-\code{tooling/docker-context} & 2 & Exact build context\\
+Product & 22 & 330 & Archive, compare, policy, report, model, server, runner, CLI, viewer\\
+Tooling & 11 & 58 & Build, release policy, npm publication, smoke, toolchain\\
 \midrule
-\textbf{Total} & \textbf{43} & \\
+\textbf{Total} & \textbf{33} & \textbf{388} & \\
 \bottomrule
 \end{tabular}
 \vspace{1pt}
@@ -602,8 +626,9 @@ are parameterised and expand into more cases at run time.
 \end{table}
 
 \subsection{Planned Evaluation Protocol}
-Because the analyzer core is not yet on main, no accuracy results are reported
-here. The evaluation that will gate Phase~2 is defined in advance:
+The analyzer now runs end to end, but no systematic accuracy benchmark has been
+run yet, so no accuracy figures are claimed. The evaluation that will gate
+Phase~2 is defined in advance:
 \begin{itemize}
 \item \textbf{Injection benchmark.} Take $N$ popular npm releases with a
 resolvable \code{gitHead}; for each, create a modified tarball with one of
@@ -621,47 +646,80 @@ rating of whether each accepted hypothesis helps a reviewer.
 
 \section{Current Status}\label{sec:status}
 
-Table~\ref{tab:status} reports what exists on the merged main branch at
-revision \code{80721ed} and what is pending. The distinction matters: design
-documents describe interfaces, not running code.
+Table~\ref{tab:status} reports the state of the upstream main branch on
+1~November~2026. Most components that the first draft of this report listed as
+pending have since been merged.
 
 \begin{table}[t]
-\caption{Component status at main revision \code{80721ed}}
+\caption{Component status on main, 1 November 2026}
 \label{tab:status}
 \centering
 \footnotesize
-\begin{tabular}{@{}p{2.6cm}p{1.5cm}p{3.5cm}@{}}
+\begin{tabular}{@{}p{2.3cm}p{1.6cm}p{3.7cm}@{}}
 \toprule
 \textbf{Component} & \textbf{State} & \textbf{Evidence}\\
 \midrule
-CI workflow & Merged & \code{.github/workflows/ci.yml}\\
-Release tooling & Merged, gated & \code{scripts/release*.mjs}; publishing off\\
-Website shell & Merged & \code{src/viewer/shell.mjs}, 7 tests\\
-Package identity & Merged & \code{@xagents\_in/unmask}, private 0.0.0\\
-Design \& contracts & Merged & \code{docs/*.md}\\
-Analyzer core & Pending & Specified; not on main\\
-HTTP server, CLI & Pending & Specified; not on main\\
-Hosted model & Blocked & Generation returned HTTP 403\\
-Deployment & Not started & No image or service\\
+Analyzer core & Merged & \code{src/core/}, 11 modules\\
+HTTP server \& queue & Merged & \code{src/server/}\\
+CLI (hosted + offline) & Merged & \code{src/cli/}\\
+Next.js website & Merged & \code{web/}, Next.js 16\\
+Model route & Working & HTTP 200 from Gemini tiers\\
+Tests & Merged & 388 declarations, 33 files\\
+Deployment & Live & Cloud Run, \code{/version} = 0.1.0\\
+npm publication & Not yet & Registry returns 404\\
+Accuracy benchmark & Not run & Protocol in Section~\ref{sec:eng}\\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\textbf{Model diagnostic.} A minimal metadata lookup and token-counting request
-to \code{gemma-4-26b-a4b-it} succeeded. Generation returned HTTP~403
-\code{PERMISSION\_DENIED} because the configured project's free tier is
-unavailable. No generated output was obtained, no package evidence was sent, and
-no billing change was made. The model acceptance gate is therefore unmet.
+\textbf{Model status.} The earlier HTTP~403 \code{PERMISSION\_DENIED} on
+\code{gemma-4-26b-a4b-it} is resolved: the deployed service now reaches the
+Gemini tiers and receives HTTP~200 generations, and the team reports that the
+model works on its own checks.
 
-\textbf{Repository activity.} The main branch has 22 commits from four
-contributors, merged through six pull requests that follow the repository's
-four-section PR template (what the PR does, models used, testing, risks).
+\textbf{Live spot checks.} On 1~November~2026 we submitted three exact releases
+to the deployed service (Table~\ref{tab:live}). Every deterministic analysis
+completed with full source coverage and exit code~0. For \code{ms} and
+\code{chalk} every shipped file was byte-identical to source, so the model stage
+was correctly skipped (\code{no-eligible-evidence}). For \code{clsx}, five
+shipped files had no source counterpart, so the evidence went to the model. The
+Gemini~3.5 Flash tier returned HTTP~200 in 37\,s, but its output failed
+validation; a retry got a transient 503; the request then fell through to
+Gemini~3 Flash preview, which answered in 4\,s but also failed validation. The
+report therefore showed the model as \code{unavailable} (\code{invalid-output})
+and displayed no unchecked explanation. The deterministic result was unchanged,
+which is the intended behaviour. Three checks are a smoke test, not a measure of
+model quality.
+
+\begin{table}[t]
+\caption{Live spot checks on the deployed 0.1.0 service}
+\label{tab:live}
+\centering
+\footnotesize
+\begin{tabular}{@{}p{1.6cm}cccp{2.4cm}@{}}
+\toprule
+\textbf{Release} & \textbf{Ident.} & \textbf{Art.-only} & \textbf{Exit} & \textbf{Model stage}\\
+\midrule
+\code{clsx@2.1.1} & 5 & 5 & 0 & Called; output rejected\\
+\code{ms@2.1.3} & 4 & 0 & 0 & Skipped, no evidence\\
+\code{chalk@6.0.1} & 12 & 0 & 0 & Skipped, no evidence\\
+\bottomrule
+\end{tabular}
+\vspace{1pt}
+
+\textit{Source:} \code{/r/<id>.json} reports from the hosted service.
+\end{table}
+
+\textbf{Repository activity.} Upstream main has 42 commits across eight merged
+pull requests from three contributors. This report adds a fourth contributor
+through its own pull request. Every pull request follows the repository's
+four-section template (what the PR does, models used, AI assistants, testing).
 
 \section{Discussion}\label{sec:disc}
 
 \subsection{Answers to the Design Questions}
-\textbf{DQ1: Inert comparison.} The specification shows that a useful
-comparison needs no execution: byte digests, conservative absence rules and
+\textbf{DQ1: Inert comparison.} The working implementation shows that a
+useful comparison needs no execution: byte digests, conservative absence rules and
 byte spans are enough to separate identical, changed and extra files, and
 install hooks can be read from manifests. Whether this is useful \emph{in
 practice} depends on how often packages ship generated code with no source
@@ -673,8 +731,11 @@ The key rule is asymmetric: weaker facts may \emph{prioritise} review but never
 \emph{clear} a stronger finding.
 
 \textbf{DQ3: Model role.} The model can add value only as an explainer whose
-quotations are checked and whose output cannot change the exit code. Even this
-narrow role is not yet validated, because generation is blocked.
+quotations are checked and whose output cannot change the exit code. The
+\code{clsx} check shows the guard working: two tiers produced output that failed
+validation, and the report showed nothing rather than an unverified claim. How
+often outputs pass validation, and whether accepted explanations help reviewers,
+is the next measurement.
 
 \subsection{Why Not the Alternatives}
 \emph{Rebuild and compare}~\cite{lamb2021} gives stronger guarantees but
@@ -692,22 +753,22 @@ component, contradicting DQ2.
 \textbf{Construct validity.} Byte identity is a strict notion of
 correspondence; a benign rebuild that changes a timestamp is reported as
 \textsf{changed}. This is intended, but it will raise the share of findings a
-reviewer must inspect. \textbf{Internal validity.} This report relies on design
-documents for the core; the code that implements them has been reviewed locally
-by the team but is not yet public. \textbf{External validity.} Scope is npm
+reviewer must inspect. \textbf{Internal validity.} Live results come from three
+packages on one deployed revision; model behaviour may vary between runs and
+tiers. \textbf{External validity.} Scope is npm
 only; PyPI and other ecosystems have different packaging conventions.
 
 \section{Limitations and Future Work}\label{sec:future}
 
 Each item states a measurable test of completion.
 
-\textbf{Merge the analyzer core.} Land \code{core/}, \code{cli/} and
-\code{server/} with product tests. \emph{Done when} \code{npm run test:product}
-runs in CI and \code{release:readiness} reports no product blockers.
+\textbf{Publish to npm.} \emph{Done when} \code{@xagents\_in/unmask@0.1.0}
+resolves on the public registry and its tarball SHA-256 matches \code{/version}.
 
-\textbf{Unblock the model.} Obtain a quota-verified Gemma configuration.
-\emph{Done when} one end-to-end check produces a validated advisory section and
-a human reviewer rates it.
+\textbf{Raise the model acceptance rate.} Tune the evidence prompt and output
+schema. \emph{Done when} the share of model calls that pass validation is
+measured over at least 50 packages with differences, and a human reviewer has
+rated the accepted explanations.
 
 \textbf{Run the injection benchmark.} \emph{Done when} TPR, false-finding rate,
 coverage and latency are reported for at least 100 releases.
@@ -716,9 +777,9 @@ coverage and latency are reported for at least 100 releases.
 provenance~\cite{sigstore,npmprov}. \emph{Done when}
 \code{provenance-verification-failed} is emitted by a real verifier.
 
-\textbf{Deploy.} Build the image from the released tarball and deploy to the
-selected DigitalOcean App Platform service. \emph{Done when} \code{/version}
-returns the manifest's commit and tarball hash.
+\textbf{Bind the deployment to a release.} The service on Cloud Run already
+reports its commit and tarball hash. \emph{Done when} those values match a
+published GitHub release manifest.
 
 \textbf{Extend scope.} Add PyPI wheels and source distributions. \emph{Done when}
 the injection benchmark runs on PyPI releases.
@@ -727,26 +788,29 @@ the injection benchmark runs on PyPI releases.
 
 UNMASK addresses a gap that registries leave open: the published package and
 the reviewed source are separate artifacts, and nothing checks that they agree.
-The project's main contribution so far is a precise, bounded and non-executing
-design that keeps every fact at its true strength, ties every claim to bytes,
-and keeps the verdict independent of the language model. The engineering
-foundation that will carry it --- pinned toolchain, read-only CI, gated and
-digest-bound releases, and an accessible escaped website shell --- is merged and
-tested. The analyzer core, model acceptance and the evaluation benchmark are the
-work of the next phase, and their completion criteria are defined above.
+The project delivers a bounded, non-executing analyzer that keeps every fact at
+its true strength, ties every claim to bytes, and keeps the verdict independent
+of the language model. It is merged, covered by 388 test declarations, deployed
+on Cloud Run, and reachable through both a CLI and a Next.js website. Its model
+route now generates successfully, and its validator already refuses outputs it
+cannot verify. Publishing to npm, measuring the model's acceptance rate and
+running the evaluation benchmark are the work of the next phase, with
+completion criteria defined above.
 
 \appendices
 
 \section{Repository Structure and Reproduction}
-The repository has six top-level parts. \code{docs/} holds the architecture,
-contracts, stack, release and website documentation. \code{scripts/} holds the
-build, package, toolchain, readiness, release-policy and candidate tooling.
-\code{src/viewer/} holds the website shell. \code{tests/} holds tooling and
-product tests. \code{.github/} holds the CI and release workflows, the
+The main top-level parts are as follows. \code{src/} holds
+the analysis core, CLI, model adapter, server and viewer. \code{web/} holds the
+Next.js website. \code{docs/} holds the architecture, contracts, CLI, stack,
+release and website documentation. \code{scripts/} holds the build, package,
+toolchain, readiness, release-policy and candidate tooling. \code{tests/} holds
+product and tooling tests. The \code{Dockerfile} builds the serving image from
+the exact packed tarball. \code{.github/} holds the CI and release workflows, the
 \code{CODEOWNERS} file and the PR template. \code{report/} holds this report's
 LaTeX source. Reproduction requires Node.js~24.22.2 and the commands
-\code{npm ci --ignore-scripts}, \code{npm run check}, \code{npm test} and
-\code{npm run check:package}.
+\code{npm ci --ignore-scripts}, \code{npm run build}, \code{npm test},
+\code{npm run check} and \code{npm run check:package}.
 
 \section{Individual Contributions}
 
