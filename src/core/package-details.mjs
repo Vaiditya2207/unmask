@@ -16,6 +16,34 @@ const sorted = (value) => Object.keys(value).sort(order);
 const type = (value) =>
   value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
 
+function aiAssessment(model, take) {
+  const value = model.assessment;
+  if (
+    model.status !== "complete" ||
+    value?.source !== "model" ||
+    typeof model.summary !== "string"
+  )
+    return {
+      status: model.status,
+      source: "none",
+      reason: /^[a-z-]{1,64}$/u.test(model.reason ?? "") ? model.reason : null,
+      note: "No AI assessment exists for this check. This status is deterministic, not model output, and is not a safety signal.",
+    };
+  const { paths, ...checkedScope } = value.checkedScope ?? {};
+  return {
+    status: "complete",
+    source: "model",
+    summary: model.summary,
+    uncertainty: value.uncertainty,
+    nextAction: value.nextAction,
+    note: "Advisory model output. It is not a safety signal.",
+    checkedScope: {
+      ...checkedScope,
+      paths: take(Array.isArray(paths) ? paths : []),
+    },
+  };
+}
+
 export function buildPackageDetails(report, options = {}) {
   validateReport(report);
   const limits = { ...PACKAGE_DETAILS_LIMITS, ...options };
@@ -544,6 +572,7 @@ export function buildPackageDetails(report, options = {}) {
     },
     ai: {
       advisory: true,
+      assessment: aiAssessment(report.model, take),
       selection: {
         selectedGroups: Array.isArray(report.model.evidenceGroups)
           ? report.model.evidenceGroups.length

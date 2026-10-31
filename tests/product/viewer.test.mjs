@@ -495,3 +495,34 @@ test("empty panels use neutral headings while populated policy and cue panels re
   assert.match(html, /<h2>Review suggested<\/h2>/);
   assert.doesNotMatch(html, /Source literal status unavailable/);
 });
+
+test("viewer shows an escaped AI summary and assessment, or an explicit non-model notice", () => {
+  const input = report();
+  input.model = {
+    status: "complete",
+    summary: "One file <b>differs</b>; not proof the package is safe.",
+    hypotheses: [],
+    assessment: {
+      source: "model",
+      uncertainty: "Runtime behavior was not observed.",
+      nextAction: "Review <script>index.js</script> manually.",
+      checkedScope: {
+        evidenceSupplied: 1,
+        evidenceOmitted: 2,
+        notChecked: ["runtime-behavior", "omitted-evidence"],
+      },
+    },
+  };
+  const html = renderReport(input);
+  assert.match(html, /AI summary/);
+  assert.match(html, /One file &lt;b&gt;differs&lt;\/b&gt;/);
+  assert.match(html, /Review &lt;script&gt;index\.js&lt;\/script&gt; manually/);
+  assert.match(html, /1 evidence items supplied, 2 omitted/);
+  assert.match(html, /Not checked: runtime-behavior, omitted-evidence/);
+  assert.match(html, /The AI summary is advisory and is not a safety signal/);
+  input.model = { status: "unavailable", reason: "quota" };
+  const fallback = renderReport(input);
+  assert.match(fallback, /Model status: unavailable \(quota\)/);
+  assert.match(fallback, /No AI summary is available for this check/);
+  assert.doesNotMatch(fallback, /<h3>AI summary<\/h3>/);
+});

@@ -453,3 +453,61 @@ test("behavior details use existing item caps and expose exact omitted observati
   );
   assert.ok(Buffer.byteLength(JSON.stringify(details)) <= 2097152);
 });
+
+test("details expose a structured model assessment only for completed model results", () => {
+  const report = fixture();
+  const unavailable = buildPackageDetails({
+    ...report,
+    model: { status: "unavailable", reason: "quota" },
+  });
+  assert.deepEqual(
+    {
+      status: unavailable.ai.assessment.status,
+      source: unavailable.ai.assessment.source,
+      reason: unavailable.ai.assessment.reason,
+    },
+    { status: "unavailable", source: "none", reason: "quota" },
+  );
+  assert.match(unavailable.ai.assessment.note, /not model output/);
+  assert.equal(unavailable.ai.assessment.summary, undefined);
+  const complete = buildPackageDetails({
+    ...report,
+    model: {
+      status: "complete",
+      summary: "One file was inventoried without a selected source.",
+      hypotheses: [],
+      assessment: {
+        source: "model",
+        uncertainty: "Source correspondence was not checked.",
+        nextAction: "Locate the release commit.",
+        checkedScope: {
+          basis: "deterministic-prompt-selection",
+          evidenceSupplied: 1,
+          paths: ["package.json"],
+          notChecked: ["runtime-behavior", "unselected-source"],
+        },
+      },
+    },
+  });
+  assert.equal(complete.ai.assessment.source, "model");
+  assert.match(complete.ai.assessment.note, /not a safety signal/);
+  assert.equal(complete.ai.assessment.nextAction, "Locate the release commit.");
+  assert.deepEqual(complete.ai.assessment.checkedScope.paths.items, [
+    "package.json",
+  ]);
+  assert.deepEqual(complete.ai.assessment.checkedScope.notChecked, [
+    "runtime-behavior",
+    "unselected-source",
+  ]);
+  assert.throws(
+    () =>
+      validateReport({
+        ...report,
+        model: {
+          status: "unavailable",
+          assessment: { source: "model", nextAction: "x" },
+        },
+      }),
+    /Model assessment requires a completed model result/,
+  );
+});
