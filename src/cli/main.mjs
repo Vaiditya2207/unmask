@@ -19,6 +19,7 @@ import { doctorCommand } from "./doctor.mjs";
 import { cacheCommand } from "./cache.mjs";
 import { runScan } from "./scan.mjs";
 import { runBatch } from "./batch.mjs";
+import { discoveryCommand, isDiscoveryRequest } from "./discovery.mjs";
 
 const names = {
   "--tarball": "tarballPath",
@@ -171,9 +172,11 @@ async function configuredModel(allowModel, runtime) {
 }
 
 export async function main(argv = process.argv.slice(2), runtime = {}) {
-  if (argv[0] === "preflight") return preflightMain(argv.slice(1), runtime);
-  if (argv[0] === "watch") return watchMain(argv.slice(1), runtime);
   try {
+    if (isDiscoveryRequest(argv)) return discoveryCommand(argv, runtime);
+    if (argv[0] === "preflight")
+      return await preflightMain(argv.slice(1), runtime);
+    if (argv[0] === "watch") return await watchMain(argv.slice(1), runtime);
     if (argv[0] === "audit") return await runAudit(argv.slice(1), runtime);
     if (argv[0] === "why") return await runWhy(argv.slice(1));
     if (argv[0] === "compare") return await runCompare(argv.slice(1), runtime);
