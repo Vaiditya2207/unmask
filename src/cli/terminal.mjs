@@ -102,8 +102,17 @@ function modelLines(model) {
       lines.push(`  Summary: ${safeText(model.summary, 600)}`);
     const assessment = model.assessment;
     if (object(assessment) && assessment.source === "model") {
-      if (typeof assessment.checkedScope === "string")
-        lines.push(`  Scope: ${safeText(assessment.checkedScope, 200)}`);
+      const scope = assessment.checkedScope;
+      if (typeof scope === "string")
+        lines.push(`  Scope: ${safeText(scope, 200)}`);
+      else if (object(scope)) {
+        const notChecked = list(scope.notChecked)
+          .slice(0, 8)
+          .map((item) => safeText(item, 40));
+        lines.push(
+          `  Scope: ${count(scope.evidenceSupplied)} evidence items supplied, ${count(scope.evidenceOmitted)} omitted${notChecked.length ? `; not checked: ${notChecked.join(", ")}` : ""}`,
+        );
+      }
       if (typeof assessment.uncertainty === "string")
         lines.push(`  Uncertainty: ${safeText(assessment.uncertainty, 200)}`);
     }

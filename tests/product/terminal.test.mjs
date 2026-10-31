@@ -199,6 +199,43 @@ test("offline check without --out keeps exit semantics, reports AI consent and c
   assert.match(result.stdout, /not proof of safety/);
 });
 
+test("structured AI checked scope renders bounded counts and unchecked areas", () => {
+  const summary = renderCheckSummary(
+    {
+      inputs: { claim: { name: "fixture", version: "1.0.0" } },
+      coverage: {
+        complete: true,
+        inventory: { files: 1, bytes: 1 },
+        states: {},
+      },
+      policy: { exitCode: 0, findings: [] },
+      model: {
+        status: "complete",
+        summary: "One file compared.",
+        hypotheses: [],
+        assessment: {
+          source: "model",
+          uncertainty: "Runtime behavior was not observed.",
+          nextAction: "Review the install script.",
+          checkedScope: {
+            basis: "deterministic-prompt-selection",
+            evidenceSupplied: 3,
+            evidenceOmitted: 1,
+            notChecked: ["runtime-behavior", "omitted-evidence\u001b[2J"],
+          },
+        },
+      },
+    },
+    { style: { paint: (_name, text) => text } },
+  );
+  assert.match(
+    summary,
+    /Scope: 3 evidence items supplied, 1 omitted; not checked: runtime-behavior, omitted-evidence\\u001b\[2J/,
+  );
+  assert.match(summary, /Uncertainty: Runtime behavior was not observed\./);
+  assert.match(summary, /AI suggests: Review the install script\./);
+});
+
 test("summary escapes terminal control characters and never claims safety for unavailable AI or advisories", () => {
   assert.equal(safeText("a\u001b[31mb\u202e"), "a\\u001b[31mb\\u202e");
   assert.equal(
