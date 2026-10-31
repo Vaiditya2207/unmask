@@ -99,3 +99,60 @@ test("transient model states and non-incomplete exit-2 records cannot reuse dete
   for (const exitCode of [0, 1, 3])
     assert.equal(stored(failures, { exitCode }), undefined, String(exitCode));
 });
+
+test("only complete advisory snapshots are reused; incomplete ones stay readable but never replayed", () => {
+  const check = (status, advisories = []) => ({
+    source: "OSV",
+    status,
+    complete: ["found", "none-reported"].includes(status),
+    reasons: ["found", "none-reported"].includes(status) ? [] : ["http-error"],
+    advisories,
+  });
+  const malware = [{ id: "GHSA-synthetic-malware" }];
+  const cases = [
+    [undefined, true],
+    [check("found", malware), true],
+    [check("none-reported"), true],
+    [check("incomplete", malware), false],
+    [check("unavailable"), false],
+    [{ ...check("found", malware), complete: false }, false],
+    [{ ...check("unavailable"), reasons: ["storage-byte-cap"] }, true],
+    [{ ...check("incomplete", malware), reasons: ["advisory-limit"] }, true],
+    [
+      {
+        ...check("incomplete", malware),
+        reasons: ["advisory-limit", "timeout"],
+      },
+      false,
+    ],
+    [
+      {
+        ...check("incomplete", malware),
+        reasons: ["http-error", "stale-cache"],
+      },
+      false,
+    ],
+  ];
+  for (const [vulnerabilityCheck, reusable] of cases) {
+    const store = createReportStore();
+    const record = {
+      id: "job",
+      key: "fixture@1.0.0",
+      status: "done",
+      report: {
+        policy: { exitCode: 0, findings: [] },
+        model: { status: "disabled" },
+        failures: [],
+      },
+      ...(vulnerabilityCheck ? { vulnerabilityCheck } : {}),
+    };
+    store.put(record);
+    const label = JSON.stringify(vulnerabilityCheck?.status ?? "absent");
+    assert.equal(Boolean(store.findKey("fixture@1.0.0")), reusable, label);
+    assert.deepEqual(
+      store.get("job").vulnerabilityCheck,
+      vulnerabilityCheck,
+      label,
+    );
+  }
+});

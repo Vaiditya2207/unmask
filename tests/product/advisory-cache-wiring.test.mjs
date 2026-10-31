@@ -73,7 +73,7 @@ async function serve(t, options) {
   const base = `http://127.0.0.1:${runtime.server.address().port}`;
   return { runtime, base };
 }
-async function checkDetails(base) {
+async function checkLocation(base) {
   const submitted = await fetch(`${base}/check`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -86,8 +86,11 @@ async function checkDetails(base) {
     if (response.status !== 202) break;
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
-  return (await fetch(`${base}${location}.details.json`)).json();
+  return location;
 }
+const details = async (base, location) =>
+  (await fetch(`${base}${location}.details.json`)).json();
+const checkDetails = async (base) => details(base, await checkLocation(base));
 
 test("an injected advisory cache is the single instance behind hosted enrichment", async (t) => {
   const blocked = guardNetwork(t);
@@ -151,4 +154,36 @@ test("explicit enrichment opts out of the shared cache and conflicting options a
       assert.fail("conflicting advisory options were accepted");
     }
   }
+});
+
+test("a check finished during an advisory outage is not replayed after the provider recovers", async (t) => {
+  guardNetwork(t);
+  let down = true;
+  const osv = [];
+  const cache = createAdvisoryCache({
+    lookupOptions: {
+      limits: { retries: 0 },
+      fetchImpl: async (_url, options) => {
+        osv.push(JSON.parse(options.body).version);
+        if (down) return new Response("synthetic outage", { status: 503 });
+        return Response.json({ vulns: [{ id: "GHSA-synthetic-malware" }] });
+      },
+    },
+  });
+  const { base } = await serve(t, { advisoryCache: cache });
+  const first = await checkLocation(base);
+  const outage = await details(base, first);
+  assert.equal(outage.vulnerabilityCheck.status, "unavailable");
+  down = false;
+  const second = await checkLocation(base);
+  assert.notEqual(second, first);
+  const refreshed = await details(base, second);
+  assert.equal(refreshed.vulnerabilityCheck.status, "found");
+  assert.deepEqual(
+    refreshed.vulnerabilityCheck.advisories.map((item) => item.id),
+    ["GHSA-synthetic-malware"],
+  );
+  assert.deepEqual(await details(base, first), outage);
+  assert.equal(await checkLocation(base), second);
+  assert.equal(osv.length, 2);
 });
