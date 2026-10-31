@@ -186,6 +186,8 @@ test("cleanup selects only owned, unserved, untagged revisions for the exact clo
     tag: "keep",
   });
   assert.equal(cleanupCandidates(active, candidates, 12).length, 1);
+  active.status.latestCreatedRevisionName = candidates[1].metadata.name;
+  assert.deepEqual(cleanupCandidates(active, candidates, 12), []);
   assert.throws(() =>
     verifyRouting(
       service(),

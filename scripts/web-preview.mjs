@@ -192,6 +192,7 @@ export function cleanupCandidates(service, revisions, pr) {
         PREVIEW.service &&
       revision.metadata.labels?.["unmask-preview-owner"] === "github" &&
       revision.metadata.labels?.["unmask-preview-pr"] === String(pr) &&
+      revision.metadata.name !== service.status?.latestCreatedRevisionName &&
       !used.has(revision.metadata.name),
   );
 }
