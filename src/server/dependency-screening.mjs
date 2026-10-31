@@ -203,11 +203,16 @@ export async function screenDependencyGraph(
     incomplete: count("incomplete"),
     unavailable: count("unavailable"),
     notScreened: count("not-screened"),
+    integrityConflicting: results.filter(
+      (item) => item.integrityStatus === "conflicting",
+    ).length,
     rejected: graph.rejected.length,
     local: graph.local.length,
   };
   const registryComplete =
-    graph.rejected.length === 0 && results.every((item) => item.complete);
+    graph.rejected.length === 0 &&
+    summary.integrityConflicting === 0 &&
+    results.every((item) => item.complete);
   return {
     schemaVersion: "1",
     source: "OSV",
