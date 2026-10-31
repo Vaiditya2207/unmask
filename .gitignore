@@ -12,6 +12,10 @@ __pycache__/
 .DS_Store
 models/
 artifacts/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+.taste-skill/
 
 # Internal planning/research notes: never commit (keep them in ../unmask-research)
 internal/
