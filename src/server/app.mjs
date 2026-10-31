@@ -1,4 +1,6 @@
 import { createServer } from "node:http";
+import { buildPackageDetails } from "../core/package-details.mjs";
+import { attachVulnerabilityCheck } from "./enrichment.mjs";
 import { createQueue, resolveLimits, systemClock } from "./queue.mjs";
 import { createReportStore } from "./store.mjs";
 import { renderReport } from "../viewer/render.mjs";
@@ -99,6 +101,7 @@ export function createCacheKeyPrefix(versionInfo, limits) {
 
 export function createApp({
   runAnalysis,
+  enrichJob,
   versionInfo,
   limits: overrides,
   clock = systemClock,
@@ -114,6 +117,8 @@ export function createApp({
     throw new TypeError(
       "versionInfo requires version, commit and tarballSha256 strings",
     );
+  if (enrichJob !== undefined && typeof enrichJob !== "function")
+    throw new TypeError("enrichJob must be a function");
   const limits = resolveLimits(overrides);
   const version = Object.fromEntries(
     ["version", "commit", "tarballSha256"].map((key) => [
@@ -128,7 +133,14 @@ export function createApp({
     clock,
   });
   const keyPrefix = createCacheKeyPrefix(versionInfo, limits);
-  const queue = createQueue({ runAnalysis, store, limits, clock, keyPrefix });
+  const queue = createQueue({
+    runAnalysis,
+    enrichJob,
+    store,
+    limits,
+    clock,
+    keyPrefix,
+  });
   const server = createServer(
     { maxHeaderSize: 8192, headersTimeout: 10000, requestTimeout: 15000 },
     (req, res) => {
@@ -248,7 +260,9 @@ export function createApp({
         if (path === "/") return send(200, renderHome());
         if (path === "/healthz") return json(200, { status: "ok" });
         if (path === "/version") return json(200, version);
-        const match = /^\/r\/([a-f0-9]{32})(\.json)?$/.exec(path);
+        const match = /^\/r\/([a-f0-9]{32})(\.details\.json|\.json)?$/.exec(
+          path,
+        );
         if (!match)
           return error(
             404,
@@ -265,10 +279,21 @@ export function createApp({
         const pending = ["queued", "running"].includes(job.status);
         if (match[2]) {
           if (job.report)
-            return json(200, job.report, {
-              "content-disposition":
-                'attachment; filename="unmask-report.json"',
-            });
+            return json(
+              200,
+              match[2] === ".details.json"
+                ? attachVulnerabilityCheck(
+                    buildPackageDetails(job.report),
+                    job.vulnerabilityCheck,
+                  )
+                : job.report,
+              {
+                "content-disposition":
+                  match[2] === ".details.json"
+                    ? 'attachment; filename="unmask-package-details.json"'
+                    : 'attachment; filename="unmask-report.json"',
+              },
+            );
           const { key, ...publicJob } = job;
           return json(
             pending ? 202 : 200,
