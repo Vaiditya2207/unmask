@@ -48,6 +48,7 @@ export async function startServer({
   versionInfo,
   modelClient,
   enrichJob,
+  advisoryCache,
 } = {}) {
   if (
     typeof host !== "string" ||
@@ -63,14 +64,20 @@ export async function startServer({
       : modelClient === undefined
         ? await modelClientFromEnv()
         : modelClient;
-  const enrichment =
-    enrichJob === null
-      ? undefined
-      : enrichJob === undefined
-        ? (await import("../core/advisory-cache.mjs")).createAdvisoryCache({
-            exposeStats: process.env.UNMASK_ADVISORY_CACHE_STATS === "1",
-          }).lookup
-        : enrichJob;
+  if (
+    advisoryCache !== undefined &&
+    (typeof advisoryCache?.lookup !== "function" || enrichJob !== undefined)
+  )
+    throw new TypeError("advisoryCache needs a lookup and no enrichJob");
+  // One cache per server: every advisory consumer derived from enrichJob shares it.
+  const cache =
+    enrichJob === undefined
+      ? (advisoryCache ??
+        (await import("../core/advisory-cache.mjs")).createAdvisoryCache({
+          exposeStats: process.env.UNMASK_ADVISORY_CACHE_STATS === "1",
+        }))
+      : undefined;
+  const enrichment = cache ? cache.lookup : (enrichJob ?? undefined);
   if (enrichment !== undefined && typeof enrichment !== "function")
     throw new TypeError("enrichJob must be a function or null");
   const run = await createRunner({
@@ -145,7 +152,7 @@ export async function startServer({
     await close();
     throw error;
   }
-  return { server, close };
+  return { server, close, ...(cache ? { advisoryCache: cache } : {}) };
 }
 
 async function main() {
