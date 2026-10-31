@@ -672,7 +672,9 @@ function quotaScope(body, modelId) {
     if (
       !metadata ||
       ![modelId, `models/${modelId}`].includes(metadata.model) ||
-      !identity.includes("permodel")
+      !identity.includes("permodel") ||
+      !identity.includes("perminute") ||
+      /hour|week|month|year|second/.test(identity)
     )
       return "unknown";
   }
@@ -716,6 +718,11 @@ function quotaScope(body, modelId) {
       .replace(/[^a-z0-9]/g, "");
     if (!binding.includes("permodel"))
       return binding.includes("perproject") ? "global" : "unknown";
+    if (
+      !binding.includes("perminute") ||
+      /hour|week|month|year|second/.test(binding)
+    )
+      return "unknown";
   }
   return "model";
 }
