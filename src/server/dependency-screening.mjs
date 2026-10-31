@@ -16,7 +16,9 @@ const STATUSES = new Set([
   "incomplete",
   "unavailable",
 ]);
-const systemClock = { now: Date.now };
+const systemClock = { now: Date.now, setTimeout, clearTimeout };
+const STATEMENT =
+  "Coverage describes exact registry identities only; the project root, local, rejected and unscreened entries were not checked. No reported advisory is not a safety verdict.";
 
 function advisorySummary(item) {
   return {
@@ -32,6 +34,15 @@ function advisorySummary(item) {
   };
 }
 
+const unscreened = (identity, status, reason) => ({
+  ...identity,
+  status,
+  complete: false,
+  reasons: [reason],
+  advisories: [],
+});
+
+// Accepts a lookup only when it is bound to the exact identity and its status agrees with its advisories and completeness.
 function normalize(identity, lookup, limits) {
   if (
     !lookup ||
@@ -39,31 +50,43 @@ function normalize(identity, lookup, limits) {
     !STATUSES.has(lookup.status) ||
     !Array.isArray(lookup.advisories)
   )
-    return {
-      ...identity,
-      status: "unavailable",
-      complete: false,
-      reasons: ["invalid-lookup-result"],
-      advisories: [],
-    };
+    return unscreened(identity, "unavailable", "invalid-lookup-result");
+  if (
+    lookup.package?.name !== identity.name ||
+    lookup.package?.version !== identity.version
+  )
+    return unscreened(identity, "unavailable", "identity-mismatch");
   const advisories = lookup.advisories
     .filter((item) => item && typeof item.id === "string")
     .map(advisorySummary);
   const reasons = Array.isArray(lookup.reasons)
     ? lookup.reasons.filter((reason) => typeof reason === "string")
     : [];
+  let status = lookup.status;
+  const settled =
+    lookup.complete === true &&
+    reasons.length === 0 &&
+    advisories.length === lookup.advisories.length;
+  if (
+    (status === "found" && (!advisories.length || !settled)) ||
+    (status === "none-reported" && (lookup.advisories.length > 0 || !settled))
+  ) {
+    reasons.push("inconsistent-lookup-result");
+    status = advisories.length ? "incomplete" : "unavailable";
+  }
   if (advisories.length > limits.advisoriesPerDependency)
     reasons.push("advisory-output-limit");
   return {
     ...identity,
-    status: lookup.status,
-    complete: lookup.complete === true && reasons.length === 0,
+    status,
+    complete:
+      ["found", "none-reported"].includes(status) && reasons.length === 0,
     reasons,
     advisories: advisories.slice(0, limits.advisoriesPerDependency),
   };
 }
 
-// Screens unique exact registry identities with bounded concurrency, count and time; unscreened work stays visible.
+// Screens unique exact registry identities with bounded concurrency, count and a deadline that also bounds in-flight lookups.
 export async function screenDependencyGraph(
   graph,
   { lookup, limits: overrides = {}, clock = systemClock, signal } = {},
@@ -75,49 +98,59 @@ export async function screenDependencyGraph(
     .slice(0, limits.identities)
     .map((identity, i) => [i, identity]);
   graph.identities.slice(limits.identities).forEach((identity, offset) => {
-    results[limits.identities + offset] = {
-      ...identity,
-      status: "not-screened",
-      complete: false,
-      reasons: ["identity-limit"],
-      advisories: [],
-    };
+    results[limits.identities + offset] = unscreened(
+      identity,
+      "not-screened",
+      "identity-limit",
+    );
   });
+  const deadline = new AbortController();
+  const combined = signal
+    ? AbortSignal.any([signal, deadline.signal])
+    : deadline.signal;
+  const timer = (clock.setTimeout ?? setTimeout)(
+    () => deadline.abort(),
+    limits.deadlineMs,
+  );
+  let stop;
+  const stopped = new Promise((resolve) => {
+    stop = () => resolve({ stopped: true });
+    combined.addEventListener("abort", stop, { once: true });
+  });
+  if (combined.aborted) stop();
+  const reason = () => (signal?.aborted ? "aborted" : "time-limit");
   async function worker() {
     for (let next = queue.shift(); next; next = queue.shift()) {
       const [index, identity] = next;
-      const stopped = signal?.aborted
-        ? "aborted"
-        : clock.now() - started >= limits.deadlineMs
-          ? "time-limit"
-          : null;
-      if (stopped) {
-        results[index] = {
-          ...identity,
-          status: "not-screened",
-          complete: false,
-          reasons: [stopped],
-          advisories: [],
-        };
+      if (combined.aborted || clock.now() - started >= limits.deadlineMs) {
+        results[index] = unscreened(identity, "not-screened", reason());
         continue;
       }
-      try {
-        const value = await lookup(identity.spec, { signal });
-        results[index] = normalize(identity, value, limits);
-      } catch {
-        results[index] = {
-          ...identity,
-          status: "unavailable",
-          complete: false,
-          reasons: ["lookup-failed"],
-          advisories: [],
-        };
-      }
+      const pending = Promise.resolve()
+        .then(() => lookup(identity.spec, { signal: combined }))
+        .then(
+          (value) => ({ value }),
+          () => ({ failed: true }),
+        );
+      const outcome = await Promise.race([pending, stopped]);
+      results[index] = outcome.stopped
+        ? unscreened(identity, "unavailable", reason())
+        : outcome.failed
+          ? unscreened(identity, "unavailable", "lookup-failed")
+          : normalize(identity, outcome.value, limits);
     }
   }
-  await Promise.all(
-    Array.from({ length: Math.min(limits.concurrency, queue.length) }, worker),
-  );
+  try {
+    await Promise.all(
+      Array.from(
+        { length: Math.min(limits.concurrency, queue.length) },
+        worker,
+      ),
+    );
+  } finally {
+    (clock.clearTimeout ?? clearTimeout)(timer);
+    combined.removeEventListener("abort", stop);
+  }
   const count = (status) =>
     results.filter((item) => item.status === status).length;
   const summary = {
@@ -131,26 +164,29 @@ export async function screenDependencyGraph(
     rejected: graph.rejected.length,
     local: graph.local.length,
   };
-  const complete =
+  const registryComplete =
     graph.rejected.length === 0 && results.every((item) => item.complete);
   return {
     schemaVersion: "1",
     source: "OSV",
     lockfileVersion: graph.lockfileVersion,
-    root: graph.root,
+    root: { ...graph.root, location: "", status: "not-screened" },
     screenedAt: new Date(started).toISOString(),
-    status: summary.found
+    status: results.some((item) => item.advisories.length)
       ? "advisories-found"
-      : complete
+      : registryComplete
         ? "none-reported"
         : "incomplete",
-    complete,
+    coverage: {
+      scope: "exact-registry-identities",
+      registryComplete,
+      projectScreened: false,
+    },
     summary,
-    statement:
-      "Advisory screening covers exact registry identities only. No reported advisory is not a safety verdict; rejected, local and unscreened entries were not checked.",
+    statement: STATEMENT,
     dependencies: results,
-    rejected: graph.rejected,
-    local: graph.local,
+    rejected: graph.rejected.map((item) => ({ ...item, status: "rejected" })),
+    local: graph.local.map((item) => ({ ...item, status: "not-screened" })),
     limits: {
       identities: limits.identities,
       concurrency: limits.concurrency,

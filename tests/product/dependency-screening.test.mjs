@@ -31,6 +31,17 @@ const lockfile = (packages, lockfileVersion = 3) => ({
     ...packages,
   },
 });
+const bound = (spec, fields) => {
+  const at = spec.lastIndexOf("@");
+  return {
+    package: { name: spec.slice(0, at), version: spec.slice(at + 1) },
+    reasons: [],
+    advisories: [],
+    ...fields,
+  };
+};
+const clean = (spec) =>
+  bound(spec, { status: "none-reported", complete: true });
 const sample = lockfile({
   "node_modules/ua-parser-js": registry("ua-parser-js", "0.7.29"),
   "node_modules/left": registry("left", "1.0.0", {
@@ -130,19 +141,13 @@ test("screening is bounded and never reports unscreened work as complete", async
     lookup: async (spec) => {
       seen.push(spec);
       if (spec === "a@1.0.0")
-        return {
+        return bound(spec, {
           status: "found",
           complete: true,
-          reasons: [],
           advisories: [{ id: "GHSA-test", aliases: [], summary: "Malware" }],
-        };
+        });
       if (spec === "b@1.0.0") throw new Error("network");
-      return {
-        status: "none-reported",
-        complete: true,
-        reasons: [],
-        advisories: [],
-      };
+      return clean(spec);
     },
   });
   assert.deepEqual(seen.sort(), ["a@1.0.0", "b@1.0.0", "c@1.0.0"]);
@@ -156,30 +161,104 @@ test("screening is bounded and never reports unscreened work as complete", async
     ],
   );
   assert.equal(result.status, "advisories-found");
-  assert.equal(result.complete, false);
+  assert.equal(result.coverage.registryComplete, false);
   assert.equal(result.summary.notScreened, 1);
-  const clean = await screenDependencyGraph(
+  const passed = await screenDependencyGraph(
     parseNpmLockfile(lockfile({ "node_modules/c": registry("c", "1.0.0") })),
-    {
-      lookup: async () => ({
-        status: "none-reported",
-        complete: true,
-        reasons: [],
-        advisories: [],
-      }),
-    },
+    { lookup: async (spec) => clean(spec) },
   );
-  assert.equal(clean.status, "none-reported");
-  assert.equal(clean.complete, true);
-  const rejectedOnly = await screenDependencyGraph(parseNpmLockfile(sample), {
-    lookup: async () => ({
-      status: "none-reported",
-      complete: true,
-      advisories: [],
-    }),
+  assert.equal(passed.status, "none-reported");
+  assert.deepEqual(passed.coverage, {
+    scope: "exact-registry-identities",
+    registryComplete: true,
+    projectScreened: false,
   });
+  assert.equal(passed.root.status, "not-screened");
+  const rejectedOnly = await screenDependencyGraph(parseNpmLockfile(sample), {
+    lookup: async (spec) => clean(spec),
+  });
+  assert.ok(rejectedOnly.local.every((item) => item.status === "not-screened"));
+  assert.ok(rejectedOnly.rejected.every((item) => item.status === "rejected"));
   assert.equal(rejectedOnly.status, "incomplete");
   assert.equal(rejectedOnly.summary.rejected, 7);
+});
+
+test("screening rejects unbound or inconsistent lookups and bounds hung lookups by deadline", async () => {
+  const graph = parseNpmLockfile(
+    lockfile({
+      "node_modules/a": registry("a", "1.0.0"),
+      "node_modules/b": registry("b", "1.0.0"),
+      "node_modules/c": registry("c", "1.0.0"),
+      "node_modules/d": registry("d", "1.0.0"),
+      "node_modules/e": registry("e", "1.0.0"),
+    }),
+  );
+  const answers = {
+    "a@1.0.0": clean("other@1.0.0"),
+    "b@1.0.0": bound("b@1.0.0", {
+      status: "none-reported",
+      complete: true,
+      advisories: [{ id: "GHSA-hidden" }],
+    }),
+    "c@1.0.0": bound("c@1.0.0", { status: "none-reported", complete: false }),
+    "d@1.0.0": bound("d@1.0.0", { status: "found", complete: true }),
+  };
+  const started = Date.now();
+  const result = await screenDependencyGraph(graph, {
+    limits: { deadlineMs: 100, concurrency: 5 },
+    lookup: (spec) =>
+      spec === "e@1.0.0" ? new Promise(() => {}) : answers[spec],
+  });
+  assert.ok(Date.now() - started < 2000);
+  assert.deepEqual(
+    result.dependencies.map((item) => [item.spec, item.status, item.reasons]),
+    [
+      ["a@1.0.0", "unavailable", ["identity-mismatch"]],
+      ["b@1.0.0", "incomplete", ["inconsistent-lookup-result"]],
+      ["c@1.0.0", "unavailable", ["inconsistent-lookup-result"]],
+      ["d@1.0.0", "unavailable", ["inconsistent-lookup-result"]],
+      ["e@1.0.0", "unavailable", ["time-limit"]],
+    ],
+  );
+  assert.equal(result.dependencies[1].advisories[0].id, "GHSA-hidden");
+  assert.equal(result.status, "advisories-found");
+  assert.equal(result.coverage.registryComplete, false);
+  const caller = new AbortController();
+  caller.abort();
+  const aborted = await screenDependencyGraph(graph, {
+    signal: caller.signal,
+    lookup: () => assert.fail("lookup must not start after abort"),
+  });
+  assert.ok(
+    aborted.dependencies.every(
+      (item) => item.status === "not-screened" && item.reasons[0] === "aborted",
+    ),
+  );
+});
+
+test("identities expose stable integrity binding metadata", () => {
+  const graph = parseNpmLockfile(
+    lockfile({
+      "node_modules/a": registry("a", "1.0.0"),
+      "node_modules/x/node_modules/a": registry("a", "1.0.0", {
+        integrity: "sha512-BBBB",
+      }),
+      "node_modules/b": registry("b", "1.0.0", { integrity: undefined }),
+      "node_modules/c": registry("c", "1.0.0"),
+    }),
+  );
+  assert.deepEqual(
+    graph.identities.map((item) => [
+      item.spec,
+      item.integrityStatus,
+      item.integrity,
+    ]),
+    [
+      ["a@1.0.0", "conflicting", null],
+      ["b@1.0.0", "missing", null],
+      ["c@1.0.0", "consistent", "sha512-AAAA"],
+    ],
+  );
 });
 
 const versionInfo = {
@@ -241,7 +320,7 @@ test("dependency screening API screens a submitted lockfile over local HTTP with
     "ua-parser-js@0.7.29",
   ]);
   assert.equal(result.status, "advisories-found");
-  assert.equal(result.complete, false);
+  assert.equal(result.coverage.registryComplete, false);
   const flagged = result.dependencies.find(
     (item) => item.name === "ua-parser-js",
   );
@@ -283,12 +362,7 @@ test("dependency screening API is unavailable without a lookup and admission-lim
   assert.deepEqual(await response.json(), {
     error: "advisory-lookup-unavailable",
   });
-  const post = await start(t, async () => ({
-    status: "none-reported",
-    complete: true,
-    reasons: [],
-    advisories: [],
-  }));
+  const post = await start(t, async (spec) => clean(spec));
   const body = JSON.stringify(
     lockfile({ "node_modules/c": registry("c", "1.0.0") }),
   );

@@ -88,6 +88,7 @@ export function parseNpmLockfile(input, { limits: overrides = {} } = {}) {
   if (keys.length > limits.entries) throw new LockfileError("entry-limit");
   const root = lock.packages[""];
   const identities = new Map();
+  const integrities = new Map();
   const rejected = [];
   const local = [];
   for (const key of keys) {
@@ -124,6 +125,12 @@ export function parseNpmLockfile(input, { limits: overrides = {} } = {}) {
     identity.locationCount++;
     if (identity.locations.length < limits.locations)
       identity.locations.push(key);
+    const integrity =
+      typeof entry.integrity === "string" &&
+      /^sha(?:256|384|512)-[A-Za-z0-9+/]{1,200}={0,2}$/.test(entry.integrity)
+        ? entry.integrity
+        : "";
+    integrities.set(spec, (integrities.get(spec) ?? new Set()).add(integrity));
     identity.dev &&= flags.dev;
     identity.optional &&= flags.optional;
     identities.set(spec, identity);
@@ -135,9 +142,18 @@ export function parseNpmLockfile(input, { limits: overrides = {} } = {}) {
       version: typeof root?.version === "string" ? root.version : null,
     },
     entries: keys.length - (Object.hasOwn(lock.packages, "") ? 1 : 0),
-    identities: [...identities.values()].sort((a, b) =>
-      a.spec < b.spec ? -1 : a.spec > b.spec ? 1 : 0,
-    ),
+    identities: [...identities.values()]
+      .map((identity) => {
+        const seen = [...integrities.get(identity.spec)];
+        const integrityStatus =
+          seen.length > 1 ? "conflicting" : seen[0] ? "consistent" : "missing";
+        return {
+          ...identity,
+          integrity: integrityStatus === "consistent" ? seen[0] : null,
+          integrityStatus,
+        };
+      })
+      .sort((a, b) => (a.spec < b.spec ? -1 : a.spec > b.spec ? 1 : 0)),
     rejected,
     local,
   };
