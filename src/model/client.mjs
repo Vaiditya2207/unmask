@@ -9,7 +9,6 @@ const MODELS = new Set([
   "gemini-3-flash-preview",
 ]);
 export const DEFAULT_MODEL_ROUTE = Object.freeze([
-  Object.freeze({ modelId: "gemini-3.5-flash", thinkingLevel: "high" }),
   Object.freeze({
     modelId: "gemini-3-flash-preview",
     thinkingLevel: "minimal",
@@ -661,28 +660,43 @@ const delay = (ms, signal) =>
 function quotaScope(body, modelId) {
   const details = body?.error?.details;
   if (!Array.isArray(details) || details.length > 32) return "unknown";
+  const windows = [];
+  const normalize = (value) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  function bindingWindow(binding, identity) {
+    if (/hour|week|month|year|second/.test(identity)) return null;
+    if (binding.includes("perminute") && !/day|daily/.test(identity))
+      return "minute";
+    if (binding.includes("perday") && !identity.includes("perminute"))
+      return "daily";
+    return null;
+  }
   for (const info of details.filter(
     (item) => item?.["@type"] === "type.googleapis.com/google.rpc.ErrorInfo",
   )) {
     const metadata = info.metadata;
-    const identity =
-      `${info.reason ?? ""} ${metadata?.quota_limit ?? ""} ${metadata?.quota_metric ?? ""}`
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "");
-    if (identity.includes("day")) return "daily";
+    const binding = normalize(
+      `${metadata?.quota_limit ?? ""} ${metadata?.quota_metric ?? ""}`,
+    );
+    const reason = normalize(String(info.reason ?? ""));
     if (
       ["global", "project"].includes(metadata?.scope) ||
-      (identity.includes("perproject") && !identity.includes("permodel"))
+      reason.includes("global") ||
+      (reason.includes("project") && !reason.includes("model")) ||
+      (binding.includes("perproject") && !binding.includes("permodel"))
     )
       return "global";
+    const window = bindingWindow(binding, binding + reason);
     if (
       !metadata ||
       ![modelId, `models/${modelId}`].includes(metadata.model) ||
-      !identity.includes("permodel") ||
-      !identity.includes("perminute") ||
-      /hour|week|month|year|second/.test(identity)
+      !binding.includes("permodel") ||
+      !window ||
+      (metadata.scope !== undefined &&
+        metadata.scope !== "model" &&
+        !(metadata.scope === "daily" && window === "daily"))
     )
       return "unknown";
+    windows.push(window);
   }
   const violations = [];
   for (const detail of details) {
@@ -697,40 +711,34 @@ function quotaScope(body, modelId) {
     violations.push(...detail.violations);
   }
   if (!violations.length) return "unknown";
-  if (
-    violations.some((item) =>
-      `${item?.quotaId ?? ""} ${item?.quotaMetric ?? ""}`
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "")
-        .includes("day"),
-    )
-  )
-    return "daily";
   for (const item of violations) {
     const dimensions = item?.quotaDimensions;
     if (
       !dimensions ||
       typeof dimensions !== "object" ||
       Array.isArray(dimensions) ||
-      !Object.hasOwn(dimensions, "model")
+      !Object.hasOwn(dimensions, "model") ||
+      ["global", "project"].includes(dimensions.scope)
     )
       return "global";
-    if (["global", "project", "daily"].includes(dimensions.scope))
-      return dimensions.scope === "daily" ? "daily" : "global";
     if (![modelId, `models/${modelId}`].includes(dimensions.model))
       return "unknown";
-    const binding = `${item.quotaId ?? ""} ${item.quotaMetric ?? ""}`
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "");
+    const binding = normalize(
+      `${item.quotaId ?? ""} ${item.quotaMetric ?? ""}`,
+    );
     if (!binding.includes("permodel"))
       return binding.includes("perproject") ? "global" : "unknown";
+    const window = bindingWindow(binding, binding);
     if (
-      !binding.includes("perminute") ||
-      /hour|week|month|year|second/.test(binding)
+      !window ||
+      (dimensions.scope !== undefined &&
+        dimensions.scope !== "model" &&
+        !(dimensions.scope === "daily" && window === "daily"))
     )
       return "unknown";
+    windows.push(window);
   }
-  return "model";
+  return windows.includes("daily") ? "model-daily" : "model";
 }
 
 export function createGemmaClient(options = {}) {
@@ -795,10 +803,16 @@ export function createGemmaClient(options = {}) {
   }));
   const generationConfig = route[0].generationConfig;
   const routingPolicy = {
-    version: "ordered-fallback-1",
+    version: "ordered-fallback-2",
     maxGenerationAttempts: Math.max(2, route.length),
-    fallthrough: ["model-scoped-429", "transient-5xx", "timeout"],
+    fallthrough: [
+      "model-scoped-minute-429",
+      "model-scoped-daily-429",
+      "transient-5xx",
+      "timeout",
+    ],
     invalidOutputRetry: "same-tier",
+    modelDailyFallback: "next-tier-no-wait",
   };
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   const now = options.now ?? (() => performance.now());
@@ -1108,12 +1122,17 @@ export function createGemmaClient(options = {}) {
                   body = await jsonResponse(response, controller.signal);
                 } catch {}
                 failureScope = quotaScope(body, tier.modelId);
-                const retry = failureScope === "model";
+                const retry =
+                  failureScope === "model" ||
+                  (failureScope === "model-daily" &&
+                    tierIndex + 1 < route.length);
                 throw Object.assign(
                   new Failure(
                     "quota",
                     retry,
-                    retryDelay(response, wallNow()),
+                    failureScope === "model-daily"
+                      ? 0
+                      : retryDelay(response, wallNow()),
                     retry,
                   ),
                   { scope: failureScope },
