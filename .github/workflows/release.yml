@@ -156,3 +156,45 @@ jobs:
       - name: Deploy exact digest and verify serving identity and real model route
         id: deploy
         run: node scripts/cloud-run-deploy.mjs
+
+  deploy-web:
+    needs: [publish, deploy]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.publish.outputs.complete == 'true' && needs.publish.outputs.npm_published == 'true' && needs.deploy.result == 'success'
+    environment:
+      name: production
+      url: ${{ steps.web.outputs.url }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      DEPLOY_REPOSITORY_ID: ${{ github.repository_id }}
+      DEPLOY_OWNER_ID: ${{ github.repository_owner_id }}
+      DEPLOY_ENVIRONMENT: production
+      RELEASE_COMPLETE: ${{ needs.publish.outputs.complete }}
+      RELEASE_NPM_PUBLISHED: ${{ needs.publish.outputs.npm_published }}
+      RELEASE_COMMIT: ${{ needs.publish.outputs.commit }}
+      RELEASE_VERSION: ${{ needs.publish.outputs.version }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.publish.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+      - name: Validate completed release and web production identity
+        id: web-config
+        run: node scripts/cloud-run-web-deploy.mjs --validate
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          project_id: ${{ steps.web-config.outputs.project_id }}
+          service_account: ${{ steps.web-config.outputs.service_account }}
+          workload_identity_provider: ${{ steps.web-config.outputs.workload_identity_provider }}
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+        with:
+          version: 591.0.0
+      - name: Build exact web release and verify candidate before routing
+        id: web
+        run: node scripts/cloud-run-web-deploy.mjs
