@@ -1,5 +1,16 @@
 import { createHash } from "node:crypto";
 
+const stableVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+
+function compareVersions(left, right) {
+  const a = left.split(".").map(BigInt);
+  const b = right.split(".").map(BigInt);
+  for (let index = 0; index < 3; index++) {
+    if (a[index] !== b[index]) return a[index] > b[index] ? 1 : -1;
+  }
+  return 0;
+}
+
 export function planRelease({
   version,
   sha,
@@ -9,10 +20,7 @@ export function planRelease({
   tags,
   releases,
 }) {
-  if (
-    !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version) ||
-    version === "0.0.0"
-  )
+  if (!stableVersion.test(version) || version === "0.0.0")
     throw new Error("A positive stable release version is required");
   if (!/^[a-f0-9]{40}$/.test(sha))
     throw new Error("A full commit SHA is required");
@@ -24,6 +32,14 @@ export function planRelease({
   const tag = `v${version}`;
   if (tags.includes(tag) || releases.includes(tag))
     throw new Error(`Version ${tag} already exists; choose a new version`);
+  for (const existing of [...tags, ...releases]) {
+    const stable =
+      typeof existing === "string" ? existing.replace(/^v/, "") : "";
+    if (stableVersion.test(stable) && compareVersions(version, stable) <= 0)
+      throw new Error(
+        `Release version must increase beyond existing stable version ${existing}`,
+      );
+  }
   return { version, tag, sha, imageTag: `sha-${sha}` };
 }
 

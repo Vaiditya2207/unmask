@@ -78,3 +78,66 @@ test("package file allowlist rejects internal files even under dist", () => {
     );
   }
 });
+
+for (const field of ["tags", "releases"]) {
+  test(`planner rejects a downgrade below the maximum stable ${field} version`, () => {
+    assert.throws(
+      () =>
+        planRelease({
+          ...input(),
+          version: "1.2.0",
+          [field]: ["v1.0.0", "v2.0.0", "v1.1.0"],
+        }),
+      /must increase/,
+    );
+  });
+}
+
+test("planner rejects equality even when an existing stable tag omits v", () => {
+  assert.throws(
+    () => planRelease({ ...input(), tags: ["1.2.3"] }),
+    /must increase/,
+  );
+});
+
+test("planner compares numeric segments rather than strings", () => {
+  assert.equal(
+    planRelease({ ...input(), version: "1.10.0", tags: ["v1.9.999"] }).version,
+    "1.10.0",
+  );
+  assert.throws(
+    () =>
+      planRelease({ ...input(), version: "1.9.999", releases: ["v1.10.0"] }),
+    /must increase/,
+  );
+});
+
+test("planner preserves precision for integers beyond Number.MAX_SAFE_INTEGER", () => {
+  assert.throws(
+    () =>
+      planRelease({
+        ...input(),
+        version: "9007199254740992.0.1",
+        tags: ["v9007199254740993.0.0"],
+      }),
+    /must increase/,
+  );
+  assert.equal(
+    planRelease({
+      ...input(),
+      version: "9007199254740993.0.0",
+      releases: ["v9007199254740992.999999999999999999.999999999999999999"],
+    }).tag,
+    "v9007199254740993.0.0",
+  );
+});
+
+test("planner ignores prerelease and unrelated refs when finding stable maximum", () => {
+  assert.equal(
+    planRelease({
+      ...input(),
+      tags: ["v1.2.2", "v999.0.0-rc.1", "archive-2026", "v01.2.3"],
+    }).version,
+    "1.2.3",
+  );
+});

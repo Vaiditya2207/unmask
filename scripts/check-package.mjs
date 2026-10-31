@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { validatePackageFiles, verifyAsset } from "./release-policy.mjs";
 
-export function checkPackage(root, destination) {
+export function checkPackage(root, destination, { requiredFiles = [] } = {}) {
   const [packed] = JSON.parse(
     execFileSync(
       "npm",
@@ -15,6 +15,10 @@ export function checkPackage(root, destination) {
     ),
   );
   validatePackageFiles(packed.files.map((file) => file.path));
+  for (const file of requiredFiles) {
+    if (!packed.files.some((entry) => entry.path === file))
+      throw new Error(`Entrypoint missing from npm artifact: ${file}`);
+  }
   const archive = path.join(destination, packed.filename);
   const entries = execFileSync("tar", ["-tzf", archive], { encoding: "utf8" })
     .trim()

@@ -20,11 +20,19 @@ npm run release:readiness
 
 The last command intentionally exits nonzero for the scaffold. CI prints its blockers and skips product publishing without claiming product
 readiness. Once publishing is enabled, incomplete prerequisites fail checks and
-the configured product tests/build become required. Tests exercise actual
+the configured product tests/build become required. Read-only PR and branch CI
+also builds the configured Linux AMD64 image locally, then passes that exact
+image and the real npm tarball to `test:release`. It checks the original image ID
+and archive digest again after smoke. Build or smoke failure fails the required
+Repository checks job; there is no registry login, push or secret access in this
+path. Product smoke must therefore work without fork secrets or fail closed. Tests exercise actual
 release planning, collision refusal, failed checks, archive digests, packaging
 exclusions and the disabled publishing entrypoints. Packaging tests run real
 `npm pack --ignore-scripts` and inspect the resulting tar archive. They do not
-publish anything or execute a packed package.
+publish anything or execute a packed package. Candidate-orchestration tests
+use actual npm tarballs with simulated Docker/smoke process adapters, covering
+build/smoke failure propagation and changed archive/image identity. Those tests
+do not establish a working Dockerfile or product runtime.
 
 PR and branch checks have only `contents: read`, use commit-pinned actions, and
 install with `npm ci --ignore-scripts`. There is no `pull_request_target` or PR
@@ -71,10 +79,19 @@ code. Complete them in reviewed changes before setting `enabled: true`:
 ## Versioned release contract
 
 A version-changing push to `main` runs the same repository checks before the
-release gate. Ordinary branch pushes only run checks. An unchanged version on
+release gate. Release runs use `queue: max` without cancellation so a later
+documentation-only push does not replace a waiting version bump. GitHub permits
+up to 100 pending runs; excess runs are canceled. Queue order follows when runs
+start waiting and is not a guarantee of commit order. A later version published
+first makes an older candidate fail the monotonic-version check rather than
+publishing out of order. Monitor canceled or failed candidates and choose a new
+version when recovery is needed. Ordinary branch pushes only run checks. An unchanged version on
 main does not publish again. A version-changing push with an already used tag
 or release fails rather than overwriting it; even a rerun of the same candidate
-refuses an existing version. Choose a new version after a partially failed
+refuses an existing version. The candidate must also be greater than every
+existing stable version in tags and releases; comparison uses BigInt numeric
+segments, not lexical ordering or floating-point numbers. Prerelease and
+unrelated tags do not count as stable versions. Choose a new version after a partially failed
 publication. No automatic rollback deletes tags, releases, assets or images.
 
 When enabled, the workflow runs product tests and builds the actual application,
@@ -136,6 +153,7 @@ Temporal is not involved in this foundation.
 
 ## Official references
 
+- [GitHub concurrency queues](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)
 - [GitHub workflow permissions](https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#permissions)
 - [GitHub immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases)
 - [GitHub immutability settings endpoint](https://docs.github.com/en/rest/repos/repos#check-if-immutable-releases-are-enabled-for-a-repository)
