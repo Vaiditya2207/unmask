@@ -2407,3 +2407,40 @@ test("Gemini output budget and JSON mode are explicit and identity bound", async
     /resource limits/u,
   );
 });
+
+test("prompt binds transformation category to paired citations and keeps unpaired output rejected", async () => {
+  const prompts = [];
+  const model = client(async (url, options) => {
+    const body = JSON.parse(options.body);
+    if (url.endsWith(":countTokens")) {
+      prompts.push(JSON.parse(body.contents[0].parts[0].text));
+      return new Response('{"totalTokens":100}');
+    }
+    return output({
+      hypotheses: [{ ...hypothesis(), category: "possible-transformation" }],
+    });
+  });
+  const result = await model.explain(report(), { allowLocal: true });
+  assert.equal(result.reason, "invalid-output");
+  assert.ok(prompts.length > 0);
+  for (const prompt of prompts) {
+    assert.match(
+      prompt.task,
+      /possible-transformation is allowed ONLY for a supplied paired=true group/u,
+    );
+    assert.match(prompt.task, /cite BOTH artifact and source/u);
+    assert.match(
+      prompt.task,
+      /For unpaired groups use unknown or review-concern only/u,
+    );
+    assert.match(
+      prompt.task,
+      /explanation 1–1000, uncertainty 1–500, alternative 1–500, citation quote 1–512/u,
+    );
+    assert.match(prompt.task, /1–8 citations/u);
+    assert.equal(
+      prompt.evidenceGroups.every((group) => !group.paired),
+      true,
+    );
+  }
+});
