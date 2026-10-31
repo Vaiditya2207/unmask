@@ -26,6 +26,7 @@ export function deploymentInputs(env = process.env) {
     "GCP_PROJECT_ID",
     "GCP_REGION",
     "GCP_SERVICE_ACCOUNT",
+    "GCP_RUNTIME_SERVICE_ACCOUNT",
     "GCP_WORKLOAD_IDENTITY_PROVIDER",
   ].some((name) => Object.hasOwn(env, name))
     ? {}
@@ -37,6 +38,7 @@ export function deploymentInputs(env = process.env) {
     GCP_REGION: committed.region,
     GCP_CLOUD_RUN_SERVICE: committed.service,
     GCP_SERVICE_ACCOUNT: committed.serviceAccount,
+    GCP_RUNTIME_SERVICE_ACCOUNT: committed.runtimeServiceAccount,
     GCP_WORKLOAD_IDENTITY_PROVIDER: committed.workloadIdentityProvider,
     CLOUD_RUN_SMOKE_PACKAGE: committed.smokePackage,
     CLOUD_RUN_MODEL_EXPECTATIONS: committed.modelExpectation
@@ -49,6 +51,7 @@ export function deploymentInputs(env = process.env) {
     region: env.GCP_REGION,
     service: env.GCP_CLOUD_RUN_SERVICE,
     serviceAccount: env.GCP_SERVICE_ACCOUNT,
+    runtimeServiceAccount: env.GCP_RUNTIME_SERVICE_ACCOUNT,
     workloadIdentityProvider: env.GCP_WORKLOAD_IDENTITY_PROVIDER,
   };
   const context = {
@@ -218,7 +221,7 @@ export async function deployCloudRun({
     release.image,
     fetchImpl,
   );
-  const deadline = now() + 600000;
+  let deadline = now() + 600000;
   function command(args, phase) {
     if (now() >= deadline)
       throw new Error("Cloud Run deployment verification deadline exceeded");
@@ -251,6 +254,55 @@ export async function deployCloudRun({
     );
   const service = describe();
   const plan = planCloudRunDeployment({ ...inputs, service });
+  const observedReady = (value) =>
+    /^[1-9]\d*$/.test(String(value?.metadata?.generation)) &&
+    String(value.status?.observedGeneration) ===
+      String(value.metadata.generation) &&
+    value.status.conditions?.some(
+      (item) => item.type === "Ready" && item.status === "True",
+    );
+  function trafficOf(value) {
+    const weights = new Map();
+    for (const route of value.status?.traffic ?? []) {
+      if (!route.percent) continue;
+      if (
+        !Number.isInteger(route.percent) ||
+        route.percent < 1 ||
+        route.percent > 100 ||
+        !/^[a-z][a-z0-9-]{0,62}$/.test(route.revisionName || "")
+      )
+        throw new Error("Previous revision traffic is not explicitly pinned");
+      weights.set(
+        route.revisionName,
+        (weights.get(route.revisionName) ?? 0) + route.percent,
+      );
+    }
+    const pinned = [...weights].sort(([a], [b]) =>
+      a < b ? -1 : a > b ? 1 : 0,
+    );
+    if (pinned.reduce((sum, [, percent]) => sum + percent, 0) !== 100)
+      throw new Error("Previous traffic must total100percent");
+    return pinned;
+  }
+  const previousTraffic = trafficOf(service);
+  const previousRevisions = new Map();
+  for (const [name] of previousTraffic) {
+    const previous = command(
+      ["run", "revisions", "describe", name, ...suffix],
+      "previous revision observation",
+    );
+    if (
+      !observedReady(previous) ||
+      previous.metadata.name !== name ||
+      typeof previous.spec?.containers?.[0]?.image !== "string" ||
+      !/(?:^|@)sha256:[a-f0-9]{64}$/.test(previous.status.imageDigest || "")
+    )
+      throw new Error("Previous serving revision identity/digest is not ready");
+    previousRevisions.set(name, {
+      image: previous.spec.containers[0].image,
+      digest: previous.status.imageDigest,
+    });
+  }
   const updated = command(plan.updateArgs, "image update");
   const revisionName = updated.status?.latestCreatedRevisionName;
   if (!/^[a-z][a-z0-9-]{0,62}$/.test(revisionName || ""))
@@ -262,7 +314,7 @@ export async function deployCloudRun({
       "revision observation",
     );
     try {
-      verifyCloudRunRevision(release, revision);
+      verifyCloudRunRevision(release, revision, configuration);
       break;
     } catch {
       if (attempt === 29)
@@ -279,81 +331,162 @@ export async function deployCloudRun({
     throw new Error(
       "Runtime config or secret references changed during the image update",
     );
-  command(
-    [
-      "run",
-      "services",
-      "update-traffic",
-      configuration.service,
-      "--to-latest",
-      "--quiet",
-      ...suffix,
-    ],
-    "traffic update",
-  );
-  let verified;
-  for (let attempt = 0; attempt < 30; attempt++) {
-    const after = describe();
-    try {
-      verified = verifyCloudRunDeployment({
-        ...inputs,
-        service,
-        after,
-        revision,
-      });
-      break;
-    } catch {
-      if (attempt === 29)
-        throw new Error(
-          "Cloud Run serving traffic/config/image verification failed",
-        );
-      await wait(2000);
+  let phase = "traffic promotion";
+  try {
+    command(
+      [
+        "run",
+        "services",
+        "update-traffic",
+        configuration.service,
+        "--to-revisions",
+        `${revisionName}=100`,
+        "--quiet",
+        ...suffix,
+      ],
+      "traffic update",
+    );
+    phase = "serving verification";
+    let verified;
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const after = describe();
+      try {
+        verified = verifyCloudRunDeployment({
+          ...inputs,
+          service,
+          after,
+          revision,
+        });
+        break;
+      } catch {
+        if (attempt === 29)
+          throw new Error(
+            "Cloud Run serving traffic/config/image verification failed",
+          );
+        await wait(2000);
+      }
     }
-  }
-  const observed = await smoke({
-    baseURL: verified.url,
-    identity: {
+    phase = "model smoke";
+    const observed = await smoke({
+      baseURL: verified.url,
+      identity: {
+        version: release.version,
+        commit: release.commit,
+        tarballSha256: release.tarballSha256,
+      },
+      packageSpec: inputs.packageSpec,
+      mode: "live-public",
+      healthPath: "/version",
+      timeoutMs: 240000,
+      modelExpectation: inputs.modelExpectation,
+      fetchImpl,
+    });
+    if (
+      !/^\/r\/[a-f0-9]{32}$/.test(observed.reportPath || "") ||
+      observed.modelAcceptance !== "verified-path" ||
+      observed.modelProof?.modelPath !== "verified"
+    )
+      throw new Error("Live model smoke did not verify the intended path");
+    phase = "final serving verification";
+    const finalRevision = command(
+      ["run", "revisions", "describe", revisionName, ...suffix],
+      "final revision observation",
+    );
+    verified = verifyCloudRunDeployment({
+      ...inputs,
+      service,
+      after: describe(),
+      revision: finalRevision,
+    });
+    return {
+      project: configuration.project,
+      region: configuration.region,
+      service: configuration.service,
+      image: verified.image,
+      resolvedImageDigest: verified.resolvedImageDigest,
+      commit: verified.commit,
       version: release.version,
-      commit: release.commit,
-      tarballSha256: release.tarballSha256,
-    },
-    packageSpec: inputs.packageSpec,
-    mode: "live-public",
-    healthPath: "/version",
-    timeoutMs: 240000,
-    modelExpectation: inputs.modelExpectation,
-    fetchImpl,
-  });
-  if (
-    !/^\/r\/[a-f0-9]{32}$/.test(observed.reportPath || "") ||
-    observed.modelAcceptance !== "verified-path" ||
-    observed.modelProof?.modelPath !== "verified"
-  )
-    throw new Error("Live model smoke did not verify the intended path");
-  const finalRevision = command(
-    ["run", "revisions", "describe", revisionName, ...suffix],
-    "final revision observation",
-  );
-  verified = verifyCloudRunDeployment({
-    ...inputs,
-    service,
-    after: describe(),
-    revision: finalRevision,
-  });
-  return {
-    project: configuration.project,
-    region: configuration.region,
-    service: configuration.service,
-    image: verified.image,
-    resolvedImageDigest: verified.resolvedImageDigest,
-    commit: verified.commit,
-    version: release.version,
-    revision: verified.revision,
-    url: verified.url,
-    reportUrl: new URL(observed.reportPath, verified.url).href,
-    runtimeFingerprint: verified.runtimeFingerprint,
-    modelProof: observed.modelProof,
-  };
+      revision: verified.revision,
+      url: verified.url,
+      reportUrl: new URL(observed.reportPath, verified.url).href,
+      runtimeFingerprint: verified.runtimeFingerprint,
+      modelProof: observed.modelProof,
+    };
+  } catch {
+    deadline = now() + 90000;
+    let restored = false;
+    try {
+      const current = describe();
+      const ownedRevisions = new Set([
+        revisionName,
+        ...previousTraffic.map(([name]) => name),
+      ]);
+      if (
+        current.metadata?.name !== configuration.service ||
+        current.spec?.template?.spec?.containers?.[0]?.image !==
+          release.image ||
+        runtimeConfigurationFingerprint(current) !== plan.runtimeFingerprint ||
+        trafficOf(current).some(([name]) => !ownedRevisions.has(name))
+      )
+        throw new Error(
+          "Concurrent service change prevents automatic rollback",
+        );
+      try {
+        command(
+          [
+            "run",
+            "services",
+            "update-traffic",
+            configuration.service,
+            "--to-revisions",
+            previousTraffic
+              .map(([name, percent]) => `${name}=${percent}`)
+              .join(","),
+            "--quiet",
+            ...suffix,
+          ],
+          "rollback traffic restoration",
+        );
+      } catch {}
+      for (let attempt = 0; attempt < 15; attempt++) {
+        const observed = describe();
+        if (
+          observedReady(observed) &&
+          observed.metadata.name === service.metadata.name &&
+          observed.status.url === service.status.url &&
+          runtimeConfigurationFingerprint(observed) ===
+            plan.runtimeFingerprint &&
+          JSON.stringify(trafficOf(observed)) ===
+            JSON.stringify(previousTraffic)
+        ) {
+          let digestsMatch = true;
+          for (const [name, previous] of previousRevisions) {
+            const current = command(
+              ["run", "revisions", "describe", name, ...suffix],
+              "rollback revision verification",
+            );
+            if (
+              !observedReady(current) ||
+              current.metadata.name !== name ||
+              current.spec?.containers?.[0]?.image !== previous.image ||
+              current.status?.imageDigest !== previous.digest
+            )
+              digestsMatch = false;
+          }
+          if (digestsMatch) {
+            restored = true;
+            break;
+          }
+        }
+        if (attempt < 14) await wait(2000);
+      }
+    } catch {}
+    throw new Error(
+      restored
+        ? `Deployment ${phase} failed; previous traffic and revision digests restored and verified`
+        : `Deployment ${phase} failed; rollback attempted but not verified`,
+    );
+  }
 }
 if (
   process.argv[1] &&

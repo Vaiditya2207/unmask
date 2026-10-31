@@ -32,6 +32,7 @@ function fixture() {
     region: "asia-south1",
     service: "unmask-fixture",
     serviceAccount: "deployment@fixture-project.iam.gserviceaccount.com",
+    runtimeServiceAccount: "runtime@fixture-project.iam.gserviceaccount.com",
     workloadIdentityProvider:
       "projects/123456789/locations/global/workloadIdentityPools/fixture/providers/github",
   };
@@ -532,4 +533,11 @@ test("serving identity cannot change to a different Cloud Run service", () => {
     () => verifyCloudRunDeployment({ ...f, ...observed }),
     /service|identity/i,
   );
+});
+
+test("existing runtime identity must match the intended configured service account", () => {
+  const f = fixture();
+  f.service.spec.template.spec.serviceAccountName =
+    "other@fixture-project.iam.gserviceaccount.com";
+  assert.throws(() => planCloudRunDeployment(f), /identity|service|config/i);
 });

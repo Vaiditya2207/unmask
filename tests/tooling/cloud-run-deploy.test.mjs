@@ -13,6 +13,8 @@ function fixture() {
     GCP_REGION: "asia-south1",
     GCP_CLOUD_RUN_SERVICE: "unmask",
     GCP_SERVICE_ACCOUNT: "deploy@fixture-project.iam.gserviceaccount.com",
+    GCP_RUNTIME_SERVICE_ACCOUNT:
+      "runtime@fixture-project.iam.gserviceaccount.com",
     GCP_WORKLOAD_IDENTITY_PROVIDER:
       "projects/123456789/locations/global/workloadIdentityPools/fixture/providers/github",
     GITHUB_EVENT_NAME: "push",
@@ -97,23 +99,67 @@ function fixture() {
       imageDigest: image,
     },
   };
-  let updated = false;
+  const previousRevision = {
+    metadata: { name: "unmask-old", generation: 1 },
+    spec: structuredClone(before.spec.template.spec),
+    status: {
+      observedGeneration: 1,
+      conditions: [{ type: "Ready", status: "True" }],
+      imageDigest: before.spec.template.spec.containers[0].image,
+    },
+  };
+  let updated = false,
+    routed = false,
+    restored = false;
   const calls = [];
   return {
     env,
     before,
     after,
     revision,
+    previousRevision,
     calls,
+    get traffic() {
+      return restored || !routed
+        ? "unmask-old"
+        : after.status.traffic[0].revisionName;
+    },
     execute(command, args) {
       calls.push({ command, args });
       assert.equal(command, "gcloud");
       if (args.includes("update")) {
         updated = true;
+        const candidate = structuredClone(after);
+        candidate.status.traffic = structuredClone(before.status.traffic);
+        return JSON.stringify(candidate);
+      }
+      if (args.includes("update-traffic")) {
+        if (
+          args.includes("--to-revisions") &&
+          args[args.indexOf("--to-revisions") + 1] === "unmask-old=100"
+        ) {
+          restored = true;
+          const rollback = structuredClone(after);
+          rollback.status.traffic = structuredClone(before.status.traffic);
+          return JSON.stringify(rollback);
+        }
+        routed = true;
         return JSON.stringify(after);
       }
-      if (args.includes("update-traffic")) return JSON.stringify(after);
-      if (args.includes("revisions")) return JSON.stringify(revision);
+      if (args.includes("revisions"))
+        return JSON.stringify(
+          args[3] === "unmask-old" ? previousRevision : revision,
+        );
+      if (restored) {
+        const rollback = structuredClone(after);
+        rollback.status.traffic = structuredClone(before.status.traffic);
+        return JSON.stringify(rollback);
+      }
+      if (updated && !routed) {
+        const candidate = structuredClone(after);
+        candidate.status.traffic = structuredClone(before.status.traffic);
+        return JSON.stringify(candidate);
+      }
       return JSON.stringify(updated ? after : before);
     },
     fetchImpl: async (url) =>
@@ -263,5 +309,93 @@ test("public OCI index is hash-verified and bound to exactly one Linux AMD64 chi
   assert.equal(
     await verifyPublicGhcrImage(image, fetchImpl),
     `ghcr.io/fixture/unmask@${child}`,
+  );
+});
+
+test("failed model smoke restores the exact previous revision traffic and verifies its digest", async () => {
+  const f = fixture();
+  let failure;
+  try {
+    await run(f, {
+      smoke: async () => {
+        throw new Error("model-smoke-failed");
+      },
+    });
+  } catch (error) {
+    failure = error;
+  }
+  assert.equal(f.traffic, "unmask-old");
+  assert.match(failure?.message ?? "", /restored.*verified/i);
+  const rollback = f.calls.find((call) => call.args.includes("unmask-old=100"));
+  assert.ok(rollback);
+  assert.equal(
+    rollback.args[rollback.args.indexOf("--to-revisions") + 1],
+    "unmask-old=100",
+  );
+  assert.equal(rollback.args.includes("--to-latest"), false);
+});
+
+test("rollback cannot report verification when the prior revision digest changed", async () => {
+  const f = fixture();
+  let failed = false;
+  await assert.rejects(
+    run(f, {
+      smoke: async () => {
+        failed = true;
+        f.previousRevision.status.imageDigest = `ghcr.io/fixture/unmask@sha256:${"f".repeat(64)}`;
+        throw new Error("model-failed");
+      },
+    }),
+    /rollback.*not.*verified|rollback.*failed/i,
+  );
+  assert.equal(failed, true);
+  assert.equal(f.traffic, "unmask-old");
+});
+
+test("rollback does not overwrite a concurrent operator traffic change", async () => {
+  const f = fixture();
+  let failure;
+  try {
+    await run(f, {
+      smoke: async () => {
+        f.after.status.traffic = [
+          { revisionName: "unmask-operator", percent: 100 },
+        ];
+        throw new Error("model-failed");
+      },
+    });
+  } catch (error) {
+    failure = error;
+  }
+  assert.equal(f.traffic, "unmask-operator");
+  assert.equal(
+    f.calls.some((call) => call.args.includes("unmask-old=100")),
+    false,
+  );
+  assert.match(failure?.message ?? "", /rollback.*not verified/i);
+});
+
+test("promotion targets only the captured verified revision, never concurrent latest", async () => {
+  const f = fixture();
+  await run(f);
+  const promotion = f.calls.find((call) =>
+    call.args.includes("update-traffic"),
+  );
+  assert.ok(promotion.args.includes("--to-revisions"));
+  assert.equal(
+    promotion.args[promotion.args.indexOf("--to-revisions") + 1],
+    "unmask-new=100",
+  );
+  assert.equal(promotion.args.includes("--to-latest"), false);
+});
+
+test("candidate with a different runtime service account receives no traffic", async () => {
+  const f = fixture();
+  f.revision.spec.serviceAccountName =
+    "other@fixture-project.iam.gserviceaccount.com";
+  await assert.rejects(run(f), /candidate|identity|runtime/i);
+  assert.equal(
+    f.calls.some((call) => call.args.includes("update-traffic")),
+    false,
   );
 });

@@ -51,6 +51,9 @@ function configurationValid(configuration) {
     /^[a-z0-9-]+@[a-z0-9-]+\.iam\.gserviceaccount\.com$/.test(
       configuration.serviceAccount || "",
     ) &&
+    /^[a-z0-9-]+@[a-z0-9-]+\.iam\.gserviceaccount\.com$/.test(
+      configuration.runtimeServiceAccount || "",
+    ) &&
     /^projects\/\d+\/locations\/global\/workloadIdentityPools\/[a-z0-9-]+\/providers\/[a-z0-9-]+$/.test(
       configuration.workloadIdentityProvider || "",
     )
@@ -116,7 +119,7 @@ export function planCloudRunDeployment({
     service?.metadata?.name !== configuration.service ||
     !ready(service) ||
     spec?.containers?.length !== 1 ||
-    !spec.serviceAccountName ||
+    spec.serviceAccountName !== configuration.runtimeServiceAccount ||
     annotations?.["run.googleapis.com/cpu-throttling"] !== "false" ||
     (service.metadata?.annotations?.["run.googleapis.com/minScale"] ??
       annotations?.["autoscaling.knative.dev/minScale"]) !== "1" ||
@@ -179,6 +182,7 @@ export function verifyCloudRunDeployment({
   if (
     !ready(after) ||
     !ready(revision) ||
+    revision.spec?.serviceAccountName !== configuration.runtimeServiceAccount ||
     after.status.latestReadyRevisionName !== revision.metadata.name ||
     revision.status.imageDigest?.split("@").at(-1) !==
       plan.resolvedImageDigest.split("@").at(-1) ||
@@ -359,9 +363,11 @@ export function verifyDeployedModel(report, expectation) {
 export function runtimeConfigurationFingerprint(service) {
   return fingerprint(service);
 }
-export function verifyCloudRunRevision(release, revision) {
+export function verifyCloudRunRevision(release, revision, configuration) {
   if (
     !ready(revision) ||
+    !configuration?.runtimeServiceAccount ||
+    revision.spec?.serviceAccountName !== configuration.runtimeServiceAccount ||
     revision.spec?.containers?.[0]?.image !== release.image ||
     revision.status.imageDigest?.split("@").at(-1) !==
       (release.resolvedImageDigest ?? release.image).split("@").at(-1)

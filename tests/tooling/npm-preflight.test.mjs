@@ -14,6 +14,7 @@ function preflight(
     tamper = false,
     mode = "npm-preflight",
     preparation = "immutable-denied",
+    immutableSettings = { enabled: true, enforced_by_owner: false },
   },
 ) {
   const f = buildFixture(t, {
@@ -62,7 +63,7 @@ function preflight(
         path.join(root, "no-network.mjs"),
         mode === "prepare"
           ? preparation !== "immutable-denied"
-            ? `globalThis.fetch = async url => { const p = new URL(url).pathname; if (p.endsWith("/tags") || p.endsWith("/releases")) return Response.json([]); if (p.endsWith("/immutable-releases")) return Response.json({enabled:true}); if (p === "/token") return Response.json({token:"test-only-not-a-credential"}); return new Response(null, {status:${preparation === "ghcr-clear" ? 404 : 200}}); };\n`
+            ? `globalThis.fetch = async url => { const p = new URL(url).pathname; if (p.endsWith("/tags") || p.endsWith("/releases")) return Response.json([]); if (p.endsWith("/immutable-releases")) return Response.json(${JSON.stringify(immutableSettings)}); if (p === "/token") return Response.json({token:"test-only-not-a-credential"}); return new Response(null, {status:${preparation === "ghcr-clear" ? 404 : 200}}); };\n`
             : 'globalThis.fetch = async url => { const p = new URL(url).pathname; return p.endsWith("/tags") || p.endsWith("/releases") ? Response.json([]) : new Response(null, {status: 403}); };\n'
           : 'globalThis.fetch = () => { throw new Error("Network forbidden in npm preflight"); };\n',
       );
@@ -168,4 +169,32 @@ test("prepare packs the exact inert candidate when immutable settings and GHCR a
   });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /Prepared v1\.0\.0.*nothing published/);
+});
+
+for (const [label, settings] of [
+  ["disabled", { enabled: false, enforced_by_owner: false }],
+  ["missing enabled", {}],
+  ["string enabled", { enabled: "true" }],
+]) {
+  test(`API200 immutable settings reject ${label} before publication`, (t) => {
+    const result = preflight(t, {
+      enabled: true,
+      mode: "prepare",
+      preparation: "ghcr-clear",
+      immutableSettings: settings,
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /release immutability must be enabled/i);
+  });
+}
+
+test("API200 enabled true is accepted regardless of owner enforcement", (t) => {
+  const result = preflight(t, {
+    enabled: true,
+    mode: "prepare",
+    preparation: "ghcr-clear",
+    immutableSettings: { enabled: true, enforced_by_owner: true },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /nothing published/);
 });
