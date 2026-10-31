@@ -56,9 +56,9 @@ Validation rejects an incomplete explicit configuration before authentication.
 The service name is `unmask`. The committed smoke package is `zod@4.6.7` and
 `modelExpectation` contains the approved `{ "routes": [...] }` record. A normal
 development request completed on the primary route; fallback eligibility and
-general model quality remain unverified. Approved ordered routing is `gemini-3.5-flash` with high thinking, then
-`gemini-3-flash-preview` minimal, then `gemma-4-26b-a4b-it` minimal; no `MODEL_ID`
-is overridden. Model generations are bounded to three attempts/135 seconds by
+general model quality remain unverified. Approved ordered routing is `gemini-3-flash-preview` minimal, then
+`gemma-4-26b-a4b-it` minimal. An explicit production `UNMASK_MODEL_ROUTE` uses
+this same profile. Model generations are bounded to two attempts/135 seconds by
 the app; deployment HTTP smoke allows 240 seconds including acquisition.
 The route expectations are checked against the configured profile and the
 actual report returned by each deployment smoke test.
