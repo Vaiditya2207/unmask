@@ -18,7 +18,7 @@ const SUMMARIES = {
   "behavior-install-network-fetch":
     "Install hook text references a download tool or URL; a network fetch during install is suspected, not proven. Target code was not executed.",
   "behavior-install-remote-shell":
-    "Install hook text appears to pipe downloaded content into an interpreter; this is a suspicion from static text, not observed execution.",
+    "Install hook text appears to run downloaded content (piped into an interpreter, or saved and then executed); this is a suspicion from static text, not observed execution.",
   "behavior-install-inline-execution":
     "Install hook text runs inline interpreter code; the executed content is not proven and was not run.",
   "behavior-install-credential-access":
@@ -151,6 +151,33 @@ function secretVariables(script) {
   return names;
 }
 
+const OUTPUT_FLAGS = new Set([
+  "-o",
+  "--output",
+  "--output-document",
+  "-outfile",
+]);
+const COMMAND_BREAKS = new Set([";", "&", "|", "("]);
+function downloadedFile(words, firstNetwork) {
+  if (firstNetwork < 0) return null;
+  const outputs = new Set();
+  for (let i = firstNetwork + 1; i + 1 < words.length; i++)
+    if (OUTPUT_FLAGS.has(words[i]) || words[i] === ">")
+      outputs.add(words[i + 1].replace(/^\.\//, ""));
+  for (let i = firstNetwork + 1; i < words.length; i++) {
+    const word = words[i].replace(/^\.\//, "");
+    if (!outputs.has(word)) continue;
+    const before = words[i - 1];
+    const ranAsCommand =
+      COMMAND_BREAKS.has(before) &&
+      (words[i] !== word || /\.(exe|bat|cmd|ps1)$/.test(word));
+    const ranByInterpreter =
+      INTERPRETERS.has(base(before)) || base(before) === "start";
+    if (ranAsCommand || ranByInterpreter) return word;
+  }
+  return null;
+}
+
 export function scriptSignals(script) {
   if (
     typeof script !== "string" ||
@@ -190,12 +217,15 @@ export function scriptSignals(script) {
       .findLast((word) => INTERPRETERS.has(base(word)));
     if (opener && shell) piped = base(shell);
   }
+  const saved = downloadedFile(words, firstNetwork);
+  if (!piped && saved) piped = "downloaded-file";
   if (network.length && piped)
     signals.push({
       ruleId: "behavior-install-remote-shell",
       priority: "HIGH",
       tools: network,
       interpreter: piped,
+      ...(piped === "downloaded-file" ? { file: saved } : {}),
     });
   else if (network.length || urls.length)
     signals.push({
