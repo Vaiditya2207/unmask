@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "1",
+  "scope": "artifact-source",
+  "state": "all",
+  "prefix": "",
+  "offset": 0,
+  "limit": 50,
+  "total": 2,
+  "files": [
+    {
+      "path": "index.js",
+      "originalPath": "package/index.js",
+      "state": "changed",
+      "comparisonState": "changed",
+      "size": 8,
+      "artifactSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "reason": null
+    },
+    {
+      "path": "legacy.js",
+      "originalPath": null,
+      "state": "removed",
+      "comparisonState": "source-only",
+      "size": null,
+      "artifactSha256": null,
+      "sourceSha256": null,
+      "reason": "recorded-source-only"
+    }
+  ],
+  "nextOffset": null,
+  "omittedUnsafePaths": 0,
+  "inventoryComplete": true,
+  "sourceComplete": true,
+  "limitations": [
+    "States compare artifact and selected source, not releases or version history.",
+    "Source-only paths are recorded observations; their hashes, file types and excerpts may be unavailable.",
+    "Incomplete inventories and unassessed files do not establish safety or absence."
+  ]
+}

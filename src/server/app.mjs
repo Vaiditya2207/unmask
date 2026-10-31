@@ -10,6 +10,7 @@ import { createDependencyScreening } from "./dependency-screening.mjs";
 import { serveExport } from "./exports.mjs";
 import { createQueue, resolveLimits, systemClock } from "./queue.mjs";
 import { createReportStore } from "./store.mjs";
+import { handleReportExploration } from "./report-exploration.mjs";
 import { renderReport } from "../viewer/render.mjs";
 import {
   renderHome,
@@ -300,6 +301,7 @@ export function createApp({
             "Use the release form to start a check.",
             { allow: "GET" },
           );
+        if (handleReportExploration({ path, getJob: queue.get, send })) return;
         if (path === "/") return send(200, renderHome());
         if (path === "/healthz") return json(200, { status: "ok" });
         if (path === "/version") return json(200, version);
