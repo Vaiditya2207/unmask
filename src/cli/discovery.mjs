@@ -304,7 +304,7 @@ function renderCommand(command) {
     lines.push("Usage:", ...command.usage.map((usage) => `  ${usage}`));
   return lines.join("\n") + "\n";
 }
-export function discoveryCommand(argv, runtime = {}) {
+function discover(argv, runtime) {
   const stdout = runtime.stdout ?? process.stdout;
   if (argv[0] === "--version" || argv[0] === "version") {
     const json = argv[1] === "--json";
@@ -347,6 +347,17 @@ export function discoveryCommand(argv, runtime = {}) {
     );
   stdout.write(renderCommand(command));
   return 0;
+}
+export function discoveryCommand(argv, runtime = {}) {
+  try {
+    return discover(argv, runtime);
+  } catch (error) {
+    if (!(error instanceof LocalInputError)) throw error;
+    (runtime.stderr ?? process.stderr).write(
+      `${error.code}: ${error.message}\n`,
+    );
+    return 2;
+  }
 }
 export function isDiscoveryRequest(argv) {
   return (
