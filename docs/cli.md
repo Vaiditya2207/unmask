@@ -94,3 +94,26 @@ hosted-incomplete checks) or the input is invalid, and `0` means every changed
 identity was bound and checked with no default-policy finding. Exit `0` does not mean safe:
 an advisory miss, a removed registry version or a hosted cache reuse can still
 hide malware.
+
+## Watch
+
+`unmask watch` is an explicit, opt-in foreground watcher for one project
+lockfile. It records the current valid lockfile as its baseline, then, after
+changes settle for the debounce period, runs the same exact-identity preflight
+against the last valid snapshot and prints each result. The baseline itself is
+not audited; run `unmask audit` for it.
+
+```bash
+unmask watch --lockfile package-lock.json [--debounce-ms 750] [--max-checks 6] [--no-check] [--json]
+```
+
+Duplicate file events and byte-identical rewrites do not start a run. An
+unreadable or invalid intermediate lockfile (for example a partial npm write) is
+reported and no check is run; the last valid baseline is kept. Runs never
+overlap: changes during a run are coalesced into one follow-up run. After each
+run without a cancelled check its lockfile becomes the new baseline, so a finding is reported
+once; rerun `unmask preflight` for a cumulative view. Ctrl-C cancels any
+in-progress hosted check, reports that run as `cancelled` without a result, and
+exits `130`. An unexpected run error is reported as `run-error`, claims no
+result and keeps the baseline; watching continues. A watcher failure exits `2`. `--json` prints one JSON event per line.
+Watch never installs packages or runs package code.
