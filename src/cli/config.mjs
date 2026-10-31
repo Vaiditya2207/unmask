@@ -2,7 +2,6 @@ import {
   GUARD_SEMANTICS,
   GuardConfigError,
   PROFILES,
-  SETTINGS,
   effectiveGuardSettings,
   readGuardConfig,
   validateSetting,
@@ -10,7 +9,7 @@ import {
 } from "../core/guard-config.mjs";
 
 const USAGE =
-  "Use config show|profiles [--json] [--project DIR], config set KEY VALUE [--project DIR] or config unset KEY [--project DIR]";
+  "Use config show|profiles [--json] [--project DIR] or config set profile strict|balanced|audit [--project DIR]";
 const STRENGTH = { strict: 2, balanced: 1, audit: 0 };
 
 export function parseCommandOptions(args, flags = ["--json"]) {
@@ -41,13 +40,13 @@ export function parseCommandOptions(args, flags = ["--json"]) {
 }
 
 function describe(loaded) {
-  const { settings, sources } = effectiveGuardSettings(loaded.config);
+  const { settings, warnings } = effectiveGuardSettings(loaded.config);
   return {
     schemaVersion: loaded.config.schemaVersion,
     path: loaded.file,
     source: loaded.source,
     settings,
-    sources,
+    warnings,
     scope:
       "Applies to explicit UNMASK guard decisions only; check report policy and exit codes are unchanged.",
     semantics: GUARD_SEMANTICS,
@@ -59,7 +58,7 @@ function showText(view) {
     `Guard configuration: ${view.path} (${view.source === "file" ? "file" : "defaults, no file"})`,
   ];
   for (const [key, value] of Object.entries(view.settings))
-    lines.push(`  ${key}: ${value} (${view.sources[key]})`);
+    lines.push(`  ${key}: ${value}`);
   lines.push(view.scope, ...view.semantics);
   return lines.join("\n") + "\n";
 }
@@ -93,6 +92,8 @@ export async function runConfig(args, runtime = {}) {
     }
     if (action === "show" && !key) {
       const view = describe(await readGuardConfig(project));
+      for (const warning of view.warnings)
+        stderr.write(`warning: ${warning}\n`);
       stdout.write(
         options.json ? JSON.stringify(view, null, 2) + "\n" : showText(view),
       );
@@ -102,35 +103,16 @@ export async function runConfig(args, runtime = {}) {
     if (action === "set" && key && value !== undefined && !extra.length) {
       validateSetting(key, value);
       const loaded = await readGuardConfig(project);
-      const before = effectiveGuardSettings(loaded.config).settings[key];
-      const config = structuredClone(loaded.config);
-      if (key === "profile") config.profile = value;
-      else config.overrides = { ...config.overrides, [key]: value };
-      const saved = await writeGuardConfig(project, config);
-      stdout.write(`Updated ${key}: ${before} -> ${value} (${saved.file})\n`);
-      if (key === "profile" && STRENGTH[value] < STRENGTH[before])
+      const before = loaded.config.profile;
+      const saved = await writeGuardConfig(project, {
+        ...loaded.config,
+        profile: value,
+      });
+      stdout.write(`Updated profile: ${before} -> ${value} (${saved.file})\n`);
+      if (STRENGTH[value] < STRENGTH[before])
         stderr.write(
           `warning: profile ${value} is less restrictive than ${before}\n`,
         );
-      return 0;
-    }
-    if (action === "unset" && key && value === undefined) {
-      if (key === "profile")
-        throw new GuardConfigError(
-          "invalid-setting",
-          "Profile cannot be unset; use config set profile NAME",
-        );
-      if (!Object.hasOwn(SETTINGS, key)) validateSetting(key, "");
-      const loaded = await readGuardConfig(project);
-      const config = structuredClone(loaded.config);
-      const removed = config.overrides?.[key] !== undefined;
-      if (config.overrides) delete config.overrides[key];
-      const saved = removed ? await writeGuardConfig(project, config) : loaded;
-      stdout.write(
-        removed
-          ? `Removed ${key} override; profile value applies (${saved.file})\n`
-          : `No ${key} override was set (${saved.file})\n`,
-      );
       return 0;
     }
     throw new GuardConfigError("usage", USAGE);
@@ -139,7 +121,9 @@ export async function runConfig(args, runtime = {}) {
       stderr.write(`${error.code}: ${error.message}\n`);
       return 2;
     }
-    stderr.write("Guard configuration error; no change is claimed.\n");
+    stderr.write(
+      "unreadable-config: Guard configuration error; no change is claimed.\n",
+    );
     return 1;
   }
 }

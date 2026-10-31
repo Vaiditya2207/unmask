@@ -9,6 +9,7 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -46,14 +47,15 @@ test("config show reports strict defaults without creating files", async (t) => 
   assert.equal(view.source, "default");
   assert.deepEqual(view.settings, {
     profile: "strict",
-    unknown: "block",
-    blockAtSeverity: "moderate",
+    unknownDecision: "block",
+    blockSeverity: "medium",
     knownMalware: "block",
     aiSignals: "nonbinding",
-    enforcement: "enforcing",
+    enforcement: "enforce",
   });
+  assert.deepEqual(view.warnings, []);
   assert.ok(
-    view.semantics.some((line) => /never reported as permitted/.test(line)),
+    view.semantics.some((line) => /no per-setting overrides/.test(line)),
   );
   assert.deepEqual(await readdir(root), []);
 });
@@ -68,13 +70,6 @@ test("config set writes a private validated file atomically and applies the prof
     ),
     0,
   );
-  assert.equal(
-    await runConfig(
-      ["set", "blockAtSeverity", "critical", "--project", root],
-      run.runtime,
-    ),
-    0,
-  );
   assert.match(run.out(), /Updated profile: strict -> balanced/);
   assert.match(run.err(), /balanced is less restrictive than strict/);
   const file = path.join(root, ".unmask.json");
@@ -83,23 +78,10 @@ test("config set writes a private validated file atomically and applies the prof
   assert.deepEqual(JSON.parse(await readFile(file)), {
     schemaVersion: 1,
     profile: "balanced",
-    overrides: { blockAtSeverity: "critical" },
   });
   const loaded = await loadGuardSettings(root);
-  assert.equal(loaded.settings.unknown, "warn");
-  assert.equal(loaded.settings.blockAtSeverity, "critical");
-  assert.equal(loaded.sources.blockAtSeverity, "override");
-  assert.equal(
-    await runConfig(
-      ["unset", "blockAtSeverity", "--project", root],
-      run.runtime,
-    ),
-    0,
-  );
-  assert.equal(
-    (await loadGuardSettings(root)).settings.blockAtSeverity,
-    "high",
-  );
+  assert.equal(loaded.settings.unknownDecision, "unknown");
+  assert.equal(loaded.settings.blockSeverity, "high");
 });
 
 test("config warns when choosing a less restrictive profile", async (t) => {
@@ -109,20 +91,23 @@ test("config warns when choosing a less restrictive profile", async (t) => {
   assert.match(run.err(), /audit is less restrictive than strict/);
   const shown = io(root);
   assert.equal(await runConfig(["show"], shown.runtime), 0);
-  assert.match(shown.out(), /enforcement: nonenforcing \(profile\)/);
-  assert.match(shown.out(), /audit is nonenforcing/);
+  assert.match(shown.out(), /enforcement: audit/);
+  assert.match(shown.err(), /^warning: The audit profile is nonenforcing/);
+  assert.equal((await loadGuardSettings(root)).settings.knownMalware, "block");
+  assert.equal((await inspectGuardConfig(root)).warnings.length, 1);
 });
 
 test("config rejects invalid enums, unknown keys and unsafe unknown handling without writing", async (t) => {
   const root = await project(t);
   for (const args of [
     ["set", "profile", "lenient"],
-    ["set", "unknown", "allow"],
+    ["set", "unknown", "warn"],
+    ["set", "blockAtSeverity", "high"],
     ["set", "apiToken", "secret"],
-    ["set", "blockAtSeverity", "HIGH"],
     ["unset", "profile"],
     ["set", "profile"],
     ["show", "--verbose"],
+    ["show", "--project", "--json"],
   ]) {
     const run = io(root);
     assert.equal(await runConfig(args, run.runtime), 2, args.join(" "));
@@ -161,7 +146,7 @@ test("config refuses symlinked, shared-writable and malformed configuration", as
     JSON.stringify({
       schemaVersion: 1,
       profile: "strict",
-      overrides: { unknown: "allow" },
+      overrides: { unknownDecision: "allow" },
     }),
   ]) {
     await writeFile(file, body, { mode: 0o600 });
@@ -184,4 +169,39 @@ test("config rejects a missing project directory", async (t) => {
     2,
   );
   assert.match(run.err(), /^invalid-project:/);
+});
+
+test("config fails closed without hanging on FIFOs, unreadable or oversized files", async (t) => {
+  const root = await project(t);
+  const file = path.join(root, ".unmask.json");
+  const fifo = spawnSync("mkfifo", [file]);
+  assert.equal(fifo.status, 0);
+  let result = await inspectGuardConfig(root);
+  assert.equal(result.status, "invalid");
+  assert.equal(result.code, "invalid-config");
+  await rm(file);
+
+  await writeFile(
+    file,
+    JSON.stringify({ schemaVersion: 1, profile: "strict" }),
+    { mode: 0o600 },
+  );
+  await chmod(file, 0o000);
+  result = await inspectGuardConfig(root);
+  if (process.getuid?.() !== 0) {
+    assert.deepEqual(result, {
+      status: "invalid",
+      code: "unreadable-config",
+      message: "Guard configuration file cannot be read",
+    });
+    const run = io(root);
+    assert.equal(await runConfig(["show"], run.runtime), 2);
+    assert.match(run.err(), /^unreadable-config:/);
+  }
+  await chmod(file, 0o600);
+
+  await writeFile(file, " ".repeat(64 * 1024 + 1));
+  result = await inspectGuardConfig(root);
+  assert.equal(result.code, "invalid-config");
+  assert.match(result.message, /too large/);
 });
