@@ -122,5 +122,7 @@ run without a cancelled check its lockfile becomes the new baseline, so a findin
 once; rerun `unmask preflight` for a cumulative view. Ctrl-C cancels any
 in-progress hosted check, reports that run as `cancelled` without a result, and
 exits `130`. An unexpected run error is reported as `run-error`, claims no
-result and keeps the baseline; watching continues. A watcher failure exits `2`. `--json` prints one JSON event per line.
+result and keeps the baseline; watching continues. A watcher failure exits `2`. `--json` prints only JSON events, one per line, on stdout: `watching`,
+`baseline`, `lockfile-invalid`, `lockfile-unreadable`, `result`, `run-error`,
+`watch-error` and a final `stopped` with `runs`, `interrupted` and `exitCode`.
 Watch never installs packages or runs package code.
