@@ -1,11 +1,6 @@
 **
 !Dockerfile
+!artifact.tgz
 !package.json
 !package-lock.json
-!LICENSE
-!dist/
-!dist/**
-dist/**/.env*
-dist/**/internal/
-dist/**/research/
-dist/**/*.internal.*
+!candidate.json

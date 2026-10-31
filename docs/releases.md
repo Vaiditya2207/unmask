@@ -39,6 +39,32 @@ install with `npm ci --ignore-scripts`. There is no `pull_request_target` or PR
 secret access. Configure GitHub branch protection separately to require
 `Repository checks`; workflow files do not establish repository protection.
 
+## Initial artifact tooling coverage
+
+The standalone tooling slice adds `node scripts/check-toolchain.mjs` to PR and
+push checks. It requires the running Node version, `.nvmrc`, package engines and
+lock engines to agree; direct dependencies must use exact numeric versions and
+match the lock. Registry origins and SHA-512 lock integrity records are checked
+without reading credentials. `npm ci --ignore-scripts` verifies downloaded bytes
+against that lock. Shared checks also syntax-check every tooling module and have
+no npm, model or deployment secret references.
+
+Build, freshness and isolated-context helpers are tested using temporary inert
+package fixtures and actual `npm pack --ignore-scripts` archives. They reject
+missing declared CLI builds, stale source/package/lock bytes, changed output,
+wrong or dirty release SHA and replaced archive/context/image identity. Contexts
+contain only the exact tarball, package metadata, matching lock, Dockerfile,
+ignore file and digest manifest, with no source or independent `dist/` copy.
+The fixture process adapters simulate Docker and smoke outcomes; no application,
+container image or live runtime acceptance is claimed by these tooling tests.
+
+There is still no actual product build or Dockerfile in this initial slice.
+Scaffold package checks continue to work without fabricated product entrypoints.
+Build and image smoke remain conditional on configured readiness. Later product
+integration must wire its real build, exact-context Dockerfile and real installed
+CLI/HTTP smoke before opening the gate. The full candidate adapter and runtime
+smoke remain a separate implementation. Keep all publishing gates disabled.
+
 ## Prerequisites to open the release gate
 
 These are future product implementation requirements, not supplied application
@@ -63,12 +89,13 @@ code. Complete them in reviewed changes before setting `enabled: true`:
   an image label. The server's `/version` response must expose the release
   version, full source commit and that same tarball hash; smoke checks must
   compare them with the release manifest.
-- The actual Dockerfile, tarball build-context wiring, label and `/version`
-  implementation belong to the app PR. This foundation supplies no Dockerfile
-  or server. Its current `.dockerignore` admits the built distribution, package
-  metadata, license and Dockerfile, and does **not** yet admit the exact tarball.
-  The app PR must update that allowlist and candidate/release build inputs before
-  enabling the gate; the foundation does not yet enforce this artifact contract.
+- The actual Dockerfile, server label and `/version` implementation belong to the
+  app PR. This initial tooling slice supplies no Dockerfile or server. Its
+  `.dockerignore` allows only the isolated exact-archive context; repository
+  source and separate `dist/` are excluded. The candidate helper stages those
+  inputs, but the main release image builder and real installed CLI/HTTP smoke
+  must be integrated from the separate product candidate before enabling the
+  gate. Current fixture adapter tests establish tooling behavior only.
 - Implement `test:release` to install and exercise `RELEASE_PACKAGE` in an isolated
   temporary directory, start `RELEASE_IMAGE`, and test the real website and API
   through the normal HTTP entrypoint. Verify persisted analysis and a follow-up
