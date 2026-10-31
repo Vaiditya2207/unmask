@@ -140,6 +140,17 @@ name/archive size/archive digest/lock digest/source hash, and Linux AMD64 image
 digest. Attaching a tarball to GitHub does not publish it to npm. When
 `npmPublishEnabled` is false the manifest reports `package.registryPublished: false`.
 
+Future release notes retain the candidate, image, checks and deployment evidence
+and append linked commit subjects since the highest published stable release.
+Drafts and prereleases do not define that baseline. The GitHub comparison uses
+the exact candidate SHA, includes merge commits, and lists at most 100 commits in
+chronological order with subjects limited to 200 characters. A full compare link
+and an explicit truncation notice cover longer ranges. The first release instead
+links its commit history. Comparison failures or a non-ancestor baseline stop
+publication before reserving the Git tag; the workflow's shallow checkout does
+not limit the history. Existing release bodies and immutable artifacts are not
+changed by this automation.
+
 With `npmPublishEnabled: true`, the main-push workflow injects the existing
 `NPM_TOKEN` secret only into the npm publication step after exact candidate smoke.
 It publishes the prepared archive with `--ignore-scripts --access public` to the
