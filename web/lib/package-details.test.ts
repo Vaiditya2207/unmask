@@ -109,7 +109,11 @@ test("declarations have bounded previews and evidence links use trusted position
   assert.equal(anchors.size, 2);
 });
 
-async function renderOverview(details: unknown, rawModel?: unknown) {
+async function renderOverview(
+  details: unknown,
+  rawModel?: unknown,
+  extra: Record<string, unknown> = {},
+) {
   const { readFile } = await import("node:fs/promises");
   const ts = await import("typescript");
   const { createElement } = await import("react");
@@ -152,9 +156,34 @@ async function renderOverview(details: unknown, rawModel?: unknown) {
       analyzer: "https://analyzer.invalid",
       anchors: new Map([["quote-id", "evidence-7"]]),
       rawModel,
+      ...extra,
     }),
   );
 }
+
+test("evidence on a published file opens it in Published files; other evidence keeps its viewer anchor", async () => {
+  const d = fixture();
+  d.inventory.largestFiles = list([
+    {
+      path: "install.js",
+      size: 11773,
+      state: "artifact-only",
+      evidenceIds: ["file-id", "quote-id"],
+    },
+  ]);
+  const html = await renderOverview(parsePackageDetails(d), undefined, {
+    evidencePaths: new Map([["file-id", "install.js"]]),
+  });
+  assert.ok(html.includes('href="?file=install.js#files"'));
+  assert.ok(
+    html.includes(
+      "https://analyzer.invalid/r/" + "a".repeat(32) + "#evidence-7",
+    ),
+  );
+  // Without syntax observations on it, the file is not marked for review.
+  assert.ok(html.includes("state-pill--neutral"));
+  assert.ok(!html.includes("state-pill--signal"));
+});
 
 test("live details render semantic escaped sections, incomplete coverage and visible omission limits", async () => {
   const malicious = '<script>alert("not executable")</script>';
