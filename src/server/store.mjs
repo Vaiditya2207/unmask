@@ -8,6 +8,14 @@ const deterministicCaps = new Set([
   "path-node-cap",
   "metadata-cap",
 ]);
+const deterministicAdvisoryCaps = new Set([
+  "result-byte-cap",
+  "storage-byte-cap",
+  "response-limit",
+  "page-limit",
+  "advisory-limit",
+  "record-limit",
+]);
 const transientModelStatuses = new Set([
   "unavailable",
   "timeout",
@@ -17,7 +25,19 @@ const transientModelStatuses = new Set([
 ]);
 
 function reusable(record) {
-  if (!record.report || transientModelStatuses.has(record.report.model?.status))
+  // A transiently incomplete advisory snapshot stays readable by id but must not answer a resubmission; repeatable caps may.
+  if (
+    !record.report ||
+    transientModelStatuses.has(record.report.model?.status) ||
+    (record.vulnerabilityCheck !== undefined &&
+      record.vulnerabilityCheck?.complete !== true &&
+      !(
+        record.vulnerabilityCheck?.reasons?.length > 0 &&
+        record.vulnerabilityCheck.reasons.every((reason) =>
+          deterministicAdvisoryCaps.has(reason),
+        )
+      ))
+  )
     return false;
   if (record.status === "done") return record.report.policy?.exitCode !== 2;
   return (

@@ -1558,11 +1558,11 @@ test("lookup failure, malformed identity and result/store caps preserve the core
     );
     assert.equal(calls, 1);
     assert.doesNotMatch(JSON.stringify(details), /private provider details/u);
-    assert.equal(
-      (await s.post("example@1.0.0")).headers.get("location"),
-      location,
-    );
-    assert.equal(calls, 1);
+    const repeatable = ["oversized", "storage"].includes(variant);
+    const again = (await s.post("example@1.0.0")).headers.get("location");
+    assert.equal(again === location, repeatable, variant);
+    if (!repeatable) await finished(s, again);
+    assert.equal(calls, repeatable ? 1 : 2, variant);
   }
 });
 
