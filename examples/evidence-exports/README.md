@@ -34,7 +34,7 @@ Running the script twice produces byte-identical `input/` and `output/` trees wi
 
 Both artifacts contain a bundled `node_modules/inner` and a nested `node_modules/inner/node_modules/deep`. Only `inner` is a direct root dependency edge in the SBOM.
 
-SARIF and annotations for `conflict` (`output/sarif/`) were generated with `--p08` pointing at commit `9c35ce730a340f10cad3cecb7f23b1c5459e45a7` (branch `feat/automation-outputs-extras`). That commit is not part of this branch. The advisory inputs are synthetic:
+SARIF, annotations and GitHub step summaries for `conflict` (`output/sarif/`) were generated with `--p08` pointing at commit `ff1afb0b15e4408889b3f2474f3a832f6f907bd0` (branch `feat/automation-outputs-extras`, on top of SARIF commit `d7e344e9c799184f031675391f7e699f96ac07b0`). Those commits are not part of this branch. The advisory inputs are synthetic:
 
 | File               | Contents                                                                                                                                                       |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -54,7 +54,7 @@ This writes `OUTPUT/report.json`. The SBOM and evidence manifest are served by t
 
 ### Automation outputs (SARIF and annotations)
 
-These commands are delivered separately on `feat/automation-outputs` (SARIF) and `feat/automation-outputs-extras` (annotations). They are documented here as of commit `9c35ce730a340f10cad3cecb7f23b1c5459e45a7` and are not part of this branch until those changes are integrated.
+These commands are delivered separately on `feat/automation-outputs` (SARIF) and `feat/automation-outputs-extras` (annotations). They are documented here as of commits `d7e344e9c799184f031675391f7e699f96ac07b0` (SARIF) and `ff1afb0b15e4408889b3f2474f3a832f6f907bd0` (annotations), and are not part of this branch until those changes are integrated.
 
 ```sh
 unmask sarif --report report.json [--details details.json] [--out results.sarif]
@@ -101,7 +101,7 @@ Every report records the identity that was requested (`inputs.claim`) separately
 | `claimed-manifest-unavailable`  | `unidentified-npm-artifact`, no purl | `null`                  | Manifest missing or invalid                      |
 | `unknown`                       | `unidentified-npm-artifact`, no purl | `null`                  |                                                  |
 
-The root also carries the properties `unmask:requested-identity` and `unmask:declared-identity`, and the manifest carries `package.requested` and `package.declared`. The declared identity is a publisher declaration and is not verified.
+The root also carries the properties `unmask:requested-identity` and `unmask:declared-identity`, and the manifest carries `package.requested` and `package.declared`. SARIF uses the same status names in `runs[0].properties.unmask.package.identityStatus`, alongside `requested` and `declared`. The declared identity is a publisher declaration and is not verified.
 
 ### Reading the identity-conflict example
 
@@ -113,16 +113,18 @@ In the `conflict` example, the tarball declares `@unmask-example/declared@2.0.0`
   - `package.status` is `claim-conflicts-with-manifest` and `package.purl` is `null`;
   - the limitations include "Requested identity conflicts with the artifact manifest." and "No source archive was compared with the published artifact.";
   - `source.method` is `unresolved`.
-- **SARIF** (commit 9c35ce7):
+- **SARIF** (commit ff1afb0):
   - an error result `policy/identity-claim-conflict` located at the artifact `package.json` byte region;
-  - `runs[0].properties.unmask.package` is the **requested** identity, with `source: "claim"`;
-  - advisory results use the logical location `npm:@unmask-example/requested@1.0.0`.
+  - `runs[0].properties.unmask.package` names the **requested** identity (`source: "claim"`) with `identityStatus: "claim-conflicts-with-manifest"` and both `requested` and `declared`;
+  - `runs[0].properties.unmask.advisories.boundTo` is `"claim"`, and advisory results use the logical location `npm:@unmask-example/requested@1.0.0`;
+  - the warning notification `advisory/identity-conflict` states that the declared identity was not screened.
+- **Annotations step summary:** the heading reads `@unmask-example/requested@1.0.0 (claimed; artifact declares @unmask-example/declared@2.0.0)`, an `Identity` row shows the status, and the advisory status is suffixed `(for requested identity)`.
 
-Advisory snapshots are queried for the requested identity. When the identity conflicts, an advisory status in SARIF or annotations, including `none-reported`, describes the requested name and version only. It says nothing about the identity the tarball declares, which was not queried. Resolve the identity conflict before relying on any advisory status. The `conflict-none` example shows this case: the SARIF advisory block reads `status: none-reported, complete: true`, and the only signal of the conflict is the separate `policy/identity-claim-conflict` error result.
+Advisory snapshots are queried for the requested identity. When the identity conflicts, an advisory status in SARIF or annotations, including `none-reported`, describes the requested name and version only. It says nothing about the identity the tarball declares, which was not queried. Resolve the identity conflict before relying on any advisory status. The `conflict-none` example shows this case: the SARIF advisory block reads `status: none-reported, complete: true, boundTo: "claim"`, and the `advisory/identity-conflict` warning carries the caveat. When the manifest is unavailable, SARIF instead emits the note `advisory/identity-unverified`.
 
 ## Partial advisory results
 
-An OSV snapshot has a `status`: `found`, `none-reported`, `incomplete`, `unavailable` or `not-assessed`. Only `found` and `none-reported` are complete. An `incomplete` snapshot can still carry the advisories it did retrieve, for example after a page cap. In the `conflict-partial` SARIF example (commit 9c35ce7):
+An OSV snapshot has a `status`: `found`, `none-reported`, `incomplete`, `unavailable` or `not-assessed`. Only `found` and `none-reported` are complete. An `incomplete` snapshot can still carry the advisories it did retrieve, for example after a page cap. In the `conflict-partial` SARIF example (commit ff1afb0):
 
 - `GHSA-0000-0000-0001`, whose only `MAL-` identifier is an alias, is reported as `advisory/known-malware` (error) with `properties.malwareIdentifier: "MAL-0000-0001"`.
 - The withdrawn `MAL-0000-0002` is reported as `advisory/withdrawn` (note), and annotations do not raise the exit code for it.

@@ -82,6 +82,15 @@
             },
             {
               "descriptor": {
+                "id": "advisory/identity-conflict"
+              },
+              "level": "warning",
+              "message": {
+                "text": "Advisories were queried for the requested identity @unmask-example/requested@1.0.0, which conflicts with the artifact manifest @unmask-example/declared@2.0.0; the declared identity was not screened."
+              }
+            },
+            {
+              "descriptor": {
                 "id": "limitation/absence-not-safety"
               },
               "level": "note",
@@ -252,7 +261,16 @@
           "package": {
             "name": "@unmask-example/requested",
             "version": "1.0.0",
-            "source": "claim"
+            "source": "claim",
+            "identityStatus": "claim-conflicts-with-manifest",
+            "requested": {
+              "name": "@unmask-example/requested",
+              "version": "1.0.0"
+            },
+            "declared": {
+              "name": "@unmask-example/declared",
+              "version": "2.0.0"
+            }
           },
           "artifactSha256": "8e3577c4e728d0fae8edc2dd8a02d20845d9f33d0379982a474f129e78183635",
           "coverageComplete": true,
@@ -262,7 +280,8 @@
             "status": "none-reported",
             "complete": true,
             "queriedAt": "2026-11-01T00:00:00.000Z",
-            "count": 0
+            "count": 0,
+            "boundTo": "claim"
           }
         }
       }

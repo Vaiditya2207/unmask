@@ -205,9 +205,17 @@ if (p08) {
       { encoding: "utf8" },
     );
     writeFileSync(path.join(sarifDir, `${label}.sarif`), sarif.stdout);
+    const summary = path.join(sarifDir, `${label}.summary.md`);
+    rmSync(summary, { force: true });
     const annotations = spawnSync(
       process.execPath,
-      [path.join(p08, "src/cli/main.mjs"), "annotations", ...args],
+      [
+        path.join(p08, "src/cli/main.mjs"),
+        "annotations",
+        ...args,
+        "--summary",
+        summary,
+      ],
       { encoding: "utf8" },
     );
     writeFileSync(
