@@ -1,15 +1,31 @@
-import "../../ui.css";
 import "../../report.css";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { ViewerBar } from "@/components/report/ViewerBar";
+import { cache } from "react";
+import { ReportShell } from "@/components/report/ReportShell";
 import { ReportView } from "@/components/report/ReportView";
-import { AutoRefresh } from "@/components/report/AutoRefresh";
-import { sampleReport } from "@/lib/sample-report.ts";
-import { fetchJob, type Job } from "@/lib/analyzer.ts";
-import { formatUtc } from "@/lib/report.ts";
+import { JobStatus } from "@/components/report/JobStatus";
+import { exampleReport } from "@/lib/sample-report.ts";
+import { fetchJob, type Fetched } from "@/lib/analyzer.ts";
+import { buildView, type Report } from "@/lib/report.ts";
 
 type Params = Promise<{ id: string }>;
+type Search = Promise<Record<string, string | string[] | undefined>>;
+
+// One fetch per request, shared by the metadata and the page.
+const load = cache(async (id: string): Promise<Fetched> => {
+  const example = exampleReport(id);
+  if (example) return { ok: true, kind: "report", report: example };
+  return fetchJob(id);
+});
+
+const specOf = (report: Report) =>
+  report.inputs.claim
+    ? `${report.inputs.claim.name}@${report.inputs.claim.version}`
+    : "Report";
+
+const first = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value[0] : value;
 
 export async function generateMetadata({
   params,
@@ -17,113 +33,46 @@ export async function generateMetadata({
   params: Params;
 }): Promise<Metadata> {
   const { id } = await params;
-  return {
-    title:
-      id === "sample"
-        ? "UNMASK · Sample report for clsx@2.1.1"
-        : "UNMASK · Report",
-    robots: { index: false },
-  };
+  const result = await load(id);
+  const name = !result.ok
+    ? "Report"
+    : result.kind === "report"
+      ? specOf(result.report)
+      : result.job.nameAtExactVersion;
+  return { title: `UNMASK · ${name}`, robots: { index: false } };
 }
 
-const messages: Record<Exclude<Job["status"], "completed">, string> = {
-  queued:
-    "Waiting for the check before it to finish. This page refreshes on its own.",
-  running:
-    "Reading the tarball and the source. This page refreshes on its own; reloading does not start another check.",
-  incomplete:
-    "The check stopped at its limits before it could finish. No retry runs on its own.",
-  failed: "The analyzer could not produce a report for this release.",
-};
-
-function StatusView({ job }: { job: Job }) {
-  const status = job.status === "completed" ? "failed" : job.status;
-  const active = status === "queued" || status === "running";
-  return (
-    <main className="viewer viewer-status" id="main">
-      {active ? <AutoRefresh /> : null}
-      <div className="title-row">
-        <div>
-          <h1>{job.nameAtExactVersion}</h1>
-          <p className="subtitle">
-            Requested {formatUtc(new Date(job.createdAt).toISOString())}
-          </p>
-        </div>
-      </div>
-      <section className="card status-card" aria-live="polite">
-        <div className="card-head">
-          <h2>Check</h2>
-          <span className={`pill ${active ? "pill-quiet" : "pill-negative"}`}>
-            {status[0].toUpperCase() + status.slice(1)}
-          </span>
-        </div>
-        <p className="status-text-lg">{messages[status]}</p>
-        {job.reason ? (
-          <p className="faint">
-            Reason: <code>{job.reason}</code>
-          </p>
-        ) : null}
-        <p className="status-links">
-          <a className="btn" href="/#check">
-            {active ? "Check another release" : "Request a new check"}
-          </a>
-          <a href={`/api/reports/${job.id}`}>View job JSON</a>
-        </p>
-      </section>
-    </main>
-  );
-}
-
-export default async function ReportPage({ params }: { params: Params }) {
+export default async function ReportPage({
+  params,
+  searchParams,
+}: {
+  params: Params;
+  searchParams: Search;
+}) {
   const { id } = await params;
-  if (id === "sample")
-    return (
-      <div className="app">
-        <ViewerBar spec="clsx@2.1.1" />
-        <ReportView report={sampleReport} />
-      </div>
-    );
-  const result = await fetchJob(id);
+  const result = await load(id);
   if (!result.ok) notFound();
-  if (result.kind === "report")
+  const crumb = exampleReport(id) ? "Examples" : "Reports";
+  if (result.kind === "job")
     return (
-      <div className="app">
-        <ViewerBar />
-        <main className="viewer viewer-status" id="main">
-          <div className="title-row">
-            <div>
-              <h1>Report ready</h1>
-              <p className="subtitle">
-                Check <code>{id.slice(0, 8)}</code>, report schema{" "}
-                {result.schemaVersion}
-              </p>
-            </div>
-          </div>
-          <section className="card status-card">
-            <p className="status-text-lg">
-              The analyzer finished this check. Its report opens in the
-              analyzer&rsquo;s own viewer for now; this page does not render
-              schema {result.schemaVersion} reports yet.
-            </p>
-            <p className="status-links">
-              <a className="btn" href={`${result.analyzer}/r/${id}`}>
-                Open the report
-              </a>
-              <a href={`/api/reports/${id}`}>Download JSON</a>
-            </p>
-          </section>
-        </main>
-      </div>
+      <ReportShell crumb={crumb} spec={result.job.nameAtExactVersion}>
+        <JobStatus job={result.job} />
+      </ReportShell>
     );
-  const { job } = result;
+  const view = buildView(result.report);
+  const query = await searchParams;
+  const download = {
+    href: `/api/reports/${id}`,
+    filename: `unmask-${view.spec.replace(/[^\w.@-]+/g, "_")}.json`,
+  };
   return (
-    <div className="app">
-      <ViewerBar spec={job.nameAtExactVersion} />
-      {job.status === "completed" && job.report ? (
-        <ReportView report={job.report} />
-      ) : (
-        <StatusView job={job} />
-      )}
-    </div>
+    <ReportShell crumb={crumb} spec={view.spec} download={download}>
+      <ReportView
+        view={view}
+        download={download}
+        initialKey={first(query.file)}
+        initialTab={first(query.show)}
+      />
+    </ReportShell>
   );
 }

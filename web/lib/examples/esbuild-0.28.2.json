@@ -1,0 +1,1270 @@
+{
+  "schemaVersion": "1",
+  "analyzerVersion": "0.0.0",
+  "policyVersion": "default-1",
+  "limitsVersion": "1",
+  "inputs": {
+    "artifact": {
+      "sha256": "e045f94c235c7adc50e77ba2a579c7bec41b496b6b47c3a7845f7c1e19959a88",
+      "sha512": "1ca54b4bc76f208fb1a0a5bd926ab16d12ab9d61177c926bfc56618499a2a880747b4e7740d605a8e068b9330efe4e6c203e0cbc28940afbfc6fd338877db020",
+      "kind": "registry",
+      "expectedIntegrity": {
+        "algorithm": "sha512",
+        "digest": "1ca54b4bc76f208fb1a0a5bd926ab16d12ab9d61177c926bfc56618499a2a880747b4e7740d605a8e068b9330efe4e6c203e0cbc28940afbfc6fd338877db020",
+        "status": "match"
+      },
+      "provenance": {
+        "status": "not-assessed"
+      }
+    },
+    "limits": {
+      "compressedBytes": 52428800,
+      "expandedBytes": 262144000,
+      "entries": 20000,
+      "ratio": 100,
+      "fileBytes": 10485760,
+      "parseMs": 30000,
+      "metadataBytes": 65536,
+      "pathBytes": 4096,
+      "pathDepth": 64,
+      "pathNodes": 40000,
+      "retentionBudgetBytes": 134217728,
+      "syntax": {
+        "fileBytes": 2097152,
+        "totalBytesPerSide": 8388608,
+        "tokens": 200000,
+        "cues": 1000,
+        "sourceLiterals": 10000
+      },
+      "manifest": {
+        "fieldNodes": 4096,
+        "depth": 12,
+        "valueBytes": 65536,
+        "totalValueBytes": 262144,
+        "fieldComparisons": 8192,
+        "cues": 128,
+        "declarations": 256,
+        "pathComparisons": 20000,
+        "annotations": 512
+      },
+      "acquisition": {
+        "metadataBytes": 1048576,
+        "timeoutMs": 30000,
+        "redirects": "forbidden"
+      }
+    },
+    "sourceArchive": {
+      "sha256": "04cb2d38fb6af093577aa8bf174add7286099b65ef7854480cbbb8ff061cef1f",
+      "sha512": "b8e08e09d3c85da8f3e01f2f3c0a1a3914003080f160b9e4e85dadf240cd365273cb7be8a2238bda80962d4491dc95be5fa777cbcfa98034c0bbf963f87bd0a0",
+      "kind": "remote"
+    },
+    "claim": {
+      "name": "esbuild",
+      "version": "0.28.2"
+    },
+    "syntaxParser": "acorn@8.19.0",
+    "registryDocument": {
+      "sha256": "7a6838097b106ef5d8877fd543a1e25c46e5eb1730945fb7e57bc467c12c7c8c",
+      "sha512": "3eaeafe87afad7ea062c5edd61333efafbd3dfd48592de58f32fb0b38b33bbcd1afd34fd2727e272c18a328c957e2d3620d7b228c4c281da37f39c00f30bc3bf",
+      "kind": "registry"
+    }
+  },
+  "source": {
+    "status": "selected",
+    "method": "publisher-gitHead",
+    "commit": "609683d892977362a0f99026cb74b96263d728a9",
+    "complete": true,
+    "alternatives": [
+      {
+        "repository": "https://github.com/evanw/esbuild",
+        "commit": "609683d892977362a0f99026cb74b96263d728a9",
+        "directory": "",
+        "method": "publisher-gitHead",
+        "archiveUrl": "https://codeload.github.com/evanw/esbuild/tar.gz/609683d892977362a0f99026cb74b96263d728a9",
+        "sourceRoot": "esbuild-609683d892977362a0f99026cb74b96263d728a9"
+      }
+    ],
+    "reason": "explicit-local-source",
+    "directory": "npm/esbuild",
+    "repository": "https://github.com/evanw/esbuild"
+  },
+  "files": [
+    {
+      "path": "LICENSE.md",
+      "originalPath": "package/LICENSE.md",
+      "size": 1069,
+      "artifactSha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681",
+      "state": "byte-identical",
+      "localization": "whole-file",
+      "evidenceIds": [
+        "ev-87e0c19b465af91b743d54543d0aea3e9b326bcaad3708d1050c1ad0fff936ce",
+        "ev-d5024e1ddebd132f7de5f2f1dfc88ae097d473f3fb6f5e247ad696dbef997b95"
+      ],
+      "sourceSha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+    },
+    {
+      "path": "README.md",
+      "originalPath": "package/README.md",
+      "size": 175,
+      "artifactSha256": "6d481cd60ec3c679e5e395f547ab4221147f35642894f6b95a8df38fd25c87bd",
+      "state": "byte-identical",
+      "localization": "whole-file",
+      "evidenceIds": [
+        "ev-19918c545d37c4615f728abc6be2671df87237dc50fd7be0bcbbee263748952c",
+        "ev-61832cfab31d6b36f917cb8b6a6e170735a28deb6a883ef3255af68984e45b51"
+      ],
+      "sourceSha256": "6d481cd60ec3c679e5e395f547ab4221147f35642894f6b95a8df38fd25c87bd"
+    },
+    {
+      "path": "bin/esbuild",
+      "originalPath": "package/bin/esbuild",
+      "size": 9350,
+      "artifactSha256": "183d6ead2dbc3af51aec767d5395f86fe54fbbc2d2aa8e54feb4e31d76a62f7e",
+      "state": "artifact-only",
+      "localization": "whole-file",
+      "evidenceIds": [
+        "ev-09e7e5a4105b0e6bf0b4c7acdbbed2bc71a7ec18907bb5e3306b3b80cb9f0e13"
+      ]
+    },
+    {
+      "path": "install.js",
+      "originalPath": "package/install.js",
+      "size": 11773,
+      "artifactSha256": "612294e278914443bdcf81cb17f54afec34dbdd2ebd999a6ee187912320cc315",
+      "state": "artifact-only",
+      "localization": "whole-file",
+      "evidenceIds": [
+        "ev-f7de9ca0ef63736511157223bf80ccc370e7606f66705acc59c0644b4340c39d",
+        "ev-808cf887ac9ffe366622b87da90b28113c6085c10dfc80b1366b55c2753ad92a",
+        "ev-f74f87d4584ca9ef55e01216ebb4e4582f0c784321c69c82ab08a4544dbad6f6",
+        "ev-475502fc02307a442c97a7380a9e0cb4237cfca4645c89f0ea91af199e10d354",
+        "ev-863bd17afbf0bde83d472bd0036ab1baceb1e2fb709aad342548bdf22556e58a",
+        "ev-7b1de6ca8d132851db07808342248a91c6c16073ff3a98092f72d86dd8037eba",
+        "ev-148465a5e40dc24392f9ac10aece26948b8833990facf43d6f0f77537c963717",
+        "ev-c3aa58ca623431600f35d7f30f2730225968e95cdf100b1b0880e3adaab024ae"
+      ]
+    },
+    {
+      "path": "lib/main.d.ts",
+      "originalPath": "package/lib/main.d.ts",
+      "size": 23551,
+      "artifactSha256": "e078310f23f0ccfa28a6ac81b5fad81f27150e921f92ab6e648caab42e2d9a14",
+      "state": "artifact-only",
+      "localization": "whole-file",
+      "evidenceIds": [
+        "ev-d4324fedaac9151ba42542c2125fd07e840403b2ac3569f72d4286f5fa17cc14"
+      ]
+    },
+    {
+      "path": "lib/main.js",
+      "originalPath": "package/lib/main.js",
+      "size": 97463,
+      "artifactSha256": "61ec0ba144ff93f4bf0e96ad6fab6f430ede0aa13e27ace8063ed63ba416b3cd",
+      "state": "artifact-only",
+      "localization": "whole-file",
+      "evidenceIds": [
+        "ev-4ad2955b81786ee62b90535eb93057fd22a1c3cf928ed4f78d04f27cb41ac9b2",
+        "ev-4c045c2c8d0b943d1e8c461b35ca79d913e2af92e23df2e707ab763163c2d36c",
+        "ev-cab7f80015367e5507a3f7411d90fd1d1612b99b78c6219fdf1bb559b61cb7dc",
+        "ev-3c015035d6c81dedf2451bbfd49a7336fbc1c95923f41cef4b8b701c36500ccd",
+        "ev-c9987edef866eb15403272464556f0d2185dfdc9f84bb4d366da6b3c4ed899d2",
+        "ev-d29d34b26b7b908926d20e2734aad815fa3398547d7e483bef757be140cc392a"
+      ]
+    },
+    {
+      "path": "package.json",
+      "originalPath": "package/package.json",
+      "size": 3980,
+      "artifactSha256": "9d0bc453f4e791553c4cc2298ba023b409241fd9801e494741666eb0f6051490",
+      "state": "byte-identical",
+      "localization": "whole-file",
+      "evidenceIds": [
+        "ev-ea7076d40605296376a8a4f70fc17fdc8e85d53a9aef539e45be50016177703b",
+        "ev-f5af7e5a4985952cbde67db726d50d9d9e0cbe185c61b95fe3c27e4d64dc9955"
+      ],
+      "sourceSha256": "9d0bc453f4e791553c4cc2298ba023b409241fd9801e494741666eb0f6051490"
+    }
+  ],
+  "coverage": {
+    "inventory": {
+      "files": 7,
+      "bytes": 147361,
+      "complete": true,
+      "lowerBound": false
+    },
+    "states": {
+      "byte-identical": {
+        "files": 3,
+        "bytes": 5224
+      },
+      "changed": {
+        "files": 0,
+        "bytes": 0
+      },
+      "artifact-only": {
+        "files": 4,
+        "bytes": 142137
+      },
+      "not-compared": {
+        "files": 0,
+        "bytes": 0
+      }
+    },
+    "compared": {
+      "files": 3,
+      "bytes": 5224
+    },
+    "unresolved": {
+      "files": 4,
+      "bytes": 142137
+    },
+    "syntaxInspected": {
+      "files": 2,
+      "bytes": 109236
+    },
+    "modelReviewed": {
+      "files": 0,
+      "bytes": 0
+    },
+    "links": {
+      "artifact": 0,
+      "source": 0
+    },
+    "nonregular": {
+      "artifact": 0,
+      "source": 0
+    },
+    "linkEntries": [],
+    "sourceAvailable": true,
+    "sourceComplete": true,
+    "complete": true,
+    "sourceOnly": []
+  },
+  "evidence": [
+    {
+      "id": "ev-87e0c19b465af91b743d54543d0aea3e9b326bcaad3708d1050c1ad0fff936ce",
+      "side": "artifact",
+      "blobDigest": "e045f94c235c7adc50e77ba2a579c7bec41b496b6b47c3a7845f7c1e19959a88",
+      "path": "LICENSE.md",
+      "originalPath": "package/LICENSE.md",
+      "fileSha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681",
+      "size": 1069,
+      "range": [0, 1069],
+      "excerpt": "MIT License\n\nCopyright (c) 2020 Evan Wallace\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and t",
+      "excerptRange": [0, 512]
+    },
+    {
+      "id": "ev-d5024e1ddebd132f7de5f2f1dfc88ae097d473f3fb6f5e247ad696dbef997b95",
+      "side": "source",
+      "blobDigest": "04cb2d38fb6af093577aa8bf174add7286099b65ef7854480cbbb8ff061cef1f",
+      "path": "LICENSE.md",
+      "originalPath": "esbuild-609683d892977362a0f99026cb74b96263d728a9/npm/esbuild/LICENSE.md",
+      "fileSha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681",
+      "size": 1069,
+      "range": [0, 1069],
+      "excerpt": "MIT License\n\nCopyright (c) 2020 Evan Wallace\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and t",
+      "excerptRange": [0, 512]
+    },
+    {
+      "id": "ev-19918c545d37c4615f728abc6be2671df87237dc50fd7be0bcbbee263748952c",
+      "side": "artifact",
+      "blobDigest": "e045f94c235c7adc50e77ba2a579c7bec41b496b6b47c3a7845f7c1e19959a88",
+      "path": "README.md",
+      "originalPath": "package/README.md",
+      "fileSha256": "6d481cd60ec3c679e5e395f547ab4221147f35642894f6b95a8df38fd25c87bd",
+      "size": 175,
+      "range": [0, 175],
+      "excerpt": "# esbuild\n\nThis is a JavaScript bundler and minifier. See https://github.com/evanw/esbuild and the [JavaScript API documentation](https://esbuild.github.io/api/) for details.\n",
+      "excerptRange": [0, 175]
+    },
+    {
+      "id": "ev-61832cfab31d6b36f917cb8b6a6e170735a28deb6a883ef3255af68984e45b51",
+      "side": "source",
+      "blobDigest": "04cb2d38fb6af093577aa8bf174add7286099b65ef7854480cbbb8ff061cef1f",
+      "path": "README.md",
+      "originalPath": "esbuild-609683d892977362a0f99026cb74b96263d728a9/npm/esbuild/README.md",
+      "fileSha256": "6d481cd60ec3c679e5e395f547ab4221147f35642894f6b95a8df38fd25c87bd",
+      "size": 175,
+      "range": [0, 175],
+      "excerpt": "# esbuild\n\nThis is a JavaScript bundler and minifier. See https://github.com/evanw/esbuild and the [JavaScript API documentation](https://esbuild.github.io/api/) for details.\n",
+      "excerptRange": [0, 175]
+    },
+    {
+      "id": "ev-09e7e5a4105b0e6bf0b4c7acdbbed2bc71a7ec18907bb5e3306b3b80cb9f0e13",
+      "side": "artifact",
+      "blobDigest": "e045f94c235c7adc50e77ba2a579c7bec41b496b6b47c3a7845f7c1e19959a88",
+      "path": "bin/esbuild",
+      "originalPath": "package/bin/esbuild",
+      "fileSha256": "183d6ead2dbc3af51aec767d5395f86fe54fbbc2d2aa8e54feb4e31d76a62f7e",
+      "size": 9350,
+      "range": [0, 9350],
+      "excerpt": "#!/usr/bin/env node\n\"use strict\";\nvar __create = Object.create;\nvar __defProp = Object.defineProperty;\nvar __getOwnPropDesc = Object.getOwnPropertyDescriptor;\nvar __getOwnPropNames = Object.getOwnPropertyNames;\nvar __getProtoOf = Object.getPrototypeOf;\nvar __hasOwnProp = Object.prototype.hasOwnProperty;\nvar __copyProps = (to, from, except, desc) => {\n  if (from && typeof from === \"object\" || typeof from === \"function\") {\n    for (let key of __getOwnPropNames(from))\n      if (!__hasOwnProp.call(to, key) && k",
+      "excerptRange": [0, 512]
+    },
+    {
+      "id": "ev-f7de9ca0ef63736511157223bf80ccc370e7606f66705acc59c0644b4340c39d",
+      "side": "artifact",
+      "blobDigest": "e045f94c235c7adc50e77ba2a579c7bec41b496b6b47c3a7845f7c1e19959a88",
+      "path": "install.js",
+      "originalPath": "package/install.js",
+      "fileSha256": "612294e278914443bdcf81cb17f54afec34dbdd2ebd999a6ee187912320cc315",
+      "size": 11773,
+      "range": [0, 11773],
+      "excerpt": "\"use strict\";\nvar __create = Object.create;\nvar __defProp = Object.defineProperty;\nvar __getOwnPropDesc = Object.getOwnPropertyDescriptor;\nvar __getOwnPropNames = Object.getOwnPropertyNames;\nvar __getProtoOf = Object.getPrototypeOf;\nvar __hasOwnProp = Object.prototype.hasOwnProperty;\nvar __copyProps = (to, from, except, desc) => {\n  if (from && typeof from === \"object\" || typeof from === \"function\") {\n    for (let key of __getOwnPropNames(from))\n      if (!__hasOwnProp.call(to, key) && key !== except)\n     ",
+      "excerptRange": [0, 512]
+    },
+    {
+      "id": "ev-d4324fedaac9151ba42542c2125fd07e840403b2ac3569f72d4286f5fa17cc14",
+      "side": "artifact",
+      "blobDigest": "e045f94c235c7adc50e77ba2a579c7bec41b496b6b47c3a7845f7c1e19959a88",
+      "path": "lib/main.d.ts",
+      "originalPath": "package/lib/main.d.ts",
+      "fileSha256": "e078310f23f0ccfa28a6ac81b5fad81f27150e921f92ab6e648caab42e2d9a14",
+      "size": 23551,
+      "range": [0, 23551],
+      "excerpt": "export type Platform = 'browser' | 'node' | 'neutral'\nexport type Format = 'iife' | 'cjs' | 'esm'\nexport type Loader = 'base64' | 'binary' | 'copy' | 'css' | 'dataurl' | 'default' | 'empty' | 'file' | 'js' | 'json' | 'jsx' | 'local-css' | 'text' | 'ts' | 'tsx'\nexport type LogLevel = 'verbose' | 'debug' | 'info' | 'warning' | 'error' | 'silent'\nexport type LogStyle = 'default' | 'visualstudio'\nexport type Charset = 'ascii' | 'utf8'\nexport type Drop = 'console' | 'debugger'\nexport type AbsPaths = 'code' | 'lo",
+      "excerptRange": [0, 512]
+    },
+    {
+      "id": "ev-4ad2955b81786ee62b90535eb93057fd22a1c3cf928ed4f78d04f27cb41ac9b2",
+      "side": "artifact",
+      "blobDigest": "e045f94c235c7adc50e77ba2a579c7bec41b496b6b47c3a7845f7c1e19959a88",
+      "path": "lib/main.js",
+      "originalPath": "package/lib/main.js",
+      "fileSha256": "61ec0ba144ff93f4bf0e96ad6fab6f430ede0aa13e27ace8063ed63ba416b3cd",
+      "size": 97463,
+      "range": [0, 97463],
+      "excerpt": "\"use strict\";\nvar __create = Object.create;\nvar __defProp = Object.defineProperty;\nvar __getOwnPropDesc = Object.getOwnPropertyDescriptor;\nvar __getOwnPropNames = Object.getOwnPropertyNames;\nvar __getProtoOf = Object.getPrototypeOf;\nvar __hasOwnProp = Object.prototype.hasOwnProperty;\nvar __export = (target, all) => {\n  for (var name in all)\n    __defProp(target, name, { get: all[name], enumerable: true });\n};\nvar __copyProps = (to, from, except, desc) => {\n  if (from && typeof from === \"object\" || typeof fr",
+      "excerptRange": [0, 512]
+    },
+    {
+      "id": "ev-ea7076d40605296376a8a4f70fc17fdc8e85d53a9aef539e45be50016177703b",
+      "side": "artifact",
+      "blobDigest": "e045f94c235c7adc50e77ba2a579c7bec41b496b6b47c3a7845f7c1e19959a88",
+      "path": "package.json",
+      "originalPath": "package/package.json",
+      "fileSha256": "9d0bc453f4e791553c4cc2298ba023b409241fd9801e494741666eb0f6051490",
+      "size": 3980,
+      "range": [0, 3980],
+      "excerpt": "{\n  \"name\": \"esbuild\",\n  \"version\": \"0.28.2\",\n  \"description\": \"An extremely fast JavaScript and CSS bundler and minifier.\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/evanw/esbuild.git\"\n  },\n  \"scripts\": {\n    \"postinstall\": \"node install.js\"\n  },\n  \"main\": \"lib/main.js\",\n  \"types\": \"lib/main.d.ts\",\n  \"engines\": {\n    \"node\": \">=18\"\n  },\n  \"bin\": {\n    \"esbuild\": \"bin/esbuild\"\n  },\n  \"optionalDependencies\": {\n    \"@esbuild/aix-ppc64\": \"0.28.2\",\n    \"@esbuild/android-arm\": \"0.28",
+      "excerptRange": [0, 512]
+    },
+    {
+      "id": "ev-f5af7e5a4985952cbde67db726d50d9d9e0cbe185c61b95fe3c27e4d64dc9955",
+      "side": "source",
+      "blobDigest": "04cb2d38fb6af093577aa8bf174add7286099b65ef7854480cbbb8ff061cef1f",
+      "path": "package.json",
+      "originalPath": "esbuild-609683d892977362a0f99026cb74b96263d728a9/npm/esbuild/package.json",
+      "fileSha256": "9d0bc453f4e791553c4cc2298ba023b409241fd9801e494741666eb0f6051490",
+      "size": 3980,
+      "range": [0, 3980],
+      "excerpt": "{\n  \"name\": \"esbuild\",\n  \"version\": \"0.28.2\",\n  \"description\": \"An extremely fast JavaScript and CSS bundler and minifier.\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/evanw/esbuild.git\"\n  },\n  \"scripts\": {\n    \"postinstall\": \"node install.js\"\n  },\n  \"main\": \"lib/main.js\",\n  \"types\": \"lib/main.d.ts\",\n  \"engines\": {\n    \"node\": \">=18\"\n  },\n  \"bin\": {\n    \"esbuild\": \"bin/esbuild\"\n  },\n  \"optionalDependencies\": {\n    \"@esbuild/aix-ppc64\": \"0.28.2\",\n    \"@esbuild/android-arm\": \"0.28",
+      "excerptRange": [0, 512]
+    },
+    {
+      "id": "ev-808cf887ac9ffe366622b87da90b28113c6085c10dfc80b1366b55c2753ad92a",
+      "side": "artifact",
+      "blobDigest": "e045f94c235c7adc50e77ba2a579c7bec41b496b6b47c3a7845f7c1e19959a88",
+      "path": "install.js",
+      "originalPath": "package/install.js",
+      "fileSha256": "612294e278914443bdcf81cb17f54afec34dbdd2ebd999a6ee187912320cc315",
+      "size": 11773,
+      "range": [1307, 1338],
+      "excerpt": "process.env.ESBUILD_BINARY_PATH",
+      "excerptRange": [1307, 1338]
+    },
+    {
+      "id": "ev-f74f87d4584ca9ef55e01216ebb4e4582f0c784321c69c82ab08a4544dbad6f6",
+      "side": "artifact",
+      "blobDigest": "e045f94c235c7adc50e77ba2a579c7bec41b496b6b47c3a7845f7c1e19959a88",
+      "path": "install.js",
+      "originalPath": "package/install.js",
+      "fileSha256": "612294e278914443bdcf81cb17f54afec34dbdd2ebd999a6ee187912320cc315",
+      "size": 11773,
+      "range": [4994, 5052],
+      "excerpt": "child_process.execFileSync(\"sw_vers\", [\"-productVersion\"])",
+      "excerptRange": [4994, 5052]
+    },
+    {
+      "id": "ev-475502fc02307a442c97a7380a9e0cb4237cfca4645c89f0ea91af199e10d354",
+      "side": "artifact",
+      "blobDigest": "e045f94c235c7adc50e77ba2a579c7bec41b496b6b47c3a7845f7c1e19959a88",
+      "path": "install.js",
+      "originalPath": "package/install.js",
+      "fileSha256": "612294e278914443bdcf81cb17f54afec34dbdd2ebd999a6ee187912320cc315",
+      "size": 11773,
+      "range": [4094, 4792],
+      "excerpt": "child_process.execFileSync(command.shift(), command, {\n      // Without this, this install script strangely crashes with the error\n      // \"EACCES: permission denied, write\" but only on Ubuntu Linux when node is\n      // installed from the Snap Store. This is not a problem when you download\n      // the official version of node. The problem appears to be that stderr\n      // (i.e. file descriptor 2) isn't writable?\n      //\n      // More info:\n      // - https://snapcraft.io/ (what the Snap Store is)\n     ",
+      "excerptRange": [4094, 4606]
+    },
+    {
+      "id": "ev-863bd17afbf0bde83d472bd0036ab1baceb1e2fb709aad342548bdf22556e58a",
+      "side": "artifact",
+      "blobDigest": "e045f94c235c7adc50e77ba2a579c7bec41b496b6b47c3a7845f7c1e19959a88",
+      "path": "install.js",
+      "originalPath": "package/install.js",
+      "fileSha256": "612294e278914443bdcf81cb17f54afec34dbdd2ebd999a6ee187912320cc315",
+      "size": 11773,
+      "range": [5969, 6399],
+      "excerpt": "https.get(url, (res) => {\n      if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location)\n        return fetch(res.headers.location).then(resolve, reject);\n      if (res.statusCode !== 200)\n        return reject(new Error(`Server responded with ${res.statusCode}`));\n      let chunks = [];\n      res.on(\"data\", (chunk) => chunks.push(chunk));\n      res.on(\"end\", () => resolve(Buffer.concat(chunks)));\n    })",
+      "excerptRange": [5969, 6399]
+    },
+    {
+      "id": "ev-7b1de6ca8d132851db07808342248a91c6c16073ff3a98092f72d86dd8037eba",
+      "side": "artifact",
+      "blobDigest": "e045f94c235c7adc50e77ba2a579c7bec41b496b6b47c3a7845f7c1e19959a88",
+      "path": "install.js",
+      "originalPath": "package/install.js",
+      "fileSha256": "612294e278914443bdcf81cb17f54afec34dbdd2ebd999a6ee187912320cc315",
+      "size": 11773,
+      "range": [6096, 6123],
+      "excerpt": "fetch(res.headers.location)",
+      "excerptRange": [6096, 6123]
+    },
+    {
+      "id": "ev-148465a5e40dc24392f9ac10aece26948b8833990facf43d6f0f77537c963717",
+      "side": "artifact",
+      "blobDigest": "e045f94c235c7adc50e77ba2a579c7bec41b496b6b47c3a7845f7c1e19959a88",
+      "path": "install.js",
+      "originalPath": "package/install.js",
+      "fileSha256": "612294e278914443bdcf81cb17f54afec34dbdd2ebd999a6ee187912320cc315",
+      "size": 11773,
+      "range": [7499, 7687],
+      "excerpt": "child_process.execSync(\n      `npm install --loglevel=error --prefer-offline --no-audit --progress=false ${pkg}@${packageJSON.version}`,\n      { cwd: installDir, stdio: \"pipe\", env }\n    )",
+      "excerptRange": [7499, 7687]
+    },
+    {
+      "id": "ev-c3aa58ca623431600f35d7f30f2730225968e95cdf100b1b0880e3adaab024ae",
+      "side": "artifact",
+      "blobDigest": "e045f94c235c7adc50e77ba2a579c7bec41b496b6b47c3a7845f7c1e19959a88",
+      "path": "install.js",
+      "originalPath": "package/install.js",
+      "fileSha256": "612294e278914443bdcf81cb17f54afec34dbdd2ebd999a6ee187912320cc315",
+      "size": 11773,
+      "range": [9833, 9843],
+      "excerpt": "fetch(url)",
+      "excerptRange": [9833, 9843]
+    },
+    {
+      "id": "ev-4c045c2c8d0b943d1e8c461b35ca79d913e2af92e23df2e707ab763163c2d36c",
+      "side": "artifact",
+      "blobDigest": "e045f94c235c7adc50e77ba2a579c7bec41b496b6b47c3a7845f7c1e19959a88",
+      "path": "lib/main.js",
+      "originalPath": "package/lib/main.js",
+      "fileSha256": "61ec0ba144ff93f4bf0e96ad6fab6f430ede0aa13e27ace8063ed63ba416b3cd",
+      "size": 97463,
+      "range": [74495, 74526],
+      "excerpt": "process.env.ESBUILD_BINARY_PATH",
+      "excerptRange": [74495, 74526]
+    },
+    {
+      "id": "ev-cab7f80015367e5507a3f7411d90fd1d1612b99b78c6219fdf1bb559b61cb7dc",
+      "side": "artifact",
+      "blobDigest": "e045f94c235c7adc50e77ba2a579c7bec41b496b6b47c3a7845f7c1e19959a88",
+      "path": "lib/main.js",
+      "originalPath": "package/lib/main.js",
+      "fileSha256": "61ec0ba144ff93f4bf0e96ad6fab6f430ede0aa13e27ace8063ed63ba416b3cd",
+      "size": 97463,
+      "range": [82389, 82423],
+      "excerpt": "process.env.ESBUILD_WORKER_THREADS",
+      "excerptRange": [82389, 82423]
+    },
+    {
+      "id": "ev-3c015035d6c81dedf2451bbfd49a7336fbc1c95923f41cef4b8b701c36500ccd",
+      "side": "artifact",
+      "blobDigest": "e045f94c235c7adc50e77ba2a579c7bec41b496b6b47c3a7845f7c1e19959a88",
+      "path": "lib/main.js",
+      "originalPath": "package/lib/main.js",
+      "fileSha256": "61ec0ba144ff93f4bf0e96ad6fab6f430ede0aa13e27ace8063ed63ba416b3cd",
+      "size": 97463,
+      "range": [88616, 88781],
+      "excerpt": "child_process.spawn(command, args.concat(`--service=${\"0.28.2\"}`, \"--ping\"), {\n    windowsHide: true,\n    stdio: [\"pipe\", \"pipe\", \"inherit\"],\n    cwd: defaultWD\n  })",
+      "excerptRange": [88616, 88781]
+    },
+    {
+      "id": "ev-c9987edef866eb15403272464556f0d2185dfdc9f84bb4d366da6b3c4ed899d2",
+      "side": "artifact",
+      "blobDigest": "e045f94c235c7adc50e77ba2a579c7bec41b496b6b47c3a7845f7c1e19959a88",
+      "path": "lib/main.js",
+      "originalPath": "package/lib/main.js",
+      "fileSha256": "61ec0ba144ff93f4bf0e96ad6fab6f430ede0aa13e27ace8063ed63ba416b3cd",
+      "size": 97463,
+      "range": [91577, 92034],
+      "excerpt": "child_process.execFileSync(command, args.concat(`--service=${\"0.28.2\"}`), {\n    cwd: defaultWD,\n    windowsHide: true,\n    input: stdin,\n    // We don't know how large the output could be. If it's too large, the\n    // command will fail with ENOBUFS. Reserve 16mb for now since that feels\n    // like it should be enough. Also allow overriding this with an environment\n    // variable.\n    maxBuffer: +process.env.ESBUILD_MAX_BUFFER || 16 * 1024 * 1024\n  })",
+      "excerptRange": [91577, 92034]
+    },
+    {
+      "id": "ev-d29d34b26b7b908926d20e2734aad815fa3398547d7e483bef757be140cc392a",
+      "side": "artifact",
+      "blobDigest": "e045f94c235c7adc50e77ba2a579c7bec41b496b6b47c3a7845f7c1e19959a88",
+      "path": "lib/main.js",
+      "originalPath": "package/lib/main.js",
+      "fileSha256": "61ec0ba144ff93f4bf0e96ad6fab6f430ede0aa13e27ace8063ed63ba416b3cd",
+      "size": 97463,
+      "range": [91979, 92009],
+      "excerpt": "process.env.ESBUILD_MAX_BUFFER",
+      "excerptRange": [91979, 92009]
+    }
+  ],
+  "manifests": {
+    "artifact": {
+      "status": "usable",
+      "value": {
+        "name": "esbuild",
+        "version": "0.28.2",
+        "description": "An extremely fast JavaScript and CSS bundler and minifier.",
+        "repository": {
+          "type": "git",
+          "url": "git+https://github.com/evanw/esbuild.git"
+        },
+        "scripts": {
+          "postinstall": "node install.js"
+        },
+        "main": "lib/main.js",
+        "types": "lib/main.d.ts",
+        "engines": {
+          "node": ">=18"
+        },
+        "bin": {
+          "esbuild": "bin/esbuild"
+        },
+        "optionalDependencies": {
+          "@esbuild/aix-ppc64": "0.28.2",
+          "@esbuild/android-arm": "0.28.2",
+          "@esbuild/android-arm64": "0.28.2",
+          "@esbuild/android-x64": "0.28.2",
+          "@esbuild/darwin-arm64": "0.28.2",
+          "@esbuild/darwin-x64": "0.28.2",
+          "@esbuild/freebsd-arm64": "0.28.2",
+          "@esbuild/freebsd-x64": "0.28.2",
+          "@esbuild/linux-arm": "0.28.2",
+          "@esbuild/linux-arm64": "0.28.2",
+          "@esbuild/linux-ia32": "0.28.2",
+          "@esbuild/linux-loong64": "0.28.2",
+          "@esbuild/linux-mips64el": "0.28.2",
+          "@esbuild/linux-ppc64": "0.28.2",
+          "@esbuild/linux-riscv64": "0.28.2",
+          "@esbuild/linux-s390x": "0.28.2",
+          "@esbuild/linux-x64": "0.28.2",
+          "@esbuild/netbsd-arm64": "0.28.2",
+          "@esbuild/netbsd-x64": "0.28.2",
+          "@esbuild/openbsd-arm64": "0.28.2",
+          "@esbuild/openbsd-x64": "0.28.2",
+          "@esbuild/openharmony-arm64": "0.28.2",
+          "@esbuild/sunos-x64": "0.28.2",
+          "@esbuild/win32-arm64": "0.28.2",
+          "@esbuild/win32-ia32": "0.28.2",
+          "@esbuild/win32-x64": "0.28.2"
+        },
+        "license": "MIT",
+        "esbuild.binaryHashes": {
+          "@esbuild/aix-ppc64/bin/esbuild": "6de148b932fc5d3b28a97f9f0bc4de8e2b47db478b8ad679e0eaa6b96e00420d",
+          "@esbuild/android-arm64/bin/esbuild": "84efbbd2cbf21bbfec2aaf304bee79cb2a4a05fe2ea7b861a87f7b8f213ac27d",
+          "@esbuild/darwin-arm64/bin/esbuild": "10b6243df618d374bb2d5c9cfbe7052e1405f6aa4e53a6164f11a91b9f2e1384",
+          "@esbuild/darwin-x64/bin/esbuild": "7fe5c9c905fff0a05d92db98929434ab4d3b6dd92d7a7688922db74380c75df3",
+          "@esbuild/freebsd-arm64/bin/esbuild": "6aba108a68b93064e491bfb1ecfa28843b4d4e504dff0627f53f68f6bb015c01",
+          "@esbuild/freebsd-x64/bin/esbuild": "8a237e222bee0e50556e7b00d83ec2ff43721bf72f19811a5f0ee56f1d40177c",
+          "@esbuild/linux-arm/bin/esbuild": "d88f751b22095b2f3b42c8c2e8a3f36fabc1705438c5d6e78366b681f8b4e7a5",
+          "@esbuild/linux-arm64/bin/esbuild": "90bd269553d258e80b19e3ccab4f98f0831f87442a2f056510ce24fd1b425fc2",
+          "@esbuild/linux-ia32/bin/esbuild": "b1e2d87d79f9a2baa0d3043cdf0dc6716f9f2eea66c58f47588641fd6019f36f",
+          "@esbuild/linux-loong64/bin/esbuild": "55a66f9854d6798f36b2b5471db74f2e552481887ea14d8bda1634a512383a43",
+          "@esbuild/linux-mips64el/bin/esbuild": "6bf7921a3af4a801051e056d85c360fe24bb446f488ef3da25f0b8e5cf973db1",
+          "@esbuild/linux-ppc64/bin/esbuild": "c30df60d09bb0ba4853d7b06e244ce966890d61ce60cadd9b22335f6379c316a",
+          "@esbuild/linux-riscv64/bin/esbuild": "36bdcdc8230eef385838cdfeb0d9a1565cbe4b9ace30097a511d77e894de36a1",
+          "@esbuild/linux-s390x/bin/esbuild": "bbbc1f92a76a5ca6e2976065222e42b02797363a1f119490dda315f74047741f",
+          "@esbuild/linux-x64/bin/esbuild": "e1698a3d5c6c0798fee4fd3b5cc816651f460c63d390a7a26ea4beb0b1884100",
+          "@esbuild/netbsd-arm64/bin/esbuild": "62548519d7ae875d060aa8c94bfb8ed38ef191671a5173d9f626bdb6b7516970",
+          "@esbuild/netbsd-x64/bin/esbuild": "f9d0e59d2b404559e3a0c958164d96960ebf0e04583b878b1d64d8f1c3698fcc",
+          "@esbuild/openbsd-arm64/bin/esbuild": "e10c45a0b62456632da41df058d7626b2e7cfe710780a2dc7f9f84681753f3aa",
+          "@esbuild/openbsd-x64/bin/esbuild": "720bbe607736716f2ecd37962436c5589d801966e868a2ae4e0e7e62d1e4e887",
+          "@esbuild/sunos-x64/bin/esbuild": "01a3bd9183631ca749f34d15601ea21ba6834614184c5c859f99d54bd683203d",
+          "@esbuild/win32-arm64/esbuild.exe": "530fb3933af14eefe85dfd06502f826e6ef60fdf4e75228ea67c696db312ecb1",
+          "@esbuild/win32-ia32/esbuild.exe": "b2e62af5c17e00939583be0a0762fdc469f352869a617edc91371b00454c76f0",
+          "@esbuild/win32-x64/esbuild.exe": "c7bee37877d0aa6a046e52783fa0a2cf1a9ce5579d68bb3083bda99d4bff18ef"
+        }
+      },
+      "evidenceIds": [
+        "ev-ea7076d40605296376a8a4f70fc17fdc8e85d53a9aef539e45be50016177703b"
+      ]
+    },
+    "source": {
+      "status": "usable",
+      "value": {
+        "name": "esbuild",
+        "version": "0.28.2",
+        "description": "An extremely fast JavaScript and CSS bundler and minifier.",
+        "repository": {
+          "type": "git",
+          "url": "git+https://github.com/evanw/esbuild.git"
+        },
+        "scripts": {
+          "postinstall": "node install.js"
+        },
+        "main": "lib/main.js",
+        "types": "lib/main.d.ts",
+        "engines": {
+          "node": ">=18"
+        },
+        "bin": {
+          "esbuild": "bin/esbuild"
+        },
+        "optionalDependencies": {
+          "@esbuild/aix-ppc64": "0.28.2",
+          "@esbuild/android-arm": "0.28.2",
+          "@esbuild/android-arm64": "0.28.2",
+          "@esbuild/android-x64": "0.28.2",
+          "@esbuild/darwin-arm64": "0.28.2",
+          "@esbuild/darwin-x64": "0.28.2",
+          "@esbuild/freebsd-arm64": "0.28.2",
+          "@esbuild/freebsd-x64": "0.28.2",
+          "@esbuild/linux-arm": "0.28.2",
+          "@esbuild/linux-arm64": "0.28.2",
+          "@esbuild/linux-ia32": "0.28.2",
+          "@esbuild/linux-loong64": "0.28.2",
+          "@esbuild/linux-mips64el": "0.28.2",
+          "@esbuild/linux-ppc64": "0.28.2",
+          "@esbuild/linux-riscv64": "0.28.2",
+          "@esbuild/linux-s390x": "0.28.2",
+          "@esbuild/linux-x64": "0.28.2",
+          "@esbuild/netbsd-arm64": "0.28.2",
+          "@esbuild/netbsd-x64": "0.28.2",
+          "@esbuild/openbsd-arm64": "0.28.2",
+          "@esbuild/openbsd-x64": "0.28.2",
+          "@esbuild/openharmony-arm64": "0.28.2",
+          "@esbuild/sunos-x64": "0.28.2",
+          "@esbuild/win32-arm64": "0.28.2",
+          "@esbuild/win32-ia32": "0.28.2",
+          "@esbuild/win32-x64": "0.28.2"
+        },
+        "license": "MIT",
+        "esbuild.binaryHashes": {
+          "@esbuild/aix-ppc64/bin/esbuild": "6de148b932fc5d3b28a97f9f0bc4de8e2b47db478b8ad679e0eaa6b96e00420d",
+          "@esbuild/android-arm64/bin/esbuild": "84efbbd2cbf21bbfec2aaf304bee79cb2a4a05fe2ea7b861a87f7b8f213ac27d",
+          "@esbuild/darwin-arm64/bin/esbuild": "10b6243df618d374bb2d5c9cfbe7052e1405f6aa4e53a6164f11a91b9f2e1384",
+          "@esbuild/darwin-x64/bin/esbuild": "7fe5c9c905fff0a05d92db98929434ab4d3b6dd92d7a7688922db74380c75df3",
+          "@esbuild/freebsd-arm64/bin/esbuild": "6aba108a68b93064e491bfb1ecfa28843b4d4e504dff0627f53f68f6bb015c01",
+          "@esbuild/freebsd-x64/bin/esbuild": "8a237e222bee0e50556e7b00d83ec2ff43721bf72f19811a5f0ee56f1d40177c",
+          "@esbuild/linux-arm/bin/esbuild": "d88f751b22095b2f3b42c8c2e8a3f36fabc1705438c5d6e78366b681f8b4e7a5",
+          "@esbuild/linux-arm64/bin/esbuild": "90bd269553d258e80b19e3ccab4f98f0831f87442a2f056510ce24fd1b425fc2",
+          "@esbuild/linux-ia32/bin/esbuild": "b1e2d87d79f9a2baa0d3043cdf0dc6716f9f2eea66c58f47588641fd6019f36f",
+          "@esbuild/linux-loong64/bin/esbuild": "55a66f9854d6798f36b2b5471db74f2e552481887ea14d8bda1634a512383a43",
+          "@esbuild/linux-mips64el/bin/esbuild": "6bf7921a3af4a801051e056d85c360fe24bb446f488ef3da25f0b8e5cf973db1",
+          "@esbuild/linux-ppc64/bin/esbuild": "c30df60d09bb0ba4853d7b06e244ce966890d61ce60cadd9b22335f6379c316a",
+          "@esbuild/linux-riscv64/bin/esbuild": "36bdcdc8230eef385838cdfeb0d9a1565cbe4b9ace30097a511d77e894de36a1",
+          "@esbuild/linux-s390x/bin/esbuild": "bbbc1f92a76a5ca6e2976065222e42b02797363a1f119490dda315f74047741f",
+          "@esbuild/linux-x64/bin/esbuild": "e1698a3d5c6c0798fee4fd3b5cc816651f460c63d390a7a26ea4beb0b1884100",
+          "@esbuild/netbsd-arm64/bin/esbuild": "62548519d7ae875d060aa8c94bfb8ed38ef191671a5173d9f626bdb6b7516970",
+          "@esbuild/netbsd-x64/bin/esbuild": "f9d0e59d2b404559e3a0c958164d96960ebf0e04583b878b1d64d8f1c3698fcc",
+          "@esbuild/openbsd-arm64/bin/esbuild": "e10c45a0b62456632da41df058d7626b2e7cfe710780a2dc7f9f84681753f3aa",
+          "@esbuild/openbsd-x64/bin/esbuild": "720bbe607736716f2ecd37962436c5589d801966e868a2ae4e0e7e62d1e4e887",
+          "@esbuild/sunos-x64/bin/esbuild": "01a3bd9183631ca749f34d15601ea21ba6834614184c5c859f99d54bd683203d",
+          "@esbuild/win32-arm64/esbuild.exe": "530fb3933af14eefe85dfd06502f826e6ef60fdf4e75228ea67c696db312ecb1",
+          "@esbuild/win32-ia32/esbuild.exe": "b2e62af5c17e00939583be0a0762fdc469f352869a617edc91371b00454c76f0",
+          "@esbuild/win32-x64/esbuild.exe": "c7bee37877d0aa6a046e52783fa0a2cf1a9ce5579d68bb3083bda99d4bff18ef"
+        }
+      },
+      "evidenceIds": [
+        "ev-f5af7e5a4985952cbde67db726d50d9d9e0cbe185c61b95fe3c27e4d64dc9955"
+      ]
+    },
+    "registry": {
+      "status": "usable",
+      "value": {
+        "bin": {
+          "esbuild": "bin/esbuild"
+        },
+        "bugs": {
+          "url": "https://github.com/evanw/esbuild/issues"
+        },
+        "dist": {
+          "shasum": "0f43bd1bad955b72d24e2261e3abe5957ccf0816",
+          "tarball": "https://registry.npmjs.org/esbuild/-/esbuild-0.28.2.tgz",
+          "fileCount": 7,
+          "integrity": "sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA==",
+          "signatures": [
+            {
+              "sig": "MEYCIQCUNxdzUXI/rpHaMMcf/skpuDBkNL7aLEXFFc0dex0NCAIhAMDKoRFFyK2uR0qEIAoCe4pdRrJ3ld2ZCoHNyNuX6ju7",
+              "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+            },
+            {
+              "sig": "MEUCIQC8VkNobVdJrr03U9huHI7n2VhWQ2shvrTvNYB1Mx8gigIgFkrOTUauuovxR8qg94n81hYvSw6PI2qEQkNiqHkmjcg=",
+              "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+            }
+          ],
+          "attestations": {
+            "url": "https://registry.npmjs.org/-/npm/v1/attestations/esbuild@0.28.2",
+            "provenance": {
+              "predicateType": "https://slsa.dev/provenance/v1"
+            }
+          },
+          "unpackedSize": 147361
+        },
+        "main": "lib/main.js",
+        "name": "esbuild",
+        "types": "lib/main.d.ts",
+        "engines": {
+          "node": ">=18"
+        },
+        "gitHead": "609683d892977362a0f99026cb74b96263d728a9",
+        "license": "MIT",
+        "scripts": {
+          "postinstall": "node install.js"
+        },
+        "_npmUser": {
+          "name": "GitHub Actions",
+          "email": "redacted@example.invalid",
+          "trustedPublisher": {
+            "id": "github",
+            "oidcConfigId": "oidc:b0cf120c-134e-4e78-a95a-6cbbb5de631f"
+          }
+        },
+        "homepage": "https://github.com/evanw/esbuild#readme",
+        "repository": {
+          "url": "git+https://github.com/evanw/esbuild.git",
+          "type": "git"
+        },
+        "_npmVersion": "11.5.1",
+        "description": "An extremely fast JavaScript and CSS bundler and minifier.",
+        "directories": {},
+        "maintainers": [
+          {
+            "name": "esbuild",
+            "email": "redacted@example.invalid"
+          }
+        ],
+        "_nodeVersion": "24.18.0",
+        "_hasShrinkwrap": false,
+        "esbuild.binaryHashes": {
+          "@esbuild/aix-ppc64/bin/esbuild": "6de148b932fc5d3b28a97f9f0bc4de8e2b47db478b8ad679e0eaa6b96e00420d",
+          "@esbuild/linux-arm/bin/esbuild": "d88f751b22095b2f3b42c8c2e8a3f36fabc1705438c5d6e78366b681f8b4e7a5",
+          "@esbuild/linux-x64/bin/esbuild": "e1698a3d5c6c0798fee4fd3b5cc816651f460c63d390a7a26ea4beb0b1884100",
+          "@esbuild/sunos-x64/bin/esbuild": "01a3bd9183631ca749f34d15601ea21ba6834614184c5c859f99d54bd683203d",
+          "@esbuild/win32-x64/esbuild.exe": "c7bee37877d0aa6a046e52783fa0a2cf1a9ce5579d68bb3083bda99d4bff18ef",
+          "@esbuild/darwin-x64/bin/esbuild": "7fe5c9c905fff0a05d92db98929434ab4d3b6dd92d7a7688922db74380c75df3",
+          "@esbuild/linux-ia32/bin/esbuild": "b1e2d87d79f9a2baa0d3043cdf0dc6716f9f2eea66c58f47588641fd6019f36f",
+          "@esbuild/netbsd-x64/bin/esbuild": "f9d0e59d2b404559e3a0c958164d96960ebf0e04583b878b1d64d8f1c3698fcc",
+          "@esbuild/win32-ia32/esbuild.exe": "b2e62af5c17e00939583be0a0762fdc469f352869a617edc91371b00454c76f0",
+          "@esbuild/freebsd-x64/bin/esbuild": "8a237e222bee0e50556e7b00d83ec2ff43721bf72f19811a5f0ee56f1d40177c",
+          "@esbuild/linux-arm64/bin/esbuild": "90bd269553d258e80b19e3ccab4f98f0831f87442a2f056510ce24fd1b425fc2",
+          "@esbuild/linux-ppc64/bin/esbuild": "c30df60d09bb0ba4853d7b06e244ce966890d61ce60cadd9b22335f6379c316a",
+          "@esbuild/linux-s390x/bin/esbuild": "bbbc1f92a76a5ca6e2976065222e42b02797363a1f119490dda315f74047741f",
+          "@esbuild/openbsd-x64/bin/esbuild": "720bbe607736716f2ecd37962436c5589d801966e868a2ae4e0e7e62d1e4e887",
+          "@esbuild/win32-arm64/esbuild.exe": "530fb3933af14eefe85dfd06502f826e6ef60fdf4e75228ea67c696db312ecb1",
+          "@esbuild/darwin-arm64/bin/esbuild": "10b6243df618d374bb2d5c9cfbe7052e1405f6aa4e53a6164f11a91b9f2e1384",
+          "@esbuild/netbsd-arm64/bin/esbuild": "62548519d7ae875d060aa8c94bfb8ed38ef191671a5173d9f626bdb6b7516970",
+          "@esbuild/android-arm64/bin/esbuild": "84efbbd2cbf21bbfec2aaf304bee79cb2a4a05fe2ea7b861a87f7b8f213ac27d",
+          "@esbuild/freebsd-arm64/bin/esbuild": "6aba108a68b93064e491bfb1ecfa28843b4d4e504dff0627f53f68f6bb015c01",
+          "@esbuild/linux-loong64/bin/esbuild": "55a66f9854d6798f36b2b5471db74f2e552481887ea14d8bda1634a512383a43",
+          "@esbuild/linux-riscv64/bin/esbuild": "36bdcdc8230eef385838cdfeb0d9a1565cbe4b9ace30097a511d77e894de36a1",
+          "@esbuild/openbsd-arm64/bin/esbuild": "e10c45a0b62456632da41df058d7626b2e7cfe710780a2dc7f9f84681753f3aa",
+          "@esbuild/linux-mips64el/bin/esbuild": "6bf7921a3af4a801051e056d85c360fe24bb446f488ef3da25f0b8e5cf973db1"
+        },
+        "optionalDependencies": {
+          "@esbuild/aix-ppc64": "0.28.2",
+          "@esbuild/linux-arm": "0.28.2",
+          "@esbuild/linux-x64": "0.28.2",
+          "@esbuild/sunos-x64": "0.28.2",
+          "@esbuild/win32-x64": "0.28.2",
+          "@esbuild/darwin-x64": "0.28.2",
+          "@esbuild/linux-ia32": "0.28.2",
+          "@esbuild/netbsd-x64": "0.28.2",
+          "@esbuild/win32-ia32": "0.28.2",
+          "@esbuild/android-arm": "0.28.2",
+          "@esbuild/android-x64": "0.28.2",
+          "@esbuild/freebsd-x64": "0.28.2",
+          "@esbuild/linux-arm64": "0.28.2",
+          "@esbuild/linux-ppc64": "0.28.2",
+          "@esbuild/linux-s390x": "0.28.2",
+          "@esbuild/openbsd-x64": "0.28.2",
+          "@esbuild/win32-arm64": "0.28.2",
+          "@esbuild/darwin-arm64": "0.28.2",
+          "@esbuild/netbsd-arm64": "0.28.2",
+          "@esbuild/android-arm64": "0.28.2",
+          "@esbuild/freebsd-arm64": "0.28.2",
+          "@esbuild/linux-loong64": "0.28.2",
+          "@esbuild/linux-riscv64": "0.28.2",
+          "@esbuild/openbsd-arm64": "0.28.2",
+          "@esbuild/linux-mips64el": "0.28.2",
+          "@esbuild/openharmony-arm64": "0.28.2"
+        },
+        "_npmOperationalInternal": {
+          "tmp": "tmp/esbuild_0.28.2_1786219255372_0.9596530484521715",
+          "host": "s3://npm-registry-packages-npm-production"
+        },
+        "_id": "esbuild@0.28.2",
+        "version": "0.28.2"
+      },
+      "evidenceIds": []
+    }
+  },
+  "cues": [
+    {
+      "ruleId": "syntax-environment-access",
+      "priority": "review",
+      "summary": "Syntactic capability reference; execution and binding are not proven.",
+      "literalStatus": "no-static-literal",
+      "evidenceIds": [
+        "ev-808cf887ac9ffe366622b87da90b28113c6085c10dfc80b1366b55c2753ad92a"
+      ]
+    },
+    {
+      "ruleId": "syntax-process-execution",
+      "priority": "review",
+      "summary": "Syntactic capability reference; execution and binding are not proven.",
+      "literalStatus": "not-assessed",
+      "evidenceIds": [
+        "ev-f74f87d4584ca9ef55e01216ebb4e4582f0c784321c69c82ab08a4544dbad6f6"
+      ]
+    },
+    {
+      "ruleId": "syntax-process-execution",
+      "priority": "review",
+      "summary": "Syntactic capability reference; execution and binding are not proven.",
+      "literalStatus": "no-static-literal",
+      "evidenceIds": [
+        "ev-475502fc02307a442c97a7380a9e0cb4237cfca4645c89f0ea91af199e10d354"
+      ]
+    },
+    {
+      "ruleId": "syntax-network-call",
+      "priority": "review",
+      "summary": "Syntactic capability reference; execution and binding are not proven.",
+      "literalStatus": "no-static-literal",
+      "evidenceIds": [
+        "ev-863bd17afbf0bde83d472bd0036ab1baceb1e2fb709aad342548bdf22556e58a"
+      ]
+    },
+    {
+      "ruleId": "syntax-network-call",
+      "priority": "review",
+      "summary": "Syntactic capability reference; execution and binding are not proven.",
+      "literalStatus": "no-static-literal",
+      "evidenceIds": [
+        "ev-7b1de6ca8d132851db07808342248a91c6c16073ff3a98092f72d86dd8037eba"
+      ]
+    },
+    {
+      "ruleId": "syntax-process-execution",
+      "priority": "review",
+      "summary": "Syntactic capability reference; execution and binding are not proven.",
+      "literalStatus": "no-static-literal",
+      "evidenceIds": [
+        "ev-148465a5e40dc24392f9ac10aece26948b8833990facf43d6f0f77537c963717"
+      ]
+    },
+    {
+      "ruleId": "syntax-network-call",
+      "priority": "review",
+      "summary": "Syntactic capability reference; execution and binding are not proven.",
+      "literalStatus": "no-static-literal",
+      "evidenceIds": [
+        "ev-c3aa58ca623431600f35d7f30f2730225968e95cdf100b1b0880e3adaab024ae"
+      ]
+    },
+    {
+      "ruleId": "syntax-environment-access",
+      "priority": "review",
+      "summary": "Syntactic capability reference; execution and binding are not proven.",
+      "literalStatus": "no-static-literal",
+      "evidenceIds": [
+        "ev-4c045c2c8d0b943d1e8c461b35ca79d913e2af92e23df2e707ab763163c2d36c"
+      ]
+    },
+    {
+      "ruleId": "syntax-environment-access",
+      "priority": "review",
+      "summary": "Syntactic capability reference; execution and binding are not proven.",
+      "literalStatus": "no-static-literal",
+      "evidenceIds": [
+        "ev-cab7f80015367e5507a3f7411d90fd1d1612b99b78c6219fdf1bb559b61cb7dc"
+      ]
+    },
+    {
+      "ruleId": "syntax-process-execution",
+      "priority": "review",
+      "summary": "Syntactic capability reference; execution and binding are not proven.",
+      "literalStatus": "no-static-literal",
+      "evidenceIds": [
+        "ev-3c015035d6c81dedf2451bbfd49a7336fbc1c95923f41cef4b8b701c36500ccd"
+      ]
+    },
+    {
+      "ruleId": "syntax-process-execution",
+      "priority": "review",
+      "summary": "Syntactic capability reference; execution and binding are not proven.",
+      "literalStatus": "no-static-literal",
+      "evidenceIds": [
+        "ev-c9987edef866eb15403272464556f0d2185dfdc9f84bb4d366da6b3c4ed899d2"
+      ]
+    },
+    {
+      "ruleId": "syntax-environment-access",
+      "priority": "review",
+      "summary": "Syntactic capability reference; execution and binding are not proven.",
+      "literalStatus": "no-static-literal",
+      "evidenceIds": [
+        "ev-d29d34b26b7b908926d20e2734aad815fa3398547d7e483bef757be140cc392a"
+      ]
+    },
+    {
+      "module": "manifest",
+      "ruleId": "manifest-registry-runtime-divergence",
+      "priority": "MEDIUM",
+      "summary": "Registry and artifact runtime fields differ; npm normalization is unassessed.",
+      "field": "/optionalDependencies",
+      "bindings": [
+        {
+          "side": "registry",
+          "pointer": "/optionalDependencies",
+          "present": true,
+          "valueType": "object",
+          "valueSha256": "4aeec4ce828b0b41127fde38fb28cee1d523e6205f9c65827d639261c1eb9395",
+          "keyOrder": [
+            "@esbuild/aix-ppc64",
+            "@esbuild/linux-arm",
+            "@esbuild/linux-x64",
+            "@esbuild/sunos-x64",
+            "@esbuild/win32-x64",
+            "@esbuild/darwin-x64",
+            "@esbuild/linux-ia32",
+            "@esbuild/netbsd-x64",
+            "@esbuild/win32-ia32",
+            "@esbuild/android-arm",
+            "@esbuild/android-x64",
+            "@esbuild/freebsd-x64",
+            "@esbuild/linux-arm64",
+            "@esbuild/linux-ppc64",
+            "@esbuild/linux-s390x",
+            "@esbuild/openbsd-x64",
+            "@esbuild/win32-arm64",
+            "@esbuild/darwin-arm64",
+            "@esbuild/netbsd-arm64",
+            "@esbuild/android-arm64",
+            "@esbuild/freebsd-arm64",
+            "@esbuild/linux-loong64",
+            "@esbuild/linux-riscv64",
+            "@esbuild/openbsd-arm64",
+            "@esbuild/linux-mips64el",
+            "@esbuild/openharmony-arm64"
+          ],
+          "documentSha256": "7a6838097b106ef5d8877fd543a1e25c46e5eb1730945fb7e57bc467c12c7c8c"
+        },
+        {
+          "side": "artifact",
+          "pointer": "/optionalDependencies",
+          "present": true,
+          "valueType": "object",
+          "valueSha256": "be0085a0d659c68fc0762bb98b6d298aac206c208d18a5d93bbe5acbfc002ed9",
+          "keyOrder": [
+            "@esbuild/aix-ppc64",
+            "@esbuild/android-arm",
+            "@esbuild/android-arm64",
+            "@esbuild/android-x64",
+            "@esbuild/darwin-arm64",
+            "@esbuild/darwin-x64",
+            "@esbuild/freebsd-arm64",
+            "@esbuild/freebsd-x64",
+            "@esbuild/linux-arm",
+            "@esbuild/linux-arm64",
+            "@esbuild/linux-ia32",
+            "@esbuild/linux-loong64",
+            "@esbuild/linux-mips64el",
+            "@esbuild/linux-ppc64",
+            "@esbuild/linux-riscv64",
+            "@esbuild/linux-s390x",
+            "@esbuild/linux-x64",
+            "@esbuild/netbsd-arm64",
+            "@esbuild/netbsd-x64",
+            "@esbuild/openbsd-arm64",
+            "@esbuild/openbsd-x64",
+            "@esbuild/openharmony-arm64",
+            "@esbuild/sunos-x64",
+            "@esbuild/win32-arm64",
+            "@esbuild/win32-ia32",
+            "@esbuild/win32-x64"
+          ],
+          "evidenceIds": [
+            "ev-ea7076d40605296376a8a4f70fc17fdc8e85d53a9aef539e45be50016177703b"
+          ],
+          "evidenceScope": "whole-manifest",
+          "excerptRange": [0, 512],
+          "excerptOmitted": true
+        }
+      ],
+      "evidenceIds": [
+        "ev-ea7076d40605296376a8a4f70fc17fdc8e85d53a9aef539e45be50016177703b"
+      ],
+      "normalization": "unassessed",
+      "change": "member-order"
+    },
+    {
+      "module": "manifest",
+      "ruleId": "manifest-registry-source-observation",
+      "priority": "LOW",
+      "summary": "Registry and source declared fields differ; normalization is unassessed.",
+      "field": "/optionalDependencies",
+      "bindings": [
+        {
+          "side": "registry",
+          "pointer": "/optionalDependencies",
+          "present": true,
+          "valueType": "object",
+          "valueSha256": "4aeec4ce828b0b41127fde38fb28cee1d523e6205f9c65827d639261c1eb9395",
+          "keyOrder": [
+            "@esbuild/aix-ppc64",
+            "@esbuild/linux-arm",
+            "@esbuild/linux-x64",
+            "@esbuild/sunos-x64",
+            "@esbuild/win32-x64",
+            "@esbuild/darwin-x64",
+            "@esbuild/linux-ia32",
+            "@esbuild/netbsd-x64",
+            "@esbuild/win32-ia32",
+            "@esbuild/android-arm",
+            "@esbuild/android-x64",
+            "@esbuild/freebsd-x64",
+            "@esbuild/linux-arm64",
+            "@esbuild/linux-ppc64",
+            "@esbuild/linux-s390x",
+            "@esbuild/openbsd-x64",
+            "@esbuild/win32-arm64",
+            "@esbuild/darwin-arm64",
+            "@esbuild/netbsd-arm64",
+            "@esbuild/android-arm64",
+            "@esbuild/freebsd-arm64",
+            "@esbuild/linux-loong64",
+            "@esbuild/linux-riscv64",
+            "@esbuild/openbsd-arm64",
+            "@esbuild/linux-mips64el",
+            "@esbuild/openharmony-arm64"
+          ],
+          "documentSha256": "7a6838097b106ef5d8877fd543a1e25c46e5eb1730945fb7e57bc467c12c7c8c"
+        },
+        {
+          "side": "source",
+          "pointer": "/optionalDependencies",
+          "present": true,
+          "valueType": "object",
+          "valueSha256": "be0085a0d659c68fc0762bb98b6d298aac206c208d18a5d93bbe5acbfc002ed9",
+          "keyOrder": [
+            "@esbuild/aix-ppc64",
+            "@esbuild/android-arm",
+            "@esbuild/android-arm64",
+            "@esbuild/android-x64",
+            "@esbuild/darwin-arm64",
+            "@esbuild/darwin-x64",
+            "@esbuild/freebsd-arm64",
+            "@esbuild/freebsd-x64",
+            "@esbuild/linux-arm",
+            "@esbuild/linux-arm64",
+            "@esbuild/linux-ia32",
+            "@esbuild/linux-loong64",
+            "@esbuild/linux-mips64el",
+            "@esbuild/linux-ppc64",
+            "@esbuild/linux-riscv64",
+            "@esbuild/linux-s390x",
+            "@esbuild/linux-x64",
+            "@esbuild/netbsd-arm64",
+            "@esbuild/netbsd-x64",
+            "@esbuild/openbsd-arm64",
+            "@esbuild/openbsd-x64",
+            "@esbuild/openharmony-arm64",
+            "@esbuild/sunos-x64",
+            "@esbuild/win32-arm64",
+            "@esbuild/win32-ia32",
+            "@esbuild/win32-x64"
+          ],
+          "evidenceIds": [
+            "ev-f5af7e5a4985952cbde67db726d50d9d9e0cbe185c61b95fe3c27e4d64dc9955"
+          ],
+          "evidenceScope": "whole-manifest",
+          "excerptRange": [0, 512],
+          "excerptOmitted": true
+        }
+      ],
+      "evidenceIds": [
+        "ev-f5af7e5a4985952cbde67db726d50d9d9e0cbe185c61b95fe3c27e4d64dc9955"
+      ],
+      "normalization": "unassessed",
+      "change": "member-order"
+    }
+  ],
+  "annotations": [
+    {
+      "type": "syntax-not-inspected",
+      "side": "artifact",
+      "path": "LICENSE.md",
+      "originalPath": "package/LICENSE.md",
+      "reason": "unsupported-syntax"
+    },
+    {
+      "type": "syntax-not-inspected",
+      "side": "artifact",
+      "path": "README.md",
+      "originalPath": "package/README.md",
+      "reason": "unsupported-syntax"
+    },
+    {
+      "type": "syntax-not-inspected",
+      "side": "artifact",
+      "path": "bin/esbuild",
+      "originalPath": "package/bin/esbuild",
+      "reason": "unsupported-syntax"
+    },
+    {
+      "type": "syntax-not-inspected",
+      "side": "artifact",
+      "path": "lib/main.d.ts",
+      "originalPath": "package/lib/main.d.ts",
+      "reason": "unsupported-syntax"
+    },
+    {
+      "type": "syntax-not-inspected",
+      "side": "artifact",
+      "path": "package.json",
+      "originalPath": "package/package.json",
+      "reason": "unsupported-syntax"
+    },
+    {
+      "type": "syntax-not-inspected",
+      "side": "source",
+      "path": "LICENSE.md",
+      "originalPath": "esbuild-609683d892977362a0f99026cb74b96263d728a9/npm/esbuild/LICENSE.md",
+      "reason": "unsupported-syntax"
+    },
+    {
+      "type": "syntax-not-inspected",
+      "side": "source",
+      "path": "README.md",
+      "originalPath": "esbuild-609683d892977362a0f99026cb74b96263d728a9/npm/esbuild/README.md",
+      "reason": "unsupported-syntax"
+    },
+    {
+      "type": "syntax-not-inspected",
+      "side": "source",
+      "path": "package.json",
+      "originalPath": "esbuild-609683d892977362a0f99026cb74b96263d728a9/npm/esbuild/package.json",
+      "reason": "unsupported-syntax"
+    },
+    {
+      "type": "syntax-scope",
+      "parser": "acorn@8.19.0",
+      "sourceCoverage": {
+        "files": 0,
+        "bytes": 0
+      },
+      "sourceLiteralCount": 0,
+      "sourceLiteralTruncated": false,
+      "limitation": "Literal matches are not semantic equivalence; missing literals refer only to inspected JavaScript. TypeScript, JSX, source maps, computed aliases and dynamic targets are not resolved."
+    },
+    {
+      "module": "manifest",
+      "type": "declared-output-location",
+      "label": "declared-output-location; content unverified",
+      "path": "lib/main.js",
+      "field": "/main",
+      "bindings": [
+        {
+          "side": "source",
+          "pointer": "/main",
+          "present": true,
+          "valueType": "string",
+          "value": "lib/main.js",
+          "evidenceIds": [
+            "ev-f5af7e5a4985952cbde67db726d50d9d9e0cbe185c61b95fe3c27e4d64dc9955"
+          ],
+          "evidenceScope": "whole-manifest",
+          "excerptRange": [0, 512],
+          "excerptOmitted": true
+        }
+      ],
+      "evidenceIds": [
+        "ev-f5af7e5a4985952cbde67db726d50d9d9e0cbe185c61b95fe3c27e4d64dc9955"
+      ]
+    },
+    {
+      "module": "manifest",
+      "type": "declared-output-location",
+      "label": "declared-output-location; content unverified",
+      "path": "bin/esbuild",
+      "field": "/bin/esbuild",
+      "bindings": [
+        {
+          "side": "source",
+          "pointer": "/bin/esbuild",
+          "present": true,
+          "valueType": "string",
+          "value": "bin/esbuild",
+          "evidenceIds": [
+            "ev-f5af7e5a4985952cbde67db726d50d9d9e0cbe185c61b95fe3c27e4d64dc9955"
+          ],
+          "evidenceScope": "whole-manifest",
+          "excerptRange": [0, 512],
+          "excerptOmitted": true
+        }
+      ],
+      "evidenceIds": [
+        "ev-f5af7e5a4985952cbde67db726d50d9d9e0cbe185c61b95fe3c27e4d64dc9955"
+      ]
+    },
+    {
+      "module": "manifest",
+      "type": "manifest-scope",
+      "sourceDeclarationStatus": "available",
+      "sourceDeclarationReason": "usable",
+      "status": "complete",
+      "pairs": {
+        "artifactSource": "available",
+        "registryArtifact": "available",
+        "registrySource": "available"
+      },
+      "reasons": [],
+      "unassessed": [],
+      "counts": {
+        "fieldNodes": 108,
+        "valueBytes": 2481,
+        "fieldComparisons": 118,
+        "cues": 2,
+        "declarations": 2,
+        "pathComparisons": 14,
+        "annotations": 2
+      },
+      "limitation": "Declarations describe observed fields only; no normalization, glob expansion, publish-set prediction, build reproduction or content equivalence is established."
+    }
+  ],
+  "failures": [],
+  "model": {
+    "status": "disabled"
+  },
+  "run": {
+    "timestamps": {},
+    "timings": {},
+    "surface": "web",
+    "observations": [
+      {
+        "url": "https://registry.npmjs.org/esbuild/0.28.2",
+        "observedAt": "2026-10-31T20:35:16.204Z",
+        "bytes": 5022,
+        "status": 200,
+        "contentLength": 5022
+      },
+      {
+        "url": "https://registry.npmjs.org/esbuild/-/esbuild-0.28.2.tgz",
+        "observedAt": "2026-10-31T20:35:16.591Z",
+        "bytes": 34207,
+        "status": 200,
+        "contentLength": 34207
+      },
+      {
+        "url": "https://codeload.github.com/evanw/esbuild/tar.gz/609683d892977362a0f99026cb74b96263d728a9",
+        "observedAt": "2026-10-31T20:35:16.621Z",
+        "bytes": 2011018,
+        "status": 200
+      }
+    ]
+  },
+  "policy": {
+    "exitCode": 0,
+    "findings": []
+  }
+}
