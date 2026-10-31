@@ -107,7 +107,9 @@ export async function auditLock(
   lock,
   { check, max = AUDIT_LIMITS.defaultMax, concurrency = 1, omitDev = false },
 ) {
-  const { considered, targets, skipped } = exactTargets(lock, { omitDev });
+  const { considered, targets, skipped, omitted } = exactTargets(lock, {
+    omitDev,
+  });
   const selected = targets.slice(0, max);
   const results = new Array(selected.length);
   let next = 0;
@@ -150,6 +152,7 @@ export async function auditLock(
       counts,
       binding,
       skipped,
+      omitted,
     },
     exitCode: counts.findings ? 3 : complete ? 0 : 2,
     results: [...results, ...notChecked],
@@ -158,6 +161,7 @@ export async function auditLock(
       "Removed or unpublished registry versions fail acquisition and are reported as failed, not clean.",
       "Git, URL, file, workspace and invalid entries are not audited by exact registry identity.",
       "Coverage requires each locked sha512 integrity to equal the hosted artifact sha512; unbound (no registry.npmjs.org resolved or sha512 integrity), mismatched or unreported hashes stay incomplete.",
+      "Unlocked optionalDependencies and optional peers are counted under coverage.omitted and not audited; npm does not require them, so they do not make coverage incomplete.",
       "At most --max (default 6, matching the hosted limit of six new checks per ten minutes) unique versions are checked, in name order; the rest are not-checked.",
     ],
   };
@@ -177,10 +181,18 @@ function formatText(result) {
           (item.binding && item.binding !== "verified"
             ? ` [binding ${item.binding}]`
             : "");
-    lines.push(`  ${item.status.padEnd(12)} ${item.spec}${detail}`);
+    const alias = item.aliases?.length
+      ? ` (as ${item.aliases.join(", ")})`
+      : "";
+    lines.push(`  ${item.status.padEnd(12)} ${item.spec}${alias}${detail}`);
   }
   for (const [reason, count] of Object.entries(coverage.skipped))
     lines.push(`  skipped      ${count} entries: ${reason}`);
+  const { optional, peerOptional, devEntries, devEdges } = coverage.omitted;
+  if (optional + peerOptional + devEntries + devEdges > 0)
+    lines.push(
+      `  omitted      ${optional} unlocked optional, ${peerOptional} unlocked optional peer edges; ${devEntries} dev entries, ${devEdges} dev edges (--omit-dev)`,
+    );
   lines.push(
     coverage.complete
       ? "Coverage: complete for the checked scope."
