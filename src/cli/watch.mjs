@@ -188,8 +188,11 @@ export async function watchMain(argv, runtime = {}) {
     : controller.signal;
   const onSigint = () => controller.abort();
   process.once("SIGINT", onSigint);
+  const lockfile = path.resolve(options.lockfile);
   process.stdout.write(
-    `watching ${path.resolve(options.lockfile)}; press Ctrl-C to stop\n`,
+    options.json
+      ? JSON.stringify({ type: "watching", lockfile }) + "\n"
+      : `watching ${lockfile}; press Ctrl-C to stop\n`,
   );
   try {
     const summary = await watchLockfile({
@@ -203,12 +206,20 @@ export async function watchMain(argv, runtime = {}) {
           options.json ? JSON.stringify(event) + "\n" : describe(event),
         ),
     });
+    const exitCode = summary.failed ? 2 : 130;
     process.stdout.write(
-      summary.interrupted
-        ? `watch stopped after ${summary.runs} run(s); the in-progress run was cancelled and claims no result\n`
-        : `watch stopped after ${summary.runs} run(s)\n`,
+      options.json
+        ? JSON.stringify({
+            type: "stopped",
+            runs: summary.runs,
+            interrupted: summary.interrupted,
+            exitCode,
+          }) + "\n"
+        : summary.interrupted
+          ? `watch stopped after ${summary.runs} run(s); the in-progress run was cancelled and claims no result\n`
+          : `watch stopped after ${summary.runs} run(s)\n`,
     );
-    return summary.failed ? 2 : 130;
+    return exitCode;
   } catch (error) {
     process.stderr.write(
       error instanceof LocalInputError

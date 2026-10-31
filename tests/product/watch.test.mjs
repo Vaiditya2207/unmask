@@ -134,7 +134,10 @@ test("unmask watch uses real file events and stops on SIGINT with exit 130", asy
     { env: { PATH: process.env.PATH }, stdio: ["ignore", "pipe", "pipe"] },
   );
   const killer = setTimeout(() => child.kill("SIGKILL"), 10000);
-  t.after(() => clearTimeout(killer));
+  t.after(() => {
+    clearTimeout(killer);
+    child.kill("SIGKILL");
+  });
   let stdout = "";
   child.stdout.on("data", (chunk) => (stdout += chunk));
   await until(() => stdout.includes("baseline recorded"), stdout);
@@ -190,4 +193,53 @@ test("an unexpected run error is reported, keeps the baseline and does not stop 
   );
   controller.abort();
   assert.deepEqual(await done, { runs: 2, interrupted: false, failed: false });
+});
+
+test("unmask watch --json writes only JSON lines to stdout, including start and stop", async (t) => {
+  const root = await temp(t);
+  const lockfile = path.join(root, "package-lock.json");
+  await writeFile(lockfile, lock({ a: "1.0.0" }));
+  const child = spawn(
+    process.execPath,
+    [
+      entrypoint,
+      "watch",
+      "--lockfile",
+      lockfile,
+      "--no-check",
+      "--debounce-ms",
+      "50",
+      "--json",
+    ],
+    { env: { PATH: process.env.PATH }, stdio: ["ignore", "pipe", "pipe"] },
+  );
+  const killer = setTimeout(() => child.kill("SIGKILL"), 10000);
+  t.after(() => {
+    clearTimeout(killer);
+    child.kill("SIGKILL");
+  });
+  let stdout = "";
+  child.stdout.on("data", (chunk) => (stdout += chunk));
+  await until(() => stdout.includes('"type":"baseline"'), stdout);
+  await writeFile(lockfile, lock({ a: "1.0.0", b: "2.0.0" }));
+  await until(() => stdout.includes('"type":"result"'), stdout);
+  child.kill("SIGINT");
+  const [code] = await once(child, "exit");
+  assert.equal(code, 130);
+  assert.ok(stdout.endsWith("\n"));
+  const events = stdout
+    .trimEnd()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  assert.deepEqual(
+    events.map((event) => event.type),
+    ["watching", "baseline", "result", "stopped"],
+  );
+  assert.equal(events[0].lockfile, lockfile);
+  assert.deepEqual(events.at(-1), {
+    type: "stopped",
+    runs: 1,
+    interrupted: false,
+    exitCode: 130,
+  });
 });
