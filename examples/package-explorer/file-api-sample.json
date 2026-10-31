@@ -1,0 +1,119 @@
+{
+  "contractCommit": "9d3a7646583b81c12fc5a1dd6f71c1d3795368ce",
+  "fixture": "inert synthetic report, no live package/provider requests",
+  "inventoryRoute": "/r/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/files.json?limit=50",
+  "inventory": {
+    "reportId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "schemaVersion": "1",
+    "scope": "artifact-source",
+    "state": "all",
+    "prefix": "",
+    "offset": 0,
+    "limit": 50,
+    "total": 3,
+    "files": [
+      {
+        "path": "README.md",
+        "originalPath": "package/README.md",
+        "state": "identical",
+        "comparisonState": "byte-identical",
+        "size": 13,
+        "artifactSha256": "caf9f906b16a91cb0160c50abdac8bd6db9a283fa9751f9801ef991554b46a8a",
+        "sourceSha256": "caf9f906b16a91cb0160c50abdac8bd6db9a283fa9751f9801ef991554b46a8a",
+        "reason": null,
+        "fileId": "f-t4Na_gfpnwFbCFunSe5EkHir32cHEXjKiSGDAqpw0J4"
+      },
+      {
+        "path": "index.js",
+        "originalPath": "package/index.js",
+        "state": "changed",
+        "comparisonState": "changed",
+        "size": 10,
+        "artifactSha256": "e8b2086bcd01cd7ae249908d0de7c81d2f5ca9c49d96c75097c790e629434065",
+        "sourceSha256": "fbc020523a89b9dde134af1eedc34980295b71bb736242f9ea8995b39eac5148",
+        "reason": null,
+        "fileId": "f-SScGcR35TXUe8NjcOJTufJ9VsLqt_ajCsbeHINS6c7c"
+      },
+      {
+        "path": "package.json",
+        "originalPath": "package/package.json",
+        "state": "identical",
+        "comparisonState": "byte-identical",
+        "size": 175,
+        "artifactSha256": "fa6b1f1a8418cbdefb3b985445d5953199d4783b2b048e4d7e072ec8a9e3eec2",
+        "sourceSha256": "fa6b1f1a8418cbdefb3b985445d5953199d4783b2b048e4d7e072ec8a9e3eec2",
+        "reason": null,
+        "fileId": "f-RaQzygDqZDWtyijS5LggJAZMD0xI0fIbRV2JJR9YL20"
+      }
+    ],
+    "nextOffset": null,
+    "omittedUnsafePaths": 1,
+    "inventoryComplete": true,
+    "sourceComplete": true,
+    "limitations": [
+      "States compare artifact and selected source, not releases or version history.",
+      "Source-only paths are recorded observations; their hashes, file types and excerpts may be unavailable.",
+      "Incomplete inventories and unassessed files do not establish safety or absence."
+    ]
+  },
+  "fileRoute": "/r/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/file.json?fileId=f-SScGcR35TXUe8NjcOJTufJ9VsLqt_ajCsbeHINS6c7c",
+  "detail": {
+    "reportId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "schemaVersion": "1",
+    "scope": "artifact-source",
+    "file": {
+      "path": "index.js",
+      "originalPath": "package/index.js",
+      "state": "changed",
+      "comparisonState": "changed",
+      "size": 10,
+      "artifactSha256": "e8b2086bcd01cd7ae249908d0de7c81d2f5ca9c49d96c75097c790e629434065",
+      "sourceSha256": "fbc020523a89b9dde134af1eedc34980295b71bb736242f9ea8995b39eac5148",
+      "reason": null,
+      "fileId": "f-SScGcR35TXUe8NjcOJTufJ9VsLqt_ajCsbeHINS6c7c"
+    },
+    "recordedOnly": true,
+    "evidence": [
+      {
+        "id": "ev-b5d1bf021b696685786af6b5a3d686d10c5c80515365240eff74f1cf5af858c9",
+        "side": "artifact",
+        "path": "index.js",
+        "originalPath": "package/index.js",
+        "fileSha256": "e8b2086bcd01cd7ae249908d0de7c81d2f5ca9c49d96c75097c790e629434065",
+        "blobDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "size": 10,
+        "range": [0, 0],
+        "excerpt": "",
+        "excerptRange": [0, 0],
+        "recordedExcerptRange": [0, 0],
+        "excerptTruncated": false,
+        "excerptStatus": "recorded"
+      },
+      {
+        "id": "ev-e51b851cae43980889ad41435ee79848e2733e428d1140d77c4225d4f2b83b2d",
+        "side": "source",
+        "path": "index.js",
+        "originalPath": "root/index.js",
+        "fileSha256": "fbc020523a89b9dde134af1eedc34980295b71bb736242f9ea8995b39eac5148",
+        "blobDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "size": 20,
+        "range": [0, 10],
+        "excerpt": "different ",
+        "excerptRange": [0, 10],
+        "recordedExcerptRange": [0, 10],
+        "excerptTruncated": false,
+        "excerptStatus": "recorded"
+      }
+    ],
+    "evidenceStatus": "recorded",
+    "evidenceOmitted": 0,
+    "invalidEvidenceOmitted": 0,
+    "limitations": [
+      "States compare artifact and selected source, not releases or version history.",
+      "Source-only paths are recorded observations; their hashes, file types and excerpts may be unavailable.",
+      "Incomplete inventories and unassessed files do not establish safety or absence.",
+      "Only previously recorded excerpts are returned; omitted text is not fetched or reconstructed. Hashes are recorded claims, not new artifact verification. Render excerpts as text, never HTML."
+    ]
+  },
+  "posts": 0
+}

@@ -170,7 +170,8 @@ export function buildPackageDetails(report, options = {}) {
       cueRef: `/annotations/${index}`,
     })),
   ].filter(
-    (cue) => typeof cue.ruleId === "string" && cue.ruleId.startsWith("syntax-"),
+    (cue) =>
+      typeof cue.ruleId === "string" && /^(syntax|behavior)-/.test(cue.ruleId),
   );
   observations.sort(
     (a, b) => order(a.ruleId, b.ruleId) || order(a.cueRef, b.cueRef),
@@ -203,7 +204,9 @@ export function buildPackageDetails(report, options = {}) {
   }
   const evidenceById = new Map(report.evidence.map((item) => [item.id, item]));
   const cueRefsByPath = new Map();
-  for (const cue of observations)
+  for (const cue of observations.filter((item) =>
+    item.ruleId.startsWith("syntax-"),
+  ))
     for (const id of cue.evidenceIds ?? []) {
       const evidence = evidenceById.get(id);
       if (evidence?.side !== "artifact") continue;
@@ -505,7 +508,8 @@ export function buildPackageDetails(report, options = {}) {
       },
     },
     capabilities: {
-      label: "observed syntax references; execution and bindings unproven",
+      label:
+        "recorded static syntax and behavior references; execution and bindings unproven",
       referenceFormat:
         "cueRef is a JSON pointer into the raw report; existing cue IDs, when present, are preserved. evidenceIds refer to raw-report evidence IDs.",
       groups: take(
@@ -618,9 +622,12 @@ export function buildPackageDetails(report, options = {}) {
             annotationRef: `/annotations/${index}`,
           }))
           .filter((item) =>
-            ["syntax-scope", "syntax-not-inspected", "manifest-scope"].includes(
-              item.type,
-            ),
+            [
+              "syntax-scope",
+              "syntax-not-inspected",
+              "manifest-scope",
+              "behavior-scope",
+            ].includes(item.type),
           ),
       ),
       failures: take(report.failures),

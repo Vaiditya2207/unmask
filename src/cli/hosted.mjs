@@ -95,6 +95,7 @@ async function runHosted(
     fetchImpl = globalThis.fetch,
     signal,
     limits: overrides = {},
+    existingReportId,
     optionalDetails = false,
     onStatus,
   } = {},
@@ -102,6 +103,15 @@ async function runHosted(
 ) {
   const claim = parsePackageSpec(spec);
   const origin = serverOrigin(serverUrl);
+  if (
+    existingReportId !== undefined &&
+    (typeof existingReportId !== "string" ||
+      !/^[a-f0-9]{32}$/.test(existingReportId))
+  )
+    throw failure(
+      "hosted-configuration",
+      "Use a recorded 32-character lowercase hexadecimal report ID.",
+    );
   const limits = { ...defaults, ...overrides };
   if (
     Object.keys(limits).some(
@@ -156,46 +166,48 @@ async function runHosted(
     } catch {}
   };
   try {
-    status("submitting");
-    const reportUrl = await request(
-      origin + "/check",
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/x-www-form-urlencoded",
-          accept: "application/json",
-        },
-        body: new URLSearchParams({ package: spec }),
-      },
-      async (response) => {
-        if (response.status !== 303)
-          throw failure(
-            "hosted-submit-failed",
-            `The hosted service did not accept the check (HTTP ${response.status}). No local fallback was attempted.`,
-          );
-        const location = response.headers.get("location");
-        let url;
-        try {
-          url = new URL(location, origin);
-        } catch {}
-        if (
-          !location ||
-          location.length > 2048 ||
-          !url ||
-          url.origin !== origin ||
-          url.username ||
-          url.password ||
-          url.search ||
-          url.hash ||
-          !/^\/r\/[a-f0-9]{32}$/.test(url.pathname)
-        )
-          throw failure(
-            "hosted-response",
-            "The hosted service returned an invalid report location.",
-          );
-        return url.href + ".json";
-      },
-    );
+    if (!existingReportId) status("submitting");
+    const reportUrl = existingReportId
+      ? `${origin}/r/${existingReportId}.json`
+      : await request(
+          origin + "/check",
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/x-www-form-urlencoded",
+              accept: "application/json",
+            },
+            body: new URLSearchParams({ package: spec }),
+          },
+          async (response) => {
+            if (response.status !== 303)
+              throw failure(
+                "hosted-submit-failed",
+                `The hosted service did not accept the check (HTTP ${response.status}). No local fallback was attempted.`,
+              );
+            const location = response.headers.get("location");
+            let url;
+            try {
+              url = new URL(location, origin);
+            } catch {}
+            if (
+              !location ||
+              location.length > 2048 ||
+              !url ||
+              url.origin !== origin ||
+              url.username ||
+              url.password ||
+              url.search ||
+              url.hash ||
+              !/^\/r\/[a-f0-9]{32}$/.test(url.pathname)
+            )
+              throw failure(
+                "hosted-response",
+                "The hosted service returned an invalid report location.",
+              );
+            return url.href + ".json";
+          },
+        );
     const id = new URL(reportUrl).pathname.slice(3, -5);
     for (;;) {
       const result = await request(
@@ -437,4 +449,10 @@ export async function checkHosted(spec, options) {
 
 export async function getHostedDetails(spec, options) {
   return runHosted(spec, options, true);
+}
+
+export async function getHostedDetailsForReport(spec, reportId, options = {}) {
+  if (reportId === undefined)
+    throw failure("hosted-configuration", "An existing report ID is required.");
+  return runHosted(spec, { ...options, existingReportId: reportId }, true);
 }

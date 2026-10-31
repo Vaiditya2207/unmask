@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { compareInventories } from "../../src/core/compare.mjs";
 import { createReport } from "../../src/core/report.mjs";
 
-export function explorerReport() {
+export function explorerReport(withSource = false) {
   const manifest = {
     name: "example",
     version: "1.2.3",
@@ -27,6 +27,27 @@ export function explorerReport() {
     sha256: createHash("sha256").update(text).digest("hex"),
     inspection: "retained",
   }));
+  const source = withSource
+    ? {
+        digest: { sha256: "c".repeat(64) },
+        complete: true,
+        failures: [],
+        entries: entries
+          .filter((entry) => !entry.path.startsWith("src/"))
+          .map((entry) => {
+            if (entry.path !== "index.js")
+              return { ...entry, originalPath: `root/${entry.path}` };
+            const content = Buffer.from("different inert text");
+            return {
+              ...entry,
+              originalPath: `root/${entry.path}`,
+              content,
+              size: content.length,
+              sha256: createHash("sha256").update(content).digest("hex"),
+            };
+          }),
+      }
+    : null;
   const comparison = compareInventories(
     {
       digest: { sha256: "a".repeat(64) },
@@ -34,15 +55,23 @@ export function explorerReport() {
       entries,
       failures: [],
     },
-    null,
+    source,
   );
   return createReport({
     inputs: {
       limits: { maxEntries: 20000 },
+      ...(withSource ? { sourceArchive: { sha256: "c".repeat(64) } } : {}),
       artifact: { sha256: "a".repeat(64), sha512: "b".repeat(128) },
       claim: { name: "example", version: "1.2.3" },
     },
-    source: { status: "unresolved", method: "unresolved", alternatives: [] },
+    source: withSource
+      ? {
+          status: "selected",
+          method: "user-full-SHA",
+          commit: "d".repeat(40),
+          alternatives: [],
+        }
+      : { status: "unresolved", method: "unresolved", alternatives: [] },
     comparison,
     manifests: {
       artifact: {
@@ -57,7 +86,11 @@ export function explorerReport() {
   });
 }
 
-export async function runExplorer(args, origin, built = false) {
+export async function runExplorer(
+  args,
+  origin,
+  built = process.env.UNMASK_TEST_BUILT === "1",
+) {
   const child = spawn(
     process.execPath,
     [

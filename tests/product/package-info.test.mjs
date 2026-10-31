@@ -181,3 +181,90 @@ test("details transport rejects redirect, invalid content and oversized response
     );
   }
 });
+
+test("explorer escapes zero-width text and displays recorded AI summaries only when complete", async () => {
+  const { terminalText, renderInfo } = await import("../../src/cli/info.mjs");
+  const { renderFiles } = await import("../../src/cli/files.mjs");
+  assert.equal(
+    terminalText("x\u200b\u200c\u200d\u2060\ufeffy"),
+    "x\\u200b\\u200c\\u200d\\u2060\\ufeffy",
+  );
+  const report = explorerReport();
+  const details = buildPackageDetails(report);
+  const renderers = [
+    (value) => renderInfo(value),
+    (value) =>
+      renderFiles(value, {
+        spec: "example@1.2.3",
+        state: "all",
+        path: "",
+        limit: 2,
+        offset: 0,
+      }),
+  ];
+  for (const render of renderers) {
+    report.model = {
+      status: "complete",
+      summary: "Recorded bounded assessment\u200b",
+    };
+    assert.match(
+      render({
+        report,
+        details,
+        reportUrl: `https://example.invalid/r/${"a".repeat(32)}.json`,
+      }),
+      /AI summary: Recorded bounded assessment\\u200b/,
+    );
+    report.model.status = "unavailable";
+    assert.doesNotMatch(
+      render({
+        report,
+        details,
+        reportUrl: `https://example.invalid/r/${"a".repeat(32)}.json`,
+      }),
+      /Recorded bounded assessment/,
+    );
+  }
+});
+
+test("submitted and existing-report details retain unavailable OSV instead of advisory absence", async (t) => {
+  const details = buildPackageDetails(explorerReport());
+  details.vulnerabilityCheck = {
+    source: "OSV",
+    status: "unavailable",
+    complete: false,
+    reasons: ["provider-unavailable"],
+    advisories: [],
+  };
+  const origin = await listen(
+    t,
+    createServer((req, res) => {
+      if (req.method === "POST") {
+        res.writeHead(303, { location: `/r/${"a".repeat(32)}` });
+        res.end();
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify(
+          req.url.endsWith(".details.json") ? details : explorerReport(),
+        ),
+      );
+    }),
+  );
+  const submitted = await hosted.getHostedDetails("example@1.2.3", {
+    serverUrl: origin,
+  });
+  const existing = await hosted.getHostedDetailsForReport(
+    "example@1.2.3",
+    "a".repeat(32),
+    { serverUrl: origin },
+  );
+  for (const result of [submitted, existing]) {
+    assert.equal(result.details.vulnerabilityCheck.status, "unavailable");
+    assert.equal(result.details.vulnerabilityCheck.complete, false);
+    assert.deepEqual(result.details.vulnerabilityCheck.reasons, [
+      "provider-unavailable",
+    ]);
+  }
+});
