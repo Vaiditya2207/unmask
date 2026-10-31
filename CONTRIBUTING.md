@@ -31,6 +31,11 @@ Use a commit message that describes the actual change. Run `npm run format`
 when formatting needs correction, review the resulting diff, and run checks
 again. Add and run meaningful tests when executable functionality is introduced.
 
+## Code comments
+
+Use at most one single-line comment per logical block of code. Prefer clear names
+and small functions; keep longer explanations in documentation, not block comments.
+
 ## Open the pull request
 
 On GitHub, choose **Pull requests → New pull request**. Set the base branch to
