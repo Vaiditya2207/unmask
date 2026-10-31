@@ -1,0 +1,109 @@
+{
+  "schemaVersion": "1",
+  "analyzerVersion": "0.0.0",
+  "policyVersion": "default-1",
+  "limitsVersion": "1",
+  "inputs": {
+    "artifact": {
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sha512": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "claim": {
+      "name": "fixture",
+      "version": "1.0.0"
+    },
+    "limits": {
+      "maxEntries": 1
+    }
+  },
+  "source": {
+    "status": "unresolved",
+    "method": "unresolved",
+    "alternatives": [],
+    "complete": false
+  },
+  "files": [],
+  "coverage": {
+    "inventory": {
+      "files": 0,
+      "bytes": 0,
+      "complete": false,
+      "lowerBound": true
+    },
+    "states": {
+      "byte-identical": {
+        "files": 0,
+        "bytes": 0
+      },
+      "changed": {
+        "files": 0,
+        "bytes": 0
+      },
+      "artifact-only": {
+        "files": 0,
+        "bytes": 0
+      },
+      "not-compared": {
+        "files": 0,
+        "bytes": 0
+      }
+    },
+    "compared": {
+      "files": 0,
+      "bytes": 0
+    },
+    "unresolved": {
+      "files": 0,
+      "bytes": 0
+    },
+    "syntaxInspected": {
+      "files": 0,
+      "bytes": 0
+    },
+    "modelReviewed": {
+      "files": 0,
+      "bytes": 0
+    },
+    "links": {
+      "artifact": 0,
+      "source": 0
+    },
+    "nonregular": {
+      "artifact": 0,
+      "source": 0
+    },
+    "linkEntries": [],
+    "sourceAvailable": false,
+    "sourceComplete": false,
+    "complete": false,
+    "sourceOnly": []
+  },
+  "evidence": [],
+  "manifests": {
+    "artifact": {
+      "status": "unavailable"
+    },
+    "source": {
+      "status": "unavailable"
+    },
+    "registry": {
+      "status": "unavailable"
+    }
+  },
+  "cues": [],
+  "annotations": [],
+  "failures": [],
+  "model": {
+    "status": "disabled"
+  },
+  "run": {
+    "timestamps": {},
+    "timings": {},
+    "surface": "unknown",
+    "observations": []
+  },
+  "policy": {
+    "exitCode": 2,
+    "findings": []
+  }
+}
