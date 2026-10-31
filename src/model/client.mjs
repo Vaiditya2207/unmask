@@ -9,6 +9,7 @@ import {
 import {
   SUMMARY_POLICY,
   checkedScopeFor,
+  consistentWithScope,
   hasControl,
   summaryBundle,
   unfence,
@@ -568,7 +569,7 @@ function promptFor(report, inputLimit) {
     omittedEvidenceIds: [...all].filter((id) => !selected.has(id)).sort(order),
   };
 }
-function hypothesesFor(envelope, selected, secret, evidenceGroups) {
+function hypothesesFor(envelope, selected, secret, evidenceGroups, scope) {
   if (
     !envelope ||
     typeof envelope !== "object" ||
@@ -612,8 +613,9 @@ function hypothesesFor(envelope, selected, secret, evidenceGroups) {
   }
   if (
     !exactKeys(result, ["summary", "assessment", "hypotheses"]) ||
-    !validSummary(result.summary, secret) ||
+    !validSummary(result.summary, secret, scope) ||
     !validAssessment(result.assessment, secret) ||
+    !consistentWithScope(result.assessment.uncertainty, scope) ||
     !Array.isArray(result.hypotheses) ||
     result.hypotheses.length > 5
   )
@@ -1313,6 +1315,7 @@ export function createGemmaClient(options = {}) {
               bundle.selected,
               apiKey,
               bundle.evidenceGroups,
+              bundle.scope,
             );
             check();
             return validated;
