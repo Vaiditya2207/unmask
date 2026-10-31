@@ -45,7 +45,8 @@ function text(value, max) {
     typeof value === "string" && value.trim().length > 0 && value.length <= max
   );
 }
-function promptFor(report) {
+function promptFor(report, inputLimit) {
+  const promptBytes = Math.min(PROMPT_BYTES, Math.max(0, inputLimit - 256));
   const evidence = report.evidence;
   const files = Array.isArray(report.files) ? report.files : [];
   const cues = Array.isArray(report.cues) ? report.cues : [];
@@ -428,7 +429,7 @@ function promptFor(report) {
     payload.evidenceGroups.push(descriptor);
     if (
       payload.evidence.length > 16 ||
-      Buffer.byteLength(JSON.stringify(payload)) > PROMPT_BYTES
+      Buffer.byteLength(JSON.stringify(payload)) > promptBytes
     ) {
       payload.evidence.length = previous;
       payload.evidenceGroups.pop();
@@ -447,7 +448,7 @@ function promptFor(report) {
       )
     ) {
       payload.differences.push({ path: file.path, state: file.state });
-      if (Buffer.byteLength(JSON.stringify(payload)) > PROMPT_BYTES)
+      if (Buffer.byteLength(JSON.stringify(payload)) > promptBytes)
         payload.differences.pop();
     }
   }
@@ -949,7 +950,7 @@ export function createGemmaClient(options = {}) {
       const deadline = started + totalMs;
       let bundle;
       try {
-        bundle = promptFor(report);
+        bundle = promptFor(report, inputLimit);
       } catch (error) {
         return {
           status: "unavailable",
