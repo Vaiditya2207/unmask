@@ -10,7 +10,7 @@ The CLI supports the following forms in the reviewed implementation. These
 commands require the pending package build; they are not scaffold commands.
 
 ```bash
-unmask check package-name@1.2.3 --cache-dir CACHE --out OUTPUT
+unmask check package-name@1.2.3 --out OUTPUT
 unmask check --tarball PACKAGE.tgz --offline --cache-dir CACHE --out OUTPUT
 unmask check --tarball PACKAGE.tgz --source-archive SOURCE.tgz \
   --commit FULL_SHA --source-root ARCHIVE_ROOT --offline \
@@ -22,16 +22,28 @@ A selected local source requires a full 40-character commit claim and explicit
 safe archive root. Registry and local/offline modes cannot be combined. Tags,
 ranges and mutable source refs are not accepted as exact input.
 
-The current CLI requires both `--cache-dir` and `--out`. Output writes use
+Every CLI check requires `--out`; offline checks also require `--cache-dir`.
+Hosted checks accept an optional `--cache-dir` without reading or writing it.
+Output writes use
 exclusive creation: existing `report.json` or `report.html` files are not
 silently overwritten. Package paths never become output destinations. Local
 input bytes are retained as the analyzed artifact, not replaced by registry bytes.
 Offline mode prevents registry and source acquisition, including inferred lookups.
 
-`--allow-model` is required for every CLI model request. It permits sending
-selected evidence even with `--offline`, whose scope is acquisition. Without the
-flag, no model factory is invoked. Invalid model configuration is disclosed under
-the model stage while deterministic analysis continues.
+Public exact-version checks submit only the spec to `POST /check`, then poll the
+same-origin `/r/ID.json`. The hosted report is untrusted: the CLI bounds transport,
+validates the report schema, exact claim and deterministic policy, renders escaped
+HTML locally, and returns its validated policy exit code. No local/provider key
+is read or transmitted, and hosted failures never trigger local acquisition.
+The default origin is `https://unmask-386156642190.asia-south1.run.app`;
+`UNMASK_SERVER_URL` selects another service. See [CLI configuration](cli.md) for
+bounds and release-verification prerequisites.
+
+`--allow-model` applies only to offline local evidence. It permits sending selected
+evidence even with `--offline`, whose scope is acquisition. Without the flag no
+local model factory is invoked. Invalid local model configuration is disclosed
+under the model stage while deterministic analysis continues. Hosted checks reject
+this flag and follow the service's published model/data disclosure instead.
 
 ## Module interfaces
 
