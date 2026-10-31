@@ -289,9 +289,18 @@ export function createApp({
         if (decisionMatch) {
           if (req.method !== "GET")
             return json(405, { error: "method-unavailable" }, { allow: "GET" });
-          const result = guardDecisionResponse(queue.get(decisionMatch[1]), {
-            search: decisionMatch[2] ?? "",
-          });
+          const decisionJob = queue.get(decisionMatch[1]);
+          // A job without a report keeps its exact-version advisory lookup inside advisoryResult.
+          const result = guardDecisionResponse(
+            decisionJob?.advisoryResult && !decisionJob.vulnerabilityCheck
+              ? {
+                  ...decisionJob,
+                  vulnerabilityCheck:
+                    decisionJob.advisoryResult.vulnerabilityCheck,
+                }
+              : decisionJob,
+            { search: decisionMatch[2] ?? "" },
+          );
           return json(result.status, result.body, result.headers);
         }
         if (req.method !== "GET")
