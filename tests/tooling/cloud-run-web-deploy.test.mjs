@@ -122,6 +122,7 @@ function fixture() {
         current.metadata.generation++;
         current.status.observedGeneration = current.metadata.generation;
         current.spec.template.spec.containers[0].image = image;
+        current.spec.template.metadata.name = "unmask-web-new";
         current.status.latestReadyRevisionName =
           current.status.latestCreatedRevisionName = "unmask-web-new";
         current.status.traffic.push({
@@ -200,6 +201,64 @@ test("web builds exact release, pushes verified digest, smokes tagged candidate 
   assert.ok(promote.args.includes("unmask-web-new=100"));
   assert.ok(!promote.args.includes("--to-latest"));
 });
+
+for (const previousName of [undefined, "unmask-web-old"])
+  test(`generated template revision name replaces ${previousName ?? "an absent name"} without configuration drift`, async () => {
+    const f = fixture();
+    if (previousName) f.current.spec.template.metadata.name = previousName;
+    const result = await run(f);
+    assert.equal(result.revision, "unmask-web-new");
+    assert.equal(result.status, "verified");
+    assert.deepEqual(
+      f.smokes.map((s) => s.phase),
+      ["candidate", "public"],
+    );
+    assert.deepEqual(f.current.status.traffic, [
+      { revisionName: "unmask-web-new", percent: 100 },
+    ]);
+  });
+
+for (const phase of ["staged", "candidate", "public"])
+  for (const wrongName of [undefined, "unmask-web-external"])
+    test(`${wrongName ?? "missing template name"} at ${phase} cannot authorize promotion or rollback`, async () => {
+      const f = fixture(),
+        original = f.execute;
+      const changeName = () => {
+        if (wrongName) f.current.spec.template.metadata.name = wrongName;
+        else delete f.current.spec.template.metadata.name;
+      };
+      await assert.rejects(
+        run(f, {
+          execute: (binary, args) => {
+            const text = original(binary, args);
+            if (phase === "staged" && args.includes("update")) {
+              changeName();
+              return JSON.stringify(f.current);
+            }
+            return text;
+          },
+          smoke: async (options) => {
+            if (options.phase === phase) changeName();
+            return f.smoke(options);
+          },
+        }),
+        phase === "public"
+          ? /rollback skipped/
+          : /External web configuration or route changed/,
+      );
+      assert.deepEqual(
+        f.smokes.map((s) => s.phase),
+        phase === "staged"
+          ? []
+          : phase === "candidate"
+            ? ["candidate"]
+            : ["candidate", "public"],
+      );
+      assert.equal(
+        f.calls.filter((c) => c.args.includes("update-traffic")).length,
+        phase === "public" ? 1 : 0,
+      );
+    });
 
 test("dirty or mismatched release source cannot build or push", async () => {
   for (const kind of ["dirty", "sha", "version"]) {

@@ -73,6 +73,7 @@ function fingerprint(service) {
     ])
       delete annotations[key];
   delete copy.annotations["run.googleapis.com/urls"];
+  delete copy.template?.metadata?.name;
   if (copy.template?.metadata?.labels)
     delete copy.template.metadata.labels["client.knative.dev/nonce"];
   for (const c of copy.template?.spec?.containers ?? []) delete c.image;
@@ -516,6 +517,7 @@ export async function deployWeb({
     return (
       current.metadata?.name === serviceName &&
       fingerprint(current) === preserved &&
+      current.spec?.template?.metadata?.name === revisionName &&
       current.spec?.template?.spec?.containers?.[0]?.image === image &&
       current.status.latestCreatedRevisionName === revisionName &&
       origin(current.status.url) === publicURL
