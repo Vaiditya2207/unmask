@@ -309,9 +309,15 @@ test("preflight checks changed identity through the real hosted app over local H
       exitCode: 3,
       findings: ["lifecycle-source-absent"],
       coverageComplete: true,
+      advisory: {
+        decision: "unknown",
+        reasons: ["hosted-http-503"],
+        advisories: [],
+      },
     },
   ]);
-  assert.equal(result.coverage.complete, true);
+  assert.equal(result.coverage.complete, false);
+  assert.equal(result.coverage.advisoryScreened, 0);
 });
 
 test("a workspace entry carrying artifact claims is unsupported, matching dependency screening", () => {

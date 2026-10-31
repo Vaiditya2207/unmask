@@ -102,6 +102,14 @@ fetch without a locked entry; optional dependencies excluded) is listed as
 `invalid-dependencies`; both keep coverage incomplete. The baseline itself is
 not audited; use `unmask audit` for that.
 
+Unless `--no-check` is given, bound changed identities are also screened for
+known advisories through the same hosted dependency screening and strict policy
+as `unmask ci`, in one request. Each check then carries an `advisory` decision
+(`allow`, `warn`, `block` or `unknown`). A `block`, for example known malware,
+is a finding (exit `3`) even when the package report has none. An `unknown`
+screening, such as an unavailable or rate-limited service, keeps coverage
+incomplete (exit `2`). `coverage.advisoryScreened` counts settled screenings.
+
 The `unmask-preflight-1` JSON document has `status`, `exitCode`, `changes`
 (`added`, `removed`), per-identity `checks` (`completed` with policy exit and
 finding rule IDs, `unavailable` with an error code, `not-checked` with reason, or

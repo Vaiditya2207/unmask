@@ -5,6 +5,7 @@ import { LocalInputError } from "../core/pipeline.mjs";
 import {
   formatPreflight,
   hostedChecker,
+  hostedScreener,
   lockIdentities,
   parseCount,
   preflight,
@@ -21,6 +22,7 @@ export function watchLockfile({
   maxChecks,
   check = true,
   checkPackage,
+  screenAdvisories,
   signal,
   onEvent = () => {},
   watchFactory = (directory, listener) => fsWatch(directory, listener),
@@ -63,6 +65,7 @@ export function watchLockfile({
       check,
       maxChecks,
       checkPackage,
+      screenAdvisories,
       signal,
     });
     onEvent({ type: "result", sha256: hash, result });
@@ -192,6 +195,7 @@ export async function watchMain(argv, runtime = {}) {
     const summary = await watchLockfile({
       ...options,
       checkPackage: runtime.checkPackage ?? hostedChecker(runtime),
+      screenAdvisories: runtime.screenAdvisories ?? hostedScreener(runtime),
       signal,
       watchFactory: runtime.watchFactory,
       onEvent: (event) =>
