@@ -12,6 +12,8 @@ function transport({
   wrongVersion = false,
   failedJob = false,
   wrongClaim = false,
+  model,
+  evidence = [],
 } = {}) {
   const calls = [];
   let polls = 0;
@@ -20,8 +22,9 @@ function transport({
       artifact: { kind: "registry", sha256: "d".repeat(64) },
       claim: { name: "fixture", version: wrongClaim ? "2.0.0" : "1.0.0" },
     },
+    evidence,
     policy: { exitCode: 3 },
-    model: { status: "disabled" },
+    model: model ?? { status: "disabled" },
   };
   return {
     calls,
@@ -43,7 +46,9 @@ function transport({
         return Response.json(failedJob ? { status: "failed" } : report);
       }
       if (route === location)
-        return new Response(`<html>${report.inputs.artifact.sha256}</html>`);
+        return new Response(
+          `<html>${report.inputs.artifact.sha256}${report.model.hypotheses?.[0]?.explanation ?? ""}</html>`,
+        );
       throw new Error("Unexpected smoke request");
     },
   };
@@ -116,4 +121,68 @@ test("HTTP smoke rejects a different package report returned for the submitted c
     }),
     /report|package/i,
   );
+});
+
+test("configured deployed smoke requires real-model proof rather than disabled output", async () => {
+  const f = transport();
+  await assert.rejects(
+    smokeHttpCandidate({
+      baseURL: "http://127.0.0.1:9000",
+      identity,
+      packageSpec: "fixture@1.0.0",
+      mode: "recorded",
+      modelExpectation: {
+        modelId: "configured-model",
+        configHash: "a".repeat(64),
+        provider: "google",
+        endpointHost: "generativelanguage.googleapis.com",
+        generationConfig: { temperature: 0 },
+      },
+      fetchImpl: f.fetchImpl,
+      pause: async () => {},
+    }),
+    /model|preflight|config/i,
+  );
+});
+
+test("model HTTP smoke checks normal-route citations, rendered rationale and stable follow-up", async () => {
+  const expectation = {
+    provider: "google",
+    endpointHost: "generativelanguage.googleapis.com",
+    modelId: "configured-model",
+    configHash: "a".repeat(64),
+    generationConfig: { temperature: 0 },
+  };
+  const model = {
+    ...expectation,
+    status: "complete",
+    promptHash: "b".repeat(64),
+    attempts: 1,
+    preflightCalls: 1,
+    hypotheses: [
+      {
+        category: "review-concern",
+        explanation: "Review this command.",
+        uncertainty: "Intent is unverified.",
+        alternative: "It could be packaging.",
+        citations: [{ evidenceId: "e1", quote: "install" }],
+      },
+    ],
+  };
+  const f = transport({
+    model,
+    evidence: [{ id: "e1", side: "artifact", excerpt: "install command" }],
+  });
+  const result = await smokeHttpCandidate({
+    baseURL: "http://127.0.0.1:9000",
+    identity,
+    packageSpec: "fixture@1.0.0",
+    mode: "recorded",
+    modelExpectation: expectation,
+    fetchImpl: f.fetchImpl,
+    pause: async () => {},
+  });
+  assert.equal(result.modelAcceptance, "recorded-diagnostic");
+  assert.equal(result.modelProof.hypothesesCount, 1);
+  assert.ok(f.calls.some((call) => call.route === location));
 });

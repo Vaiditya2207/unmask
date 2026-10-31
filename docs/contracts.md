@@ -1,13 +1,11 @@
 # Analysis and service contracts
 
-These contracts describe the pending implementation, not code shipped by this
-documentation-only change. See the [status and inspected revision](README.md),
+These contracts describe the reviewed implementation. Source and live deployment snapshots are distinguished in the [status and inspected revision](README.md),
 [architecture](architecture.md) and [stack](stack.md).
 
 ## Inputs and entrypoints
 
-The CLI supports the following forms in the reviewed implementation. These
-commands require the pending package build; they are not scaffold commands.
+The CLI supports these forms in a built/installed candidate. Public registry metadata now lists version `0.1.0`; this documentation review did not install or verify the published artifact.
 
 ```bash
 unmask check package-name@1.2.3 --out OUTPUT
@@ -47,7 +45,7 @@ this flag and follow the service's published model/data disclosure instead.
 
 ## Module interfaces
 
-Module paths refer to the pending layout rather than files already on main.
+Module paths below identify the implemented backend. The separately merged Next.js frontend lives under `web/`.
 
 | Module                                  | Interface and responsibility                                                                                               |
 | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
@@ -185,34 +183,26 @@ The in-process queue has one active job and one waiting slot. New admission is
 shared globally within that server process: six checks per ten minutes. Coalesced
 or reusable results do not consume a new admission. Keys bind exact identity,
 build/analyzer/policy/limits versions, effective limits and model configuration.
-Transient model failures and runner failures require a fresh POST; deterministic
-cap results can be reused. A queue wait expires after 300 seconds; execution has
+Transient model failures and runner failures require a fresh POST. Incomplete
+results are reusable only when every failure is an explicitly supported deterministic
+cap or `source-selection-unresolved` with reason `ambiguous-manifest`; mixed transient
+or unknown failures are not reusable. A queue wait expires after 300 seconds; execution has
 a 240-second deadline, including a 120-second deterministic child stage and up to
-90 seconds of model work.
+135 seconds of model work. The outer execution deadline still caps the combined stages.
 
 Reports live in a bounded in-memory LRU store: 200 entries, 64 MiB combined,
-24-hour TTL. They are lost on restart. The hosted result cap is also 64 MiB per
+up to 30 minutes after completion. Reads do not extend that TTL; capacity eviction or restart can remove results sooner. The hosted result cap is also 64 MiB per
 result, including model success and failure sections. This is a single-process
 service contract, not distributed admission or durable storage.
 
 ## Model and distribution boundaries
 
-The shared factory requires explicit model enablement, verified positive quota
-limits and configured provider access. The adapter supports a fixed Google host
-and the candidate Gemma IDs listed in the [stack](stack.md). It has no tools,
-bounds input/output, validates citations and skips calls without eligible
-evidence. Hypotheses cannot modify deterministic findings or file states.
+The shared factory requires explicit model enablement and configured provider access. The default Google route is `gemini-3.5-flash` high thinking → `gemini-3-flash-preview` minimal thinking → `gemma-4-26b-a4b-it` minimal thinking. It allows at most three generation attempts total, each at most 45 seconds, within 135 seconds overall. Invalid output can retry the same tier within that budget; scoped transient failures can fall through. Input is capped at 4,000 tokens, with default output caps of 4,096 for Gemini and 1,000 for Gemma.
 
-The pending package identity is `@xagents_in/unmask`, still private at `0.0.0` in
-the inspected source. One explicit copy build places the CLI, core, model,
-server and viewer in `dist/`. The CLI bin is `dist/cli/main.mjs` and the hosted
-entrypoint is `dist/server/main.mjs`. Both consume the same report and renderer.
-Build metadata records version, source commit when clean, dirty status and a
-source digest; the deployed tarball digest is supplied separately, not invented
-or calculated circularly from its own embedded metadata.
+Provider quota remains unknown. Default local controls are three generations/minute, 12,000 input tokens/minute and 100 generations/day, shared by the long-lived client across jobs. These controls reset on restart and do not establish provider entitlement or billing limits. The model has no tools, validates citations, and skips calls without eligible evidence. Hypotheses cannot modify findings or file states. The [live zod result](README.md#model-evidence-and-acceptance) establishes a validated Gemini advisory result, not usefulness, study or open-weight hackathon acceptance.
 
-The intended image consumes the exact packed tarball and matching lockfile.
-The reviewed snapshot has no Dockerfile or deployment proof. An npm account and
-scope are selected, but neither registry publication nor a serving image follows
-from that selection. See the existing [release contract](releases.md) for the
-guarded tooling and remaining release steps.
+The package identity is `@xagents_in/unmask`, with current source candidate `0.1.1` pending release and deployment acceptance. Release `0.1.0` was published and verified; the dated [deployment snapshot](README.md) retains its observed runtime versions and commits. One explicit copy build places the backend CLI, core, model, server and original viewer in `dist/`. The CLI bin is `dist/cli/main.mjs`, and the API entrypoint is `dist/server/main.mjs`. Build metadata records version, source commit when clean, dirty status and a source digest. The packed tarball hash is supplied separately, avoiding a circular embedded hash.
+
+The API container consumes the packed tarball and matching lockfile. The separate Next.js service has its own standalone container and serving identity; the observed candidate is `4de9ec1194ac144823102be36de0350633a7c27e`. Its `/check` proxies the API submission with a relative 303; `/api/reports/<id>` passes through job/report JSON. Live schema 1 reports link to the API's original viewer until the Next viewer has a schema mapping. Browser and hosted CLI users need no local provider key.
+
+The API `/version` returns version, commit and tarball hash. The website `/version` returns version and commit. Both observed services are recorded in the [deployment snapshot](README.md); these identifiers do not replace image-digest and routing verification on each rollout. Use `/version` for the public Cloud Run identity smoke; the API's local main-process `/healthz` route can return 404 through the platform frontend. See the [release contract](releases.md) for artifact checks; publication metadata alone does not verify an installed release.

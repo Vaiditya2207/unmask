@@ -15,6 +15,7 @@ import { verifyBuild } from "./build.mjs";
 import path from "node:path";
 import { checkPackage } from "./check-package.mjs";
 import { publishNpm, verifyNpmReceipt } from "./npm-publication.mjs";
+import { releaseDeploymentOutputs } from "./cloud-run-policy.mjs";
 
 const mode = process.argv[2];
 if (
@@ -336,7 +337,7 @@ if (mode === "prepare") {
       target_commitish: sha,
       name: plan.tag,
       draft: true,
-      body: `Commit: ${sha}\nImage: ${image}@${digest}\nChecks and candidate smoke: ${manifest.workflow}\nDeploy manually by digest in DigitalOcean App Platform. See release-manifest.json for npm asset integrity.`,
+      body: `Commit: ${sha}\nImage: ${image}@${digest}\nChecks and candidate smoke: ${manifest.workflow}\nProduction deployment follows in this workflow after complete GitHub and verified npm publication. See release-manifest.json for artifact integrity and the deploy job for serving evidence.`,
     },
   });
   for (const [name, content] of [
@@ -372,7 +373,21 @@ if (mode === "prepare") {
   });
   if (published.immutable !== true)
     throw new Error("Published release immutability was not confirmed");
+  const sealedTag = await api(`git/ref/tags/${plan.tag}`);
+  const deployment = releaseDeploymentOutputs({
+    repository,
+    manifest,
+    published,
+    sealedTag,
+  });
+  if (process.env.GITHUB_OUTPUT)
+    appendFileSync(
+      process.env.GITHUB_OUTPUT,
+      Object.entries(deployment)
+        .map(([key, value]) => `${key}=${value}\n`)
+        .join(""),
+    );
   console.log(
-    `Published immutable ${plan.tag}: ${image}@${digest}; deployment remains manual`,
+    `Published immutable ${plan.tag}: ${image}@${digest}; production deployment is handled by the dependent job`,
   );
 }

@@ -13,6 +13,7 @@ import { gzipSync } from "node:zlib";
 import tar from "tar-stream";
 import { readArchive } from "../src/core/archive.mjs";
 import { validatePackageFiles, verifyAsset } from "./release-policy.mjs";
+import { verifyDeployedModel } from "./cloud-run-policy.mjs";
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function identityValid(value) {
@@ -195,6 +196,9 @@ export async function smokeHttpCandidate({
   identity,
   packageSpec,
   mode,
+  modelExpectation,
+  healthPath = "/healthz",
+  timeoutMs = 150000,
   fetchImpl = globalThis.fetch,
   now = () => performance.now(),
   pause: wait = pause,
@@ -220,7 +224,7 @@ export async function smokeHttpCandidate({
     throw new Error(
       "Explicit candidate identity, transport mode and exact package are required",
     );
-  const deadline = now() + 150000;
+  const deadline = now() + timeoutMs;
   async function request(route, options = {}) {
     if (now() >= deadline)
       throw new Error("Candidate HTTP smoke deadline exceeded");
@@ -253,7 +257,7 @@ export async function smokeHttpCandidate({
   let health;
   for (let i = 0; i < 100; i++) {
     try {
-      health = await request("/healthz");
+      health = await request(healthPath);
       if (health.response.status === 200) break;
     } catch {}
     await wait(100);
@@ -298,7 +302,8 @@ export async function smokeHttpCandidate({
       `${report.inputs?.claim?.name}@${report.inputs?.claim?.version}` !==
         packageSpec ||
       ![0, 3].includes(report.policy?.exitCode) ||
-      !["disabled", "not-sent"].includes(report.model?.status)
+      (!modelExpectation &&
+        !["disabled", "not-sent"].includes(report.model?.status))
     )
       throw new Error(
         "Candidate did not persist a complete deterministic report for the submitted package",
@@ -306,12 +311,30 @@ export async function smokeHttpCandidate({
     break;
   }
   if (!report) throw new Error("Candidate report did not complete");
+  const modelProof = modelExpectation
+    ? verifyDeployedModel(report, modelExpectation)
+    : undefined;
   const html = await request(location);
   if (
     html.response.status !== 200 ||
     !html.body.includes(report.inputs.artifact.sha256)
   )
     throw new Error("Candidate HTML does not show the persisted report");
+  if (modelProof) {
+    const escaped = report.model.hypotheses[0].explanation.replace(
+      /[&<>"']/g,
+      (character) =>
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        })[character],
+    );
+    if (!html.body.includes(escaped))
+      throw new Error("Candidate HTML does not show the model hypothesis");
+  }
   const followup = await request(`${location}.json`);
   const persisted = JSON.parse(followup.body);
   if (
@@ -320,12 +343,24 @@ export async function smokeHttpCandidate({
     persisted.policy?.exitCode !== report.policy.exitCode
   )
     throw new Error("Candidate follow-up lost persisted report identity");
+  if (
+    modelProof &&
+    JSON.stringify(verifyDeployedModel(persisted, modelExpectation)) !==
+      JSON.stringify(modelProof)
+  )
+    throw new Error("Candidate follow-up changed model proof");
   return {
     status: "passed",
     transport: mode,
     packageSpec,
     policyExitCode: report.policy.exitCode,
-    modelAcceptance: "not-tested",
+    modelAcceptance: modelProof
+      ? mode === "live-public"
+        ? "verified-path"
+        : "recorded-diagnostic"
+      : "not-tested",
+    ...(modelProof ? { modelProof } : {}),
+    reportPath: location,
   };
 }
 

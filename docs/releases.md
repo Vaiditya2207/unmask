@@ -1,11 +1,12 @@
-# CI, releases and manual deployment
+# CI, releases and automatic deployment
 
-The repository contains a CLI, HTTP server and website. Version `0.1.0` is
-configured with `private: false`, public npm access, and enabled release/npm
-publication gates. This configuration is not proof of npm publication, public
-Cloud Run access, image acceptance or useful model output. Root must verify the
+The repository contains a CLI, HTTP server and website. The current source
+candidate is `0.1.1`, configured with `private: false`, public npm access, and
+enabled release/npm publication gates. Release `0.1.0` was published and verified;
+its dated runtime observations remain in the [deployment evidence](README.md).
+Release `0.1.1` and its deployment acceptance are pending. Root must verify the
 final exact artifact and deployed normal route before merging/releasing. Local
-tests alone do not establish those results.
+tests alone do not establish those results or general model usefulness.
 
 ## Local distribution checks
 
@@ -192,34 +193,30 @@ installation and the exact deployed image's normal HTTP flow remain release-time
 acceptance checks. Deterministic functionality can ship while hosted Gemma quality
 remains explicitly unverified.
 
-## Deploy a selected release in DigitalOcean App Platform
+## Automatic production deployment to Cloud Run
 
-The deployment portal is the existing App Platform dashboard. This change creates
-no resources or custom portal and does not auto-deploy branch pushes or GHCR
-publication. Select a verified GitHub release and its manifest. In
-**Settings → App Spec → Edit**, set its recorded `image.digest` and omit
-`image.tag`. Roll back by selecting a previously verified release's digest through
-the same editor. Do not deploy a source branch or floating `latest` tag.
+The user-authorized deployment target is Cloud Run service `unmask` in project
+`unmask-513319`, Mumbai `asia-south1`. The `deploy` job depends on completed
+`publish` in this same workflow. It requires an immutable GitHub release and
+verified npm publication, consumes the exact tested image digest and source
+commit, and uses the protected `production` environment with WIF. Only the
+`deploy` and `deploy-web` jobs receive `id-token: write`; publication and PR
+checks do not. No service-account JSON key is used.
 
-Make the initial GHCR image public manually and verify anonymous pull access.
-Configure the Web Service port, `/healthz` and any separately authorized model
-secret references. Use one app instance while reports are held in memory; scaling
-requires shared report storage or an explicit routing design to avoid report 404s.
+Root bootstraps the service and supplies the confirmed project/region/deployment
+SA/WIF references, exact smoke package and approved model-route expectations.
+Continuous releases update only the image, preserve runtime identity, secret
+references and configuration, verify candidate readiness before routing, then
+check actual serving digest, `/version`, normal POST/poll/JSON/HTML/follow-up and
+real-model output. Model-disabled smoke cannot substitute for the deployed AI
+path. A deployment job failure is not production acceptance, even if the GitHub
+release was published successfully.
 
-```yaml
-image:
-  registry_type: GHCR
-  registry: <GitHub-owner>
-  repository: <repository-name>
-  digest: sha256:<digest-from-release-manifest>
-```
-
-This excerpt is a contract, not a deployable app spec. Account, budget, region,
-instance size, visibility/pull access and runtime configuration remain operator
-prerequisites. After a separately authorized deployment, verify the serving digest
-and `/version`, then repeat the normal website/API smoke against that exact
-release. Temporal is not involved. Local tests, recorded HTTP tests and source
-inspection do not establish deployment or model acceptance.
+See [Cloud Run deployment contract](cloud-run-deployment.md) for variable names,
+WIF constraints, runtime settings, receipts and remaining live verification gaps.
+The `deploy-web` job follows successful API verification and deploys the website
+from the same release commit. The dated runtime evidence is separate from the
+pending `0.1.1` deployment. Temporal is not involved.
 
 ## Official references
 
@@ -229,5 +226,4 @@ inspection do not establish deployment or model acceptance.
 - [GitHub immutability settings endpoint](https://docs.github.com/en/rest/repos/repos#check-if-immutable-releases-are-enabled-for-a-repository)
 - [GitHub release assets](https://docs.github.com/en/rest/releases/assets)
 - [npm pack and ignore-scripts](https://docs.npmjs.com/cli/v12/commands/npm-pack/)
-- [DigitalOcean dashboard App Spec editing](https://docs.digitalocean.com/products/app-platform/how-to/update-app-spec/)
-- [DigitalOcean container image deployment](https://docs.digitalocean.com/products/app-platform/how-to/deploy-from-container-images/)
+- [Cloud Run container image deployment](https://docs.cloud.google.com/run/docs/deploying)

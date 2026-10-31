@@ -14,11 +14,12 @@ Hacktoberfest 2026, Hack Day Sonipat. See [HACKATHON.md](HACKATHON.md).
 
 The local candidate includes an npm CLI, a shared analyzer, a website with a
 bounded job queue, and an optional hosted Gemma adapter. It uses plain ESM
-JavaScript on Node.js 24.22.2. The intended npm name is `@xagents_in/unmask`;
-version `0.1.0` is configured for public npm publication. The default service is
-`https://unmask-386156642190.asia-south1.run.app`. Publication, public access and final
-model/runtime acceptance must still be verified; this configuration is not a
-released-artifact claim.
+JavaScript on Node.js 24.22.2. The npm package is `@xagents_in/unmask`.
+Release `0.1.0` was published and verified; the current source candidate is
+`0.1.1`, whose release and deployment acceptance are pending. The default service is
+`https://unmask-386156642190.asia-south1.run.app`. See the dated
+[deployment evidence](docs/README.md) for observed runtime versions and commits;
+source configuration does not establish acceptance of a new release.
 
 The analyzer reads package contents as data. It does not install the inspected
 package, run its scripts, follow archive links, or reproduce its build.
@@ -109,9 +110,10 @@ installed into a temporary directory and invoked through its real CLI binary.
 `npm run check` checks formatting; it is not static type checking. Product tests
 and local HTTP checks do not establish deployment readiness.
 
-Release publication is enabled for the `0.1.0` candidate, subject to CI and runtime
-release gates. The flow builds an immutable
-versioned artifact in CI, then a deployer selects that release separately.
+Release publication is enabled for the `0.1.1` source candidate, subject to CI
+and runtime release gates. A completed immutable release with verified npm
+publication triggers API deployment in the same workflow. Successful API
+verification then triggers website deployment for that exact release commit.
 See [release prerequisites](docs/releases.md). npm access is not required for
 local builds or testing.
 
