@@ -562,3 +562,88 @@ test("drilldown withholds conflicting source-only hashes and duplicate evidence 
   );
   assert.equal(changed.invalidEvidenceOmitted, 1);
 });
+
+test("inventory file IDs retrieve escaped long paths through real HTTP without more analysis", async (t) => {
+  const report = withEvidence();
+  const path = `${"<".repeat(4000)}x`;
+  report.files[0].path = path;
+  report.files[0].originalPath = `package/${path}`;
+  for (const item of report.evidence) {
+    item.path = path;
+    item.originalPath = `${item.side === "artifact" ? "package" : "source"}/${path}`;
+  }
+  const s = await serve(t, report);
+  const before = s.calls();
+  const inventory = await (await s.get("/files.json?state=changed")).json();
+  const file = inventory.files[0];
+  assert.match(file.fileId, /^f-[A-Za-z0-9_-]{43}$/);
+  assert.equal(file.path, path);
+  const response = await s.get(`/file.json?fileId=${file.fileId}`);
+  assert.equal(response.status, 200);
+  const text = await response.text();
+  assert.ok(Buffer.byteLength(text) <= 131072);
+  const body = JSON.parse(text);
+  assert.equal(body.file.path, path);
+  assert.equal(body.file.fileId, file.fileId);
+  assert.ok(body.evidence.length > 0);
+  assert.equal(s.calls() - before, 0);
+});
+
+test("file IDs are stable within the stored report and reject another report's ID", async (t) => {
+  const one = await serve(t, withEvidence());
+  const two = await serve(t, withEvidence());
+  const first = await (await one.get("/files.json?state=changed")).json();
+  const second = await (await two.get("/files.json?state=changed")).json();
+  const id = first.files[0].fileId;
+  assert.equal(typeof id, "string");
+  assert.notEqual(id, second.files[0].fileId);
+  const again = await (await one.get("/files.json?state=changed")).json();
+  assert.equal(again.files[0].fileId, id);
+  const byPath = await (
+    await one.get("/file.json?path=src%2Fchange.js")
+  ).json();
+  assert.equal(byPath.file.fileId, id);
+  assert.equal((await one.get(`/file.json?fileId=${id}`)).status, 200);
+  const foreign = await two.get(`/file.json?fileId=${id}`);
+  assert.equal(foreign.status, 404);
+  assert.equal((await foreign.json()).error, "file-unavailable");
+  assert.equal(
+    (await one.get(`/file.json?fileId=f-${"A".repeat(43)}`)).status,
+    404,
+  );
+});
+
+test("ID selection rejects malformed IDs and mixed or duplicate selectors", async (t) => {
+  const s = await serve(t, withEvidence());
+  const body = await (await s.get("/files.json?limit=1")).json();
+  const id = body.files[0].fileId;
+  for (const query of [
+    "fileId=",
+    "fileId=../x",
+    "fileId=f-short",
+    `fileId=${id}&fileId=${id}`,
+    `fileId=${id}&path=new.js`,
+    `fileId=${id}&originalPath=prefixless.js`,
+    `fileId=${id}&unknown=1`,
+    `fileId=${id}x`,
+  ]) {
+    const response = await s.get(`/file.json?${query}`);
+    assert.equal(response.status, 400, query);
+    assert.equal((await response.json()).error, "invalid-query");
+  }
+});
+
+test("every inventory identity including source-only and prefixless rows round-trips by ID", async (t) => {
+  const s = await serve(t, fixture());
+  const body = await (await s.get("/files.json")).json();
+  assert.equal(new Set(body.files.map((file) => file.fileId)).size, 5);
+  for (const file of body.files) {
+    const response = await s.get(`/file.json?fileId=${file.fileId}`);
+    assert.equal(response.status, 200);
+    const selected = await response.json();
+    assert.equal(selected.file.path, file.path);
+    assert.equal(selected.file.originalPath, file.originalPath);
+    assert.equal(selected.file.state, file.state);
+  }
+  assert.equal(s.calls(), 1);
+});
