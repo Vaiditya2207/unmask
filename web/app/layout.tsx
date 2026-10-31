@@ -1,32 +1,7 @@
 import type { Metadata, Viewport } from "next";
-import {
-  JetBrains_Mono,
-  Libre_Franklin,
-  Source_Serif_4,
-} from "next/font/google";
+import manifest from "../public/fonts/manifest.json";
+import "./fonts.css";
 import "./globals.css";
-
-const display = Libre_Franklin({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-display",
-  display: "swap",
-});
-
-const text = Source_Serif_4({
-  subsets: ["latin"],
-  weight: ["400", "600"],
-  style: ["normal", "italic"],
-  variable: "--font-text",
-  display: "swap",
-});
-
-const code = JetBrains_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500"],
-  variable: "--font-code",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "UNMASK · See what actually shipped",
@@ -45,12 +20,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html
-      lang="en"
-      className={`${display.variable} ${text.variable} ${code.variable}`}
-      suppressHydrationWarning
-    >
+    <html lang="en" suppressHydrationWarning>
       <head>
+        {manifest.assets
+          .filter((font) => font.preload)
+          .map((font) => (
+            <link
+              key={font.sha256}
+              rel="preload"
+              href={`/fonts/${font.file}`}
+              as="font"
+              type="font/woff2"
+              crossOrigin="anonymous"
+            />
+          ))}
         <script
           dangerouslySetInnerHTML={{
             __html: "document.documentElement.classList.add('js')",

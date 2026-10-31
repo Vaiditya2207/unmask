@@ -18,6 +18,7 @@ ENV NODE_ENV=production HOSTNAME=0.0.0.0 PORT=8080 UNMASK_API_URL=https://unmask
 LABEL org.opencontainers.image.revision=${RELEASE_COMMIT} org.opencontainers.image.version=${RELEASE_VERSION}
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
+COPY --from=build --chown=node:node /app/public ./public
 USER node
 EXPOSE 8080
 CMD ["node", "server.js"]
