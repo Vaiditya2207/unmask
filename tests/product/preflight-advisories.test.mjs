@@ -207,3 +207,153 @@ test("preflight blocks the same known-malware identity the install guard blocks,
   assert.equal(result.status, "findings");
   assert.equal(code, 3);
 });
+
+test("two changed versions of one package and an alias are each screened at their own location", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "unmask-preflight-ids-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const looked = [];
+  const screenedBodies = [];
+  const server = createApp({
+    versionInfo: {
+      version: "0.0.0",
+      commit: "b".repeat(40),
+      tarballSha256: "c".repeat(64),
+    },
+    async runAnalysis(spec) {
+      const at = spec.lastIndexOf("@");
+      const manifest = { name: spec.slice(0, at), version: spec.slice(at + 1) };
+      const file = path.join(root, spec.replace(/[@/]/g, "_"));
+      await writeFile(`${file}.tgz`, await archive(manifest, "package"));
+      await writeFile(`${file}-src.tgz`, await archive(manifest, "root"));
+      const report = await analyzeLocal({
+        tarballPath: `${file}.tgz`,
+        sourceArchivePath: `${file}-src.tgz`,
+        sourceRoot: "root",
+        commit: "d".repeat(40),
+        claim: manifest,
+      });
+      report.model = { status: "unavailable", reason: "fixture" };
+      return report;
+    },
+    async advisoryLookup(spec) {
+      looked.push(spec);
+      const at = spec.lastIndexOf("@");
+      const name = spec.slice(0, at);
+      const malicious = spec === "sneaky-helper@1.0.0";
+      return {
+        package: { name, version: spec.slice(at + 1) },
+        status: malicious ? "found" : "none-reported",
+        complete: true,
+        advisories: malicious
+          ? [
+              {
+                id: "MAL-2026-0002",
+                aliases: [],
+                summary: "Fixture malicious version",
+                affected: [
+                  {
+                    package: { ecosystem: "npm", name },
+                    ecosystemSeverity: "CRITICAL",
+                  },
+                ],
+              },
+            ]
+          : [],
+      };
+    },
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(
+    () =>
+      new Promise((resolve) => {
+        server.closeAllConnections();
+        server.close(resolve);
+      }),
+  );
+  const entry = (name, version) => ({
+    version,
+    resolved: `https://registry.npmjs.org/${name}/-/${name.split("/").pop()}-${version}.tgz`,
+    integrity: integrity(`${name}@${version}`),
+  });
+  const baseline = path.join(root, "base.json");
+  const lockfile = path.join(root, "package-lock.json");
+  await writeFile(baseline, lock([]));
+  await writeFile(
+    lockfile,
+    JSON.stringify({
+      lockfileVersion: 3,
+      packages: {
+        "": { name: "app", version: "1.0.0" },
+        "node_modules/sneaky-helper": entry("sneaky-helper", "1.0.0"),
+        "node_modules/top-fixture": entry("top-fixture", "1.0.0"),
+        "node_modules/top-fixture/node_modules/sneaky-helper": entry(
+          "sneaky-helper",
+          "2.0.0",
+        ),
+        "node_modules/short": {
+          name: "real-name",
+          ...entry("real-name", "3.0.0"),
+        },
+      },
+    }),
+  );
+  const write = process.stdout.write;
+  let out = "";
+  process.stdout.write = (chunk) => ((out += chunk), true);
+  let code;
+  try {
+    code = await main(
+      ["preflight", "--baseline", baseline, "--lockfile", lockfile, "--json"],
+      {
+        env: {
+          UNMASK_SERVER_URL: `http://127.0.0.1:${server.address().port}`,
+        },
+        hostedLimits: { pollMs: 1, totalTimeoutMs: 5000 },
+        fetchImpl: (url, options) => {
+          if (String(url).endsWith("/api/dependency-screening"))
+            screenedBodies.push(Buffer.from(options.body).toString());
+          return fetch(url, options);
+        },
+      },
+    );
+  } finally {
+    process.stdout.write = write;
+  }
+  const result = JSON.parse(out);
+  assert.deepEqual(
+    Object.fromEntries(
+      result.checks.map((item) => [
+        `${item.name}@${item.version}`,
+        item.advisory.decision,
+      ]),
+    ),
+    {
+      "sneaky-helper@1.0.0": "block",
+      "top-fixture@1.0.0": "allow",
+      "sneaky-helper@2.0.0": "allow",
+      "real-name@3.0.0": "allow",
+    },
+  );
+  assert.deepEqual(
+    result.checks.find(
+      (item) => item.version === "1.0.0" && item.name === "sneaky-helper",
+    ).advisory.advisories,
+    ["MAL-2026-0002"],
+  );
+  assert.deepEqual([...looked].sort(), [
+    "real-name@3.0.0",
+    "sneaky-helper@1.0.0",
+    "sneaky-helper@2.0.0",
+    "top-fixture@1.0.0",
+  ]);
+  const sent = JSON.parse(screenedBodies[0]).packages;
+  assert.equal(sent["node_modules/sneaky-helper"].version, "1.0.0");
+  assert.equal(
+    sent["node_modules/top-fixture/node_modules/sneaky-helper"].version,
+    "2.0.0",
+  );
+  assert.equal(result.status, "findings");
+  assert.equal(result.coverage.advisoryScreened, 4);
+  assert.equal(code, 3);
+});

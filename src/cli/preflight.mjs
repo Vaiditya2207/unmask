@@ -2,7 +2,7 @@ import { readFile, stat } from "node:fs/promises";
 import { LocalInputError } from "../core/pipeline.mjs";
 import { checkHosted } from "./hosted.mjs";
 import { screenPlan } from "./install-guard.mjs";
-import { parseLockfile, unresolvedEdges } from "./lockfile.mjs";
+import { nameFromKey, parseLockfile, unresolvedEdges } from "./lockfile.mjs";
 
 export const PREFLIGHT_SCHEMA = "unmask-preflight-1";
 const MAX_LOCKFILE_BYTES = 32 * 1024 * 1024;
@@ -262,12 +262,20 @@ export function hostedChecker(runtime) {
 export function hostedScreener(runtime) {
   return async (items, { signal } = {}) => {
     const packages = { "": { name: "unmask-preflight", version: "0.0.0" } };
-    for (const item of items)
-      packages[`node_modules/${item.name}`] = {
+    // Every identity keeps its own lockfile locations; alias-only identities get a private nested slot.
+    for (const [index, item] of items.entries()) {
+      const entry = {
         version: item.version,
         resolved: `https://registry.npmjs.org/${item.name}/-/${item.name.split("/").pop()}-${item.version}.tgz`,
         integrity: item.integrity,
       };
+      const keys = item.paths.filter((key) => nameFromKey(key) === item.name);
+      if (!keys.length)
+        keys.push(
+          `node_modules/unmask-preflight-slot-${index}/node_modules/${item.name}`,
+        );
+      for (const key of keys) packages[key] = entry;
+    }
     const result = await screenPlan(
       {
         packages: items.map((item) => ({
