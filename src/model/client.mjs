@@ -496,10 +496,20 @@ function promptFor(report, inputLimit) {
       hunkTier = item.priority;
       addHunks();
     }
-    const descriptor = describe(item);
+    let descriptor = describe(item);
+    // An empty insertion-point span has no text to cite, so it no longer hides the group's citable members.
+    const citable = item.evidenceIds.filter((id) => entries.has(id));
+    const marker = (id) => {
+      const raw = rawEntries.get(id);
+      return (
+        raw?.excerpt === "" &&
+        Array.isArray(raw.range) &&
+        raw.range[0] === raw.range[1]
+      );
+    };
     if (
-      !item.evidenceIds.length ||
-      item.evidenceIds.some((id) => !entries.has(id))
+      !citable.length ||
+      item.evidenceIds.some((id) => !entries.has(id) && !marker(id))
     ) {
       omittedEvidenceGroups.push({
         ...descriptor,
@@ -507,7 +517,9 @@ function promptFor(report, inputLimit) {
       });
       continue;
     }
-    const additions = item.evidenceIds
+    if (citable.length < item.evidenceIds.length)
+      descriptor = { ...descriptor, evidenceIds: citable, paired: false };
+    const additions = citable
       .filter((id) => !selected.has(id))
       .map((id) => entries.get(id));
     if (admit(descriptor, additions)) continue;
