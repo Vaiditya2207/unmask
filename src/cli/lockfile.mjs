@@ -32,7 +32,7 @@ export const isExactVersion = (value) =>
 export const isPackageName = (value) =>
   typeof value === "string" && value.length <= 214 && NAME.test(value);
 
-function nameFromKey(key) {
+export function nameFromKey(key) {
   const index = key.lastIndexOf("node_modules/");
   return index === -1 ? null : key.slice(index + "node_modules/".length);
 }
