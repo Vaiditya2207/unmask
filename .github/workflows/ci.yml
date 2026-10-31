@@ -52,3 +52,30 @@ jobs:
         run: node scripts/check-candidate.mjs
       - name: Inspect npm archive allowlist
         run: npm run check:package
+
+  web-checks:
+    name: Website checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install locked website dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Test website data contracts
+        run: npm test
+      - name: Check website types
+        run: npm run typecheck
+      - name: Build the production website
+        run: npm run build -- --webpack
