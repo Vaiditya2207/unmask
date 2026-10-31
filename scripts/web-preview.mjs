@@ -282,17 +282,31 @@ export function githubAPI({ token, fetchImpl = globalThis.fetch }) {
       (baseRoute || forkContent) && !route.includes(".."),
       "Unexpected GitHub API route",
     );
-    return boundedJSON(
-      await fetchImpl(`https://api.github.com${route}`, {
-        redirect: "error",
-        signal: AbortSignal.timeout(30000),
-        headers: {
-          accept: "application/vnd.github+json",
-          authorization: `Bearer ${token}`,
-          "x-github-api-version": "2022-11-28",
-        },
-      }),
-    );
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await boundedJSON(
+          await fetchImpl(`https://api.github.com${route}`, {
+            redirect: "error",
+            signal: AbortSignal.timeout(30000),
+            headers: {
+              accept: "application/vnd.github+json",
+              authorization: `Bearer ${token}`,
+              "x-github-api-version": "2022-11-28",
+              connection: "close",
+            },
+          }),
+        );
+      } catch (error) {
+        if (
+          attempt !== 0 ||
+          !["UND_ERR_SOCKET", "ECONNRESET", "EPIPE"].includes(
+            error?.cause?.code,
+          )
+        )
+          throw error;
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+    }
   };
 }
 export async function preparePreview({ event, api, metadata }) {
