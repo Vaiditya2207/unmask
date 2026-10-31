@@ -27,6 +27,10 @@ tar-stream. Exact-version parsing is implemented locally; there is no `semver`
 dependency. Citation validation lives in `model/client.mjs`; configuration is
 shared through `model/config.mjs`, without a separate citations module.
 
+The selected hosting design is a single DigitalOcean App Platform service for
+both frontend and API. No deployment has been applied; image identity, serving
+routes and the normal end-to-end request still need deployment acceptance.
+
 ## Resource defaults
 
 These are source-level budgets, not measured production capacity or an OS memory
@@ -62,7 +66,13 @@ The reviewed adapter supports `gemma-4-26b-a4b-it` and `gemma-4-31b-it` on the f
 Google endpoint, defaulting to the former. A supported identifier is not proof
 of current account availability. There is no selected alternate provider path.
 Generation is explicit: temperature zero, one candidate, bounded output, and
-minimal thinking configuration. Actual provider behavior remains to be verified.
+minimal thinking configuration. A minimal diagnostic succeeded for metadata
+lookup and token counting with `gemma-4-26b-a4b-it`, but hosted generation returned
+HTTP `403` `PERMISSION_DENIED`: the configured project's free tier is unavailable.
+No generated output was obtained. Successful generation, acceptance of the
+thinking configuration, quota behavior, latency and model quality remain
+unvalidated. This was not a normal package-analysis request; no billing changes
+or alternate-model calls were made.
 
 The shared factory is disabled unless `UNMASK_MODEL=on` and
 `UNMASK_MODEL_QUOTA_VERIFIED=true`. Positive integer request-per-minute,

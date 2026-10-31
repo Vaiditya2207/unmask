@@ -274,5 +274,8 @@ code. Model quotations validate locations, not reasoning quality.
 
 The current scope is npm only, without PyPI support, release monitoring or a
 watch service. There is no durable shared queue, distributed report store or
-multi-instance routing guarantee. No deployed image, provider availability,
+multi-instance routing guarantee. No deployed image, successful hosted generation,
 production load result or user validation is established by these diagrams.
+The latest minimal provider diagnostic reached metadata and token counting, but
+generation is blocked by the configured project's unavailable free tier. See the
+[model status](../HACKATHON.md) for the acceptance boundary.
