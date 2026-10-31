@@ -16,7 +16,13 @@ const versionInfo = {
   commit: "d".repeat(40),
   tarballSha256: "e".repeat(64),
 };
-function fixture({ manifest: overrides = {}, claim, manifestStatus } = {}) {
+function fixture({
+  manifest: overrides = {},
+  claim,
+  manifestStatus,
+  expectedIntegrity = { status: "unavailable" },
+  files: extraFiles = {},
+} = {}) {
   const manifest = {
     name: "@acme/widget",
     version: "1.2.3+build.1",
@@ -33,6 +39,7 @@ function fixture({ manifest: overrides = {}, claim, manifestStatus } = {}) {
     "node_modules/inner/package.json": '{"name":"inner","version":"0.0.1"}',
     "node_modules/inner/index.js": "x",
     "node_modules/@ns/undeclared/index.js": "y",
+    ...extraFiles,
   }).map(([path, text]) => ({
     path,
     originalPath: `package/${path}`,
@@ -56,7 +63,7 @@ function fixture({ manifest: overrides = {}, claim, manifestStatus } = {}) {
       artifact: {
         sha256: "a".repeat(64),
         sha512: "b".repeat(128),
-        expectedIntegrity: { status: "unavailable" },
+        expectedIntegrity,
       },
       ...(claim === null
         ? {}
@@ -158,11 +165,26 @@ test("CycloneDX SBOM reports identity conflicts and unusable manifests without i
   const conflict = buildCycloneDxSbom(
     fixture({ claim: { name: "other", version: "2.0.0" } }),
   );
-  assert.equal(conflict.metadata.component.name, "other");
-  assert.equal(conflict.metadata.component.purl, "pkg:npm/other@2.0.0");
+  const root = conflict.metadata.component;
+  assert.equal(root.group, "@acme");
+  assert.equal(root.name, "widget");
+  assert.equal(root.version, "1.2.3+build.1");
+  assert.equal(root.purl, undefined);
+  assert.equal(prop(root, "identity-status"), "claim-conflicts-with-manifest");
+  assert.equal(prop(root, "requested-identity"), "other@2.0.0");
+  assert.equal(prop(root, "declared-identity"), "@acme/widget@1.2.3+build.1");
+  assert.doesNotMatch(JSON.stringify(conflict), /pkg:npm\/other/u);
+  const claimOnly = buildCycloneDxSbom(
+    fixture({
+      claim: { name: "@acme/widget", version: "1.2.3+build.1" },
+      manifestStatus: "invalid",
+    }),
+  );
+  assert.equal(claimOnly.metadata.component.name, "unidentified-npm-artifact");
+  assert.equal(claimOnly.metadata.component.purl, undefined);
   assert.equal(
-    prop(conflict.metadata.component, "identity-status"),
-    "claim-conflicts-with-manifest",
+    prop(claimOnly.metadata.component, "requested-identity"),
+    "@acme/widget@1.2.3+build.1",
   );
   const unusable = buildCycloneDxSbom(
     fixture({ claim: null, manifestStatus: "invalid" }),
@@ -261,4 +283,49 @@ test("SBOM route refuses failed and malformed reports instead of exporting guess
   );
   assert.equal(response.status, 422);
   assert.deepEqual(await response.json(), { error: "report-not-exportable" });
+});
+
+test("CycloneDX SBOM keeps nested bundled packages off the root edge list and reports integrity outcome", () => {
+  const sbom = buildCycloneDxSbom(
+    fixture({
+      files: {
+        "node_modules/inner/node_modules/deep/index.js": "z",
+        "lib/node_modules/vendored/index.js": "w",
+      },
+      expectedIntegrity: { algorithm: "sha256", digest: "0".repeat(64) },
+    }),
+  );
+  const byRef = new Map(sbom.components.map((item) => [item["bom-ref"], item]));
+  const deep = byRef.get("unmask:bundled:node_modules/inner/node_modules/deep");
+  const vendored = byRef.get("unmask:bundled:lib/node_modules/vendored");
+  assert.equal(prop(deep, "bundled-location"), "nested");
+  assert.equal(prop(deep, "bundled-within"), "node_modules/inner");
+  assert.equal(prop(vendored, "bundled-within"), "lib");
+  assert.equal(
+    prop(byRef.get("unmask:bundled:node_modules/inner"), "bundled-location"),
+    "artifact-root-node-modules",
+  );
+  const edges = sbom.dependencies[0].dependsOn;
+  assert.ok(edges.includes("unmask:bundled:node_modules/inner"));
+  assert.ok(!edges.includes(deep["bom-ref"]));
+  assert.ok(!edges.includes(vendored["bom-ref"]));
+  assert.equal(sbom.dependencies.length, 1);
+  assert.ok(sbom.compositions[1].dependencies.includes(deep["bom-ref"]));
+  assert.equal(prop(sbom.metadata.component, "expected-integrity"), "mismatch");
+  const matching = buildCycloneDxSbom(
+    fixture({
+      expectedIntegrity: { algorithm: "sha512", digest: "b".repeat(128) },
+    }),
+  );
+  assert.equal(
+    prop(matching.metadata.component, "expected-integrity"),
+    "matches",
+  );
+  assert.equal(
+    prop(
+      buildCycloneDxSbom(fixture()).metadata.component,
+      "expected-integrity",
+    ),
+    "unavailable",
+  );
 });

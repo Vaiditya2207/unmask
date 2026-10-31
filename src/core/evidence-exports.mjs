@@ -61,13 +61,22 @@ export function reportIdentity(report) {
         : declared
           ? "manifest-declared-unclaimed"
           : "unknown";
-  const name = claim?.name ?? declaredName;
-  const version = claim?.version ?? declaredVersion;
+  // Only bind a purl when the artifact's own manifest agrees with (or stands in for) the claim.
+  const bound = [
+    "claim-matches-manifest",
+    "manifest-declared-unclaimed",
+  ].includes(status);
+  const name =
+    bound || status === "claim-conflicts-with-manifest" ? declaredName : null;
+  const version =
+    bound || status === "claim-conflicts-with-manifest"
+      ? declaredVersion
+      : null;
   return {
     status,
     name,
     version,
-    purl: npmPurl(name, version),
+    purl: bound ? npmPurl(name, version) : null,
     requested: claim ? { name: claim.name, version: claim.version } : null,
     declared: declared
       ? { name: declaredName, version: declaredVersion }
@@ -75,6 +84,15 @@ export function reportIdentity(report) {
     manifestStatus: manifest.status,
     declaredManifest: declared,
   };
+}
+
+export function integrityStatus(artifact) {
+  const expected = artifact.expectedIntegrity;
+  if (!expected) return "not-recorded";
+  if (expected.status === "unavailable") return "unavailable";
+  return expected.digest === artifact[expected.algorithm]
+    ? "matches"
+    : "mismatch";
 }
 
 function bundledObservations(report) {
@@ -89,7 +107,13 @@ function bundledObservations(report) {
       if (end >= segments.length) continue;
       const name = segments.slice(i + 1, end).join("/");
       const prefix = segments.slice(0, end).join("/");
-      const item = found.get(prefix) ?? { prefix, name, files: 0, bytes: 0 };
+      const item = found.get(prefix) ?? {
+        prefix,
+        name,
+        within: i === 0 ? null : segments.slice(0, i).join("/"),
+        files: 0,
+        bytes: 0,
+      };
       item.files++;
       item.bytes += file.size;
       found.set(prefix, item);
@@ -179,12 +203,19 @@ export function buildCycloneDxSbom(report, { toolVersion = null } = {}) {
           property("resolution", "unresolved"),
           property("evidence", "observed-bundled-path-in-artifact"),
           property("bundled-path", item.prefix),
+          property(
+            "bundled-location",
+            item.within === null ? "artifact-root-node-modules" : "nested",
+          ),
+          ...(item.within === null
+            ? []
+            : [property("bundled-within", item.within)]),
           property("bundled-files", item.files),
           property("bundled-bytes", item.bytes),
           property("bundled-declared", bundledDeclared.has(item.name)),
         ],
       },
-      true,
+      item.within === null,
     );
   }
   const root = {
@@ -202,12 +233,23 @@ export function buildCycloneDxSbom(report, { toolVersion = null } = {}) {
     properties: [
       property("identity-status", identity.status),
       property("manifest-status", identity.manifestStatus),
-      property(
-        "expected-integrity",
-        artifact.expectedIntegrity?.status ??
-          artifact.expectedIntegrity?.algorithm ??
-          "not-recorded",
-      ),
+      property("expected-integrity", integrityStatus(artifact)),
+      ...(identity.requested
+        ? [
+            property(
+              "requested-identity",
+              `${identity.requested.name}@${identity.requested.version}`,
+            ),
+          ]
+        : []),
+      ...(typeof identity.declared?.name === "string"
+        ? [
+            property(
+              "declared-identity",
+              `${identity.declared.name}@${identity.declared.version}`,
+            ),
+          ]
+        : []),
       property("source-status", report.source.status),
       property("source-method", report.source.method),
       ...(report.source.commit
