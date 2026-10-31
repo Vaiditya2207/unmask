@@ -56,3 +56,64 @@ service, and no local model configuration is read. Do not pass provider keys in
 
 Localhost synthetic HTTP/CLI tests establish the adapter contract. They do not
 establish deployed service availability, provider quotas or model usefulness.
+
+## Preflight
+
+`unmask preflight` compares exact npm lockfile identities (lockfileVersion 2
+or 3) against a baseline lockfile and checks only the changed identities through
+the hosted service. It reads both files and never runs git, installs or package
+code.
+
+```bash
+git show origin/main:package-lock.json > /tmp/base-lock.json
+unmask preflight --baseline /tmp/base-lock.json --lockfile package-lock.json --json
+```
+
+Options: `--lockfile FILE` (default `package-lock.json`), `--baseline FILE`
+(required), `--max-checks N` (1-100, default 6 to match the hosted service's new
+check limit, sequential), `--no-check` (diff only) and `--json`. A changed
+identity is a new `name@version`, or an existing one whose recorded `resolved`
+or `integrity` changed in any location, including removal of either field.
+Lockfile parsing is shared with `unmask audit`: changed non-registry or
+non-exact entries are listed under `coverage.unsupported`, and local workspaces
+and links are not checked. A changed identity that is not bound (a
+`registry.npmjs.org` tarball URL plus a sha512 integrity in every location) is
+still checked by name and version, but counts under `coverage.unbound` and keeps
+coverage incomplete, because the checked artifact is not tied to what npm will
+install. The baseline itself is not audited; use `unmask audit` for that.
+
+The `unmask-preflight-1` JSON document has `status`, `exitCode`, `changes`
+(`added`, `removed`), per-identity `checks` (`completed` with policy exit and
+finding rule IDs, `unavailable` with an error code, `not-checked` with reason, or
+`cancelled`), a `cancelled` flag and `coverage` (`complete`, `required`,
+`checked`, `unbound`, `unsupported`). A finding keeps status `findings` and exit
+`3` even if a later check is cancelled.
+Exit `3` means at least one checked change has a default-policy finding, `2`
+means coverage is incomplete (unsupported, unbound, unavailable, limited, disabled or
+hosted-incomplete checks) or the input is invalid, and `0` means every changed
+identity was bound and checked with no default-policy finding. Exit `0` does not mean safe:
+an advisory miss, a removed registry version or a hosted cache reuse can still
+hide malware.
+
+## Watch
+
+`unmask watch` is an explicit, opt-in foreground watcher for one project
+lockfile. It records the current valid lockfile as its baseline, then, after
+changes settle for the debounce period, runs the same exact-identity preflight
+against the last valid snapshot and prints each result. The baseline itself is
+not audited; run `unmask audit` for it.
+
+```bash
+unmask watch --lockfile package-lock.json [--debounce-ms 750] [--max-checks 6] [--no-check] [--json]
+```
+
+Duplicate file events and byte-identical rewrites do not start a run. An
+unreadable or invalid intermediate lockfile (for example a partial npm write) is
+reported and no check is run; the last valid baseline is kept. Runs never
+overlap: changes during a run are coalesced into one follow-up run. After each
+run without a cancelled check its lockfile becomes the new baseline, so a finding is reported
+once; rerun `unmask preflight` for a cumulative view. Ctrl-C cancels any
+in-progress hosted check, reports that run as `cancelled` without a result, and
+exits `130`. An unexpected run error is reported as `run-error`, claims no
+result and keeps the baseline; watching continues. A watcher failure exits `2`. `--json` prints one JSON event per line.
+Watch never installs packages or runs package code.
