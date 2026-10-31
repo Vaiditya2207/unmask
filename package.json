@@ -27,6 +27,9 @@
   "files": [
     "dist"
   ],
+  "bin": {
+    "unmask": "dist/cli/main.mjs"
+  },
   "dependencies": {
     "acorn": "8.19.0",
     "tar-stream": "3.2.2"
