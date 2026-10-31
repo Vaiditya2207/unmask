@@ -11,8 +11,9 @@ repositories and explain differences using inspectable evidence.
 
 This repository contains the development scaffold. The analyzer, model
 integration, and user interface will be implemented in subsequent pull requests.
-The first target ecosystem is npm JavaScript packages. The application stack
-has not been selected; Node.js currently runs repository formatting tools only.
+The first target ecosystem is npm JavaScript packages. The website and report
+viewer are a Next.js app in [`web/`](web/README.md); the analyzer stack has not
+been selected.
 
 See [HACKATHON.md](HACKATHON.md) for team details and the planned model.
 
@@ -26,6 +27,7 @@ docs/                       Technical documentation
 examples/                   Guidance for future inputs and outputs
 src/                        Application source, to be added
 tests/                      Application tests, to be added
+web/                        Next.js website and report viewer
 CONTRIBUTING.md              Branch, review, and testing workflow
 HACKATHON.md                 Team and problem statement
 LICENSE                     MIT license
