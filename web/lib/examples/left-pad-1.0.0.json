@@ -1,0 +1,482 @@
+{
+  "schemaVersion": "1",
+  "analyzerVersion": "0.0.0",
+  "policyVersion": "default-1",
+  "limitsVersion": "1",
+  "inputs": {
+    "artifact": {
+      "sha256": "4cedd527c23954a4a8dd1a8108b6839dff8178ca0dc108245df06da912ef348f",
+      "sha512": "5ef972e0259fcd3fbb4c665107641deee6f6766243a2664235fdc1b93dd75dfacd7ab407b6d6bcd8d3616ef4e8538422cfb207ae0db5601dd4a4bffa9e90ad9a",
+      "kind": "registry",
+      "expectedIntegrity": {
+        "algorithm": "sha512",
+        "digest": "5ef972e0259fcd3fbb4c665107641deee6f6766243a2664235fdc1b93dd75dfacd7ab407b6d6bcd8d3616ef4e8538422cfb207ae0db5601dd4a4bffa9e90ad9a",
+        "status": "match"
+      },
+      "provenance": {
+        "status": "not-assessed"
+      }
+    },
+    "limits": {
+      "compressedBytes": 52428800,
+      "expandedBytes": 262144000,
+      "entries": 20000,
+      "ratio": 100,
+      "fileBytes": 10485760,
+      "parseMs": 30000,
+      "metadataBytes": 65536,
+      "pathBytes": 4096,
+      "pathDepth": 64,
+      "pathNodes": 40000,
+      "retentionBudgetBytes": 134217728,
+      "syntax": {
+        "fileBytes": 2097152,
+        "totalBytesPerSide": 8388608,
+        "tokens": 200000,
+        "cues": 1000,
+        "sourceLiterals": 10000
+      },
+      "manifest": {
+        "fieldNodes": 4096,
+        "depth": 12,
+        "valueBytes": 65536,
+        "totalValueBytes": 262144,
+        "fieldComparisons": 8192,
+        "cues": 128,
+        "declarations": 256,
+        "pathComparisons": 20000,
+        "annotations": 512
+      },
+      "acquisition": {
+        "metadataBytes": 1048576,
+        "timeoutMs": 30000,
+        "redirects": "forbidden"
+      }
+    },
+    "claim": {
+      "name": "left-pad",
+      "version": "1.0.0"
+    },
+    "syntaxParser": "acorn@8.19.0",
+    "registryDocument": {
+      "sha256": "cbdaa0b16458c976e2ca35a90b1280b8b408fce48f4d6422e1503a7a97013d8c",
+      "sha512": "3d4a457a3ba943409270b97f7d2040dd9c64ba78e4a951032809a25274b2076fafb37b3fb8c9d009872d6ed903c5119289bd0e259e160e4e922a83e7272394cb",
+      "kind": "registry"
+    }
+  },
+  "source": {
+    "status": "unresolved",
+    "method": "unresolved",
+    "complete": false,
+    "alternatives": [],
+    "reason": "no-full-sha-source-candidate"
+  },
+  "files": [
+    {
+      "path": ".npmignore",
+      "originalPath": "package/.npmignore",
+      "size": 30,
+      "artifactSha256": "09461718e3e1584c24329fbf7022cde09edf18944a5f11ce3b50dc1d6da74991",
+      "state": "not-compared",
+      "localization": "whole-file",
+      "evidenceIds": [
+        "ev-2b4d14c3e408eaa02bb35a7aaea895e6449d0589b82cb4db91743c7a6388a05f"
+      ],
+      "reason": "source-unavailable"
+    },
+    {
+      "path": "README.md",
+      "originalPath": "package/README.md",
+      "size": 227,
+      "artifactSha256": "cfe7fb18fdafabf4e8fbae74234bda50e4fcd28b21db49133a0e7baa16aee081",
+      "state": "not-compared",
+      "localization": "whole-file",
+      "evidenceIds": [
+        "ev-e8587bc473440d697b711a6bf3dd695ee5c197357868d3af389de0775402fa2d"
+      ],
+      "reason": "source-unavailable"
+    },
+    {
+      "path": "index.js",
+      "originalPath": "package/index.js",
+      "size": 222,
+      "artifactSha256": "ab2f54c704f21bfbcd04a40b85d6715a92596f6403dd44e5d435db5350b639d9",
+      "state": "not-compared",
+      "localization": "whole-file",
+      "evidenceIds": [
+        "ev-0dcdd3d99b4a3551ad8e5fdbf669acf78294b8819ae8e345d621245a517620d9"
+      ],
+      "reason": "source-unavailable"
+    },
+    {
+      "path": "package.json",
+      "originalPath": "package/package.json",
+      "size": 410,
+      "artifactSha256": "ecee7267655115da72509ae5b99237f620834b255167022f088a345cb7c041c2",
+      "state": "not-compared",
+      "localization": "whole-file",
+      "evidenceIds": [
+        "ev-5f3adafc8a871ee9300aa3781157c3b3fb5296ef58d130988870a045cba3a7bb"
+      ],
+      "reason": "source-unavailable"
+    }
+  ],
+  "coverage": {
+    "inventory": {
+      "files": 4,
+      "bytes": 889,
+      "complete": true,
+      "lowerBound": false
+    },
+    "states": {
+      "byte-identical": {
+        "files": 0,
+        "bytes": 0
+      },
+      "changed": {
+        "files": 0,
+        "bytes": 0
+      },
+      "artifact-only": {
+        "files": 0,
+        "bytes": 0
+      },
+      "not-compared": {
+        "files": 4,
+        "bytes": 889
+      }
+    },
+    "compared": {
+      "files": 0,
+      "bytes": 0
+    },
+    "unresolved": {
+      "files": 4,
+      "bytes": 889
+    },
+    "syntaxInspected": {
+      "files": 1,
+      "bytes": 222
+    },
+    "modelReviewed": {
+      "files": 0,
+      "bytes": 0
+    },
+    "links": {
+      "artifact": 0,
+      "source": 0
+    },
+    "nonregular": {
+      "artifact": 0,
+      "source": 0
+    },
+    "linkEntries": [],
+    "sourceAvailable": false,
+    "sourceComplete": false,
+    "complete": true,
+    "sourceOnly": []
+  },
+  "evidence": [
+    {
+      "id": "ev-2b4d14c3e408eaa02bb35a7aaea895e6449d0589b82cb4db91743c7a6388a05f",
+      "side": "artifact",
+      "blobDigest": "4cedd527c23954a4a8dd1a8108b6839dff8178ca0dc108245df06da912ef348f",
+      "path": ".npmignore",
+      "originalPath": "package/.npmignore",
+      "fileSha256": "09461718e3e1584c24329fbf7022cde09edf18944a5f11ce3b50dc1d6da74991",
+      "size": 30,
+      "range": [0, 30],
+      "excerpt": "test\ntest.js\nexample\nexamples\n",
+      "excerptRange": [0, 30]
+    },
+    {
+      "id": "ev-e8587bc473440d697b711a6bf3dd695ee5c197357868d3af389de0775402fa2d",
+      "side": "artifact",
+      "blobDigest": "4cedd527c23954a4a8dd1a8108b6839dff8178ca0dc108245df06da912ef348f",
+      "path": "README.md",
+      "originalPath": "package/README.md",
+      "fileSha256": "cfe7fb18fdafabf4e8fbae74234bda50e4fcd28b21db49133a0e7baa16aee081",
+      "size": 227,
+      "range": [0, 227],
+      "excerpt": "## left-pad\n\nString left pad\n\n## Install\n\n```bash\n$ npm install left-pad\n```\n\n## Usage\n\n```js\nleftpad = require('left-pad')\n\nleftpad('foo', 5)\n// => \"  foo\"\n\nleftpad('foobar', 6)\n// => \"foobar\"\n\nleftpad(1, 2, 0)\n// => \"01\"\n```\n",
+      "excerptRange": [0, 227]
+    },
+    {
+      "id": "ev-0dcdd3d99b4a3551ad8e5fdbf669acf78294b8819ae8e345d621245a517620d9",
+      "side": "artifact",
+      "blobDigest": "4cedd527c23954a4a8dd1a8108b6839dff8178ca0dc108245df06da912ef348f",
+      "path": "index.js",
+      "originalPath": "package/index.js",
+      "fileSha256": "ab2f54c704f21bfbcd04a40b85d6715a92596f6403dd44e5d435db5350b639d9",
+      "size": 222,
+      "range": [0, 222],
+      "excerpt": "module.exports = leftpad;\n\nfunction leftpad (str, len, ch) {\n  str = String(str);\n\n  var i = -1;\n\n  if (!ch && ch !== 0) ch = ' ';\n\n  len = len - str.length;\n\n  while (++i < len) {\n    str = ch + str;\n  }\n\n  return str;\n}\n",
+      "excerptRange": [0, 222]
+    },
+    {
+      "id": "ev-5f3adafc8a871ee9300aa3781157c3b3fb5296ef58d130988870a045cba3a7bb",
+      "side": "artifact",
+      "blobDigest": "4cedd527c23954a4a8dd1a8108b6839dff8178ca0dc108245df06da912ef348f",
+      "path": "package.json",
+      "originalPath": "package/package.json",
+      "fileSha256": "ecee7267655115da72509ae5b99237f620834b255167022f088a345cb7c041c2",
+      "size": 410,
+      "range": [0, 410],
+      "excerpt": "{\n  \"name\": \"left-pad\",\n  \"version\": \"1.0.0\",\n  \"description\": \"String left pad\",\n  \"main\": \"index.js\",\n  \"scripts\": {\n    \"test\": \"node test\"\n  },\n  \"devDependencies\": {\n    \"tape\": \"*\"\n  },\n  \"keywords\": [\n    \"leftpad\",\n    \"left\",\n    \"pad\",\n    \"padding\",\n    \"string\"\n  ],\n  \"repository\": {\n    \"url\": \"git@github.com:azer/left-pad.git\",\n    \"type\": \"git\"\n  },\n  \"author\": \"azer\",\n  \"license\": \"WTFPL\"\n}\n",
+      "excerptRange": [0, 410]
+    }
+  ],
+  "manifests": {
+    "artifact": {
+      "status": "usable",
+      "value": {
+        "name": "left-pad",
+        "version": "1.0.0",
+        "description": "String left pad",
+        "main": "index.js",
+        "scripts": {
+          "test": "node test"
+        },
+        "devDependencies": {
+          "tape": "*"
+        },
+        "keywords": ["leftpad", "left", "pad", "padding", "string"],
+        "repository": {
+          "url": "git@github.com:azer/left-pad.git",
+          "type": "git"
+        },
+        "author": "azer",
+        "license": "WTFPL"
+      },
+      "evidenceIds": [
+        "ev-5f3adafc8a871ee9300aa3781157c3b3fb5296ef58d130988870a045cba3a7bb"
+      ]
+    },
+    "source": {
+      "status": "unavailable",
+      "reason": "missing-or-nonregular"
+    },
+    "registry": {
+      "status": "usable",
+      "value": {
+        "dist": {
+          "shasum": "c84e2417581bbb8eaf2b9e3d7a122e572ab1af37",
+          "tarball": "https://registry.npmjs.org/left-pad/-/left-pad-1.0.0.tgz",
+          "integrity": "sha512-Xvly4CWfzT+7TGZRB2Qd7ub2dmJDomZCNf3BuT3XXfrNerQHtta82NNhbvToU4Qiz7IHrg21YB3UpL/6npCtmg==",
+          "signatures": [
+            {
+              "sig": "MEYCIQClgdZWSSwoL3s3Volt/JNzCxNFkX0wd4eVliIDaXI7RgIhAMh/1mwbUPJseXx/15IZx7DrM+8K4PYIwXeVVNZIGkUy",
+              "keyid": "SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA"
+            }
+          ]
+        },
+        "main": "index.js",
+        "name": "left-pad",
+        "_from": ".",
+        "author": "azer",
+        "_shasum": "c84e2417581bbb8eaf2b9e3d7a122e572ab1af37",
+        "license": "WTFPL",
+        "scripts": {
+          "test": "node test"
+        },
+        "_npmUser": {
+          "name": "npm",
+          "email": "redacted@example.invalid"
+        },
+        "keywords": ["leftpad", "left", "pad", "padding", "string"],
+        "deprecated": "use String.prototype.padStart()",
+        "repository": {
+          "url": "git@github.com:azer/left-pad.git",
+          "type": "git"
+        },
+        "_npmVersion": "0.0.0-fake",
+        "description": "String left pad",
+        "directories": {},
+        "maintainers": [
+          {
+            "name": "sebmck",
+            "email": "redacted@example.invalid"
+          },
+          {
+            "name": "westlac",
+            "email": "redacted@example.invalid"
+          }
+        ],
+        "_nodeVersion": "0.0.0-fake",
+        "devDependencies": {
+          "tape": "*"
+        },
+        "_id": "left-pad@1.0.0",
+        "version": "1.0.0"
+      },
+      "evidenceIds": []
+    }
+  },
+  "cues": [
+    {
+      "module": "manifest",
+      "ruleId": "manifest-artifact-runtime-observation",
+      "priority": "LOW",
+      "summary": "Artifact declaration observed; source comparison is unavailable.",
+      "field": "/main",
+      "bindings": [
+        {
+          "side": "artifact",
+          "pointer": "/main",
+          "present": true,
+          "valueType": "string",
+          "value": "index.js",
+          "evidenceIds": [
+            "ev-5f3adafc8a871ee9300aa3781157c3b3fb5296ef58d130988870a045cba3a7bb"
+          ],
+          "evidenceScope": "whole-manifest",
+          "excerptRange": [0, 410],
+          "excerptOmitted": false
+        }
+      ],
+      "evidenceIds": [
+        "ev-5f3adafc8a871ee9300aa3781157c3b3fb5296ef58d130988870a045cba3a7bb"
+      ],
+      "sourceComparison": "unavailable"
+    },
+    {
+      "module": "manifest",
+      "ruleId": "manifest-artifact-runtime-observation",
+      "priority": "LOW",
+      "summary": "Artifact declaration observed; source comparison is unavailable.",
+      "field": "/name",
+      "bindings": [
+        {
+          "side": "artifact",
+          "pointer": "/name",
+          "present": true,
+          "valueType": "string",
+          "value": "left-pad",
+          "evidenceIds": [
+            "ev-5f3adafc8a871ee9300aa3781157c3b3fb5296ef58d130988870a045cba3a7bb"
+          ],
+          "evidenceScope": "whole-manifest",
+          "excerptRange": [0, 410],
+          "excerptOmitted": false
+        }
+      ],
+      "evidenceIds": [
+        "ev-5f3adafc8a871ee9300aa3781157c3b3fb5296ef58d130988870a045cba3a7bb"
+      ],
+      "sourceComparison": "unavailable"
+    },
+    {
+      "module": "manifest",
+      "ruleId": "manifest-artifact-runtime-observation",
+      "priority": "LOW",
+      "summary": "Artifact declaration observed; source comparison is unavailable.",
+      "field": "/version",
+      "bindings": [
+        {
+          "side": "artifact",
+          "pointer": "/version",
+          "present": true,
+          "valueType": "string",
+          "value": "1.0.0",
+          "evidenceIds": [
+            "ev-5f3adafc8a871ee9300aa3781157c3b3fb5296ef58d130988870a045cba3a7bb"
+          ],
+          "evidenceScope": "whole-manifest",
+          "excerptRange": [0, 410],
+          "excerptOmitted": false
+        }
+      ],
+      "evidenceIds": [
+        "ev-5f3adafc8a871ee9300aa3781157c3b3fb5296ef58d130988870a045cba3a7bb"
+      ],
+      "sourceComparison": "unavailable"
+    }
+  ],
+  "annotations": [
+    {
+      "type": "syntax-not-inspected",
+      "side": "artifact",
+      "path": ".npmignore",
+      "originalPath": "package/.npmignore",
+      "reason": "unsupported-syntax"
+    },
+    {
+      "type": "syntax-not-inspected",
+      "side": "artifact",
+      "path": "README.md",
+      "originalPath": "package/README.md",
+      "reason": "unsupported-syntax"
+    },
+    {
+      "type": "syntax-not-inspected",
+      "side": "artifact",
+      "path": "package.json",
+      "originalPath": "package/package.json",
+      "reason": "unsupported-syntax"
+    },
+    {
+      "type": "syntax-scope",
+      "parser": "acorn@8.19.0",
+      "sourceCoverage": {
+        "files": 0,
+        "bytes": 0
+      },
+      "sourceLiteralCount": 0,
+      "sourceLiteralTruncated": false,
+      "limitation": "Literal matches are not semantic equivalence; missing literals refer only to inspected JavaScript. TypeScript, JSX, source maps, computed aliases and dynamic targets are not resolved."
+    },
+    {
+      "module": "manifest",
+      "type": "manifest-scope",
+      "sourceDeclarationStatus": "unassessed",
+      "sourceDeclarationReason": "missing-or-nonregular",
+      "status": "partial",
+      "pairs": {
+        "artifactSource": "unavailable",
+        "registryArtifact": "available",
+        "registrySource": "unavailable"
+      },
+      "reasons": ["source-comparison-unavailable"],
+      "unassessed": ["source-comparison-unavailable"],
+      "counts": {
+        "fieldNodes": 6,
+        "valueBytes": 54,
+        "fieldComparisons": 22,
+        "cues": 3,
+        "declarations": 0,
+        "pathComparisons": 0,
+        "annotations": 0
+      },
+      "limitation": "Declarations describe observed fields only; no normalization, glob expansion, publish-set prediction, build reproduction or content equivalence is established."
+    }
+  ],
+  "failures": [],
+  "model": {
+    "status": "disabled"
+  },
+  "run": {
+    "timestamps": {},
+    "timings": {},
+    "surface": "web",
+    "observations": [
+      {
+        "url": "https://registry.npmjs.org/left-pad/1.0.0",
+        "observedAt": "2026-10-31T20:37:34.956Z",
+        "bytes": 1111,
+        "status": 200,
+        "contentLength": 1111
+      },
+      {
+        "url": "https://registry.npmjs.org/left-pad/-/left-pad-1.0.0.tgz",
+        "observedAt": "2026-10-31T20:37:35.046Z",
+        "bytes": 678,
+        "status": 200,
+        "contentLength": 678
+      }
+    ]
+  },
+  "policy": {
+    "exitCode": 0,
+    "findings": []
+  }
+}

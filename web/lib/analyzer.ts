@@ -1,7 +1,7 @@
-import type { Report } from "./report.ts";
+import { isReport, type Report } from "./report.ts";
 
 // The analyzer service is separate from this site. Set UNMASK_API_URL to its
-// origin; without it the site serves the sample report and says so.
+// origin; without it the site serves the example reports and says so.
 export function analyzerUrl(): string | null {
   const value = process.env.UNMASK_API_URL?.trim();
   if (!value) return null;
@@ -17,32 +17,31 @@ export function analyzerUrl(): string | null {
 
 export const REPORT_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
-export type JobStatus =
-  "queued" | "running" | "incomplete" | "failed" | "completed";
+// Job states as src/server/queue.mjs writes them. A job that finished with a report is never served as a
+// job: GET /r/<id>.json returns the bare report instead.
+export type JobStatus = "queued" | "running" | "done" | "incomplete" | "failed";
 
 export interface Job {
   id: string;
   nameAtExactVersion: string;
   status: JobStatus;
   createdAt: number;
+  startedAt?: number;
   finishedAt?: number;
   reason?: string;
-  report?: Report;
 }
 
 const STATUSES: JobStatus[] = [
   "queued",
   "running",
+  "done",
   "incomplete",
   "failed",
-  "completed",
 ];
 
-// The analyzer serves the job while it is pending and the schema 1 report itself
-// once it completes; that report is linked, not rendered, until a mapping exists.
 export type Fetched =
   | { ok: true; kind: "job"; job: Job }
-  | { ok: true; kind: "report"; schemaVersion: string; analyzer: string }
+  | { ok: true; kind: "report"; report: Report }
   | { ok: false; status: number };
 
 export async function fetchJob(id: string): Promise<Fetched> {
@@ -54,23 +53,29 @@ export async function fetchJob(id: string): Promise<Fetched> {
       headers: { accept: "application/json" },
     });
     if (!response.ok) return { ok: false, status: response.status };
-    const body = (await response.json()) as Record<string, unknown>;
-    if (typeof body.schemaVersion === "string")
-      return {
-        ok: true,
-        kind: "report",
-        schemaVersion: body.schemaVersion,
-        analyzer: base,
-      };
+    const body = (await response.json()) as unknown;
+    if (isReport(body)) return { ok: true, kind: "report", report: body };
+    const job = body as Record<string, unknown> | null;
     if (
-      typeof body.nameAtExactVersion === "string" &&
-      STATUSES.includes(body.status as JobStatus) &&
-      typeof body.createdAt === "number"
+      job &&
+      typeof job.nameAtExactVersion === "string" &&
+      STATUSES.includes(job.status as JobStatus) &&
+      typeof job.createdAt === "number"
     )
       return {
         ok: true,
         kind: "job",
-        job: { ...(body as unknown as Job), id },
+        job: {
+          id,
+          nameAtExactVersion: job.nameAtExactVersion,
+          status: job.status as JobStatus,
+          createdAt: job.createdAt,
+          startedAt:
+            typeof job.startedAt === "number" ? job.startedAt : undefined,
+          finishedAt:
+            typeof job.finishedAt === "number" ? job.finishedAt : undefined,
+          reason: typeof job.reason === "string" ? job.reason : undefined,
+        },
       };
     return { ok: false, status: 502 };
   } catch {
