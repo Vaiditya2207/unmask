@@ -788,6 +788,17 @@ const delay = (ms, signal) =>
     signal?.addEventListener("abort", abort, { once: true });
   });
 
+// Provider quota dimensions may name a preview route's base model; only observed aliases are trusted.
+const QUOTA_MODEL_ALIASES = Object.freeze({
+  "gemini-3-flash-preview": Object.freeze(["gemini-3-flash"]),
+});
+const quotaModels = (modelId) =>
+  [
+    modelId,
+    ...(Object.hasOwn(QUOTA_MODEL_ALIASES, modelId)
+      ? QUOTA_MODEL_ALIASES[modelId]
+      : []),
+  ].flatMap((id) => [id, `models/${id}`]);
 function quotaScope(body, modelId) {
   const details = body?.error?.details;
   if (!Array.isArray(details) || details.length > 32) return "unknown";
@@ -822,7 +833,7 @@ function quotaScope(body, modelId) {
       !["", "ratelimitexceeded", "quotaexceeded", "resourceexhausted"].includes(
         reason,
       ) ||
-      ![modelId, `models/${modelId}`].includes(metadata.model) ||
+      !quotaModels(modelId).includes(metadata.model) ||
       !binding.includes("permodel") ||
       !window ||
       (metadata.scope !== undefined &&
@@ -855,8 +866,7 @@ function quotaScope(body, modelId) {
       ["global", "project"].includes(dimensions.scope)
     )
       return "global";
-    if (![modelId, `models/${modelId}`].includes(dimensions.model))
-      return "unknown";
+    if (!quotaModels(modelId).includes(dimensions.model)) return "unknown";
     const binding = normalize(
       `${item.quotaId ?? ""} ${item.quotaMetric ?? ""}`,
     );
@@ -942,7 +952,7 @@ export function createGemmaClient(options = {}) {
   }));
   const generationConfig = route[0].generationConfig;
   const routingPolicy = {
-    version: "ordered-fallback-2",
+    version: "ordered-fallback-3",
     maxGenerationAttempts: Math.max(2, route.length),
     fallthrough: [
       "model-scoped-minute-429",
@@ -952,6 +962,7 @@ export function createGemmaClient(options = {}) {
     ],
     invalidOutputRetry: "same-tier",
     modelDailyFallback: "next-tier-no-wait",
+    quotaModelAliases: QUOTA_MODEL_ALIASES,
   };
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   const now = options.now ?? (() => performance.now());

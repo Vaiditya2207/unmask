@@ -12,7 +12,7 @@
         "provider": "google",
         "endpointHost": "generativelanguage.googleapis.com",
         "modelId": "gemini-3-flash-preview",
-        "configHash": "14dfd2c36cf08f28ca657cab04ee88e3a67eaccd51ff748a897db632eb495497",
+        "configHash": "a3904b089fccfa8a1bd92f7f770eae170b9c3f306cb5a5ffb123fe97cf42982d",
         "generationConfig": {
           "temperature": 0,
           "maxOutputTokens": 4096,
@@ -27,7 +27,7 @@
         "provider": "google",
         "endpointHost": "generativelanguage.googleapis.com",
         "modelId": "gemma-4-26b-a4b-it",
-        "configHash": "14dfd2c36cf08f28ca657cab04ee88e3a67eaccd51ff748a897db632eb495497",
+        "configHash": "a3904b089fccfa8a1bd92f7f770eae170b9c3f306cb5a5ffb123fe97cf42982d",
         "generationConfig": {
           "temperature": 0,
           "maxOutputTokens": 1000,

@@ -2792,6 +2792,100 @@ test("explicit current-model daily quota falls to next tier with separate calls 
   assert.equal(JSON.stringify(r), before);
 });
 
+function observedFlashDailyQuota(model = "gemini-3-flash") {
+  return {
+    error: {
+      code: 429,
+      status: "RESOURCE_EXHAUSTED",
+      message: "You exceeded your current quota.",
+      details: [
+        {
+          "@type": "type.googleapis.com/google.rpc.Help",
+          links: [{ description: "Learn more", url: "https://ai.google.dev/" }],
+        },
+        {
+          "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+          violations: [
+            {
+              quotaMetric:
+                "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+              quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier",
+              quotaDimensions: { location: "global", model },
+              quotaValue: "20",
+            },
+          ],
+        },
+        {
+          "@type": "type.googleapis.com/google.rpc.RetryInfo",
+          retryDelay: "26135s",
+        },
+      ],
+    },
+  };
+}
+async function flashQuotaRun(quotaModel, route) {
+  const seen = [];
+  let sleeps = 0;
+  const result = await createGemmaClient({
+    apiKey: "synthetic-key",
+    provider: "google",
+    ...(route ? { route } : {}),
+    sleep: async () => {
+      sleeps++;
+    },
+    localLimits: {
+      generationsPerMinute: 3,
+      inputTokensPerMinute: 12000,
+      generationsPerDay: 100,
+    },
+    fetchImpl: async (url) => {
+      if (url.endsWith(":countTokens"))
+        return new Response('{"totalTokens":100}');
+      const model = url.split("/models/")[1].split(":")[0];
+      seen.push(model);
+      if (model === route?.[0]?.modelId || model === "gemini-3-flash-preview")
+        return Response.json(observedFlashDailyQuota(quotaModel), {
+          status: 429,
+        });
+      return output({ hypotheses: [hypothesis()] });
+    },
+  }).explain(report(), { allowLocal: true });
+  return { result, seen, sleeps };
+}
+
+test("observed free-tier daily 429 naming gemini-3-flash falls from the preview route to Gemma", async () => {
+  const { result, seen, sleeps } = await flashQuotaRun("gemini-3-flash");
+  assert.equal(result.status, "complete");
+  assert.deepEqual(seen, ["gemini-3-flash-preview", "gemma-4-26b-a4b-it"]);
+  assert.equal(result.attemptLog[0].httpStatus, 429);
+  assert.equal(result.attemptLog[0].failureScope, "model-daily");
+  assert.equal(result.modelId, "gemma-4-26b-a4b-it");
+  assert.equal(sleeps, 0);
+  assert.deepEqual(result.routingPolicy.quotaModelAliases, {
+    "gemini-3-flash-preview": ["gemini-3-flash"],
+  });
+});
+
+test("the quota alias is exact and route-specific, so other model bindings stay terminal", async () => {
+  for (const quotaModel of [
+    "gemini-3-pro",
+    "gemini-3",
+    "gemini-3-flash-lite",
+  ]) {
+    const { result, seen } = await flashQuotaRun(quotaModel);
+    assert.equal(result.status, "unavailable", quotaModel);
+    assert.equal(result.attemptLog[0].failureScope, "unknown", quotaModel);
+    assert.deepEqual(seen, ["gemini-3-flash-preview"], quotaModel);
+  }
+  const { result, seen } = await flashQuotaRun("gemini-3-flash", [
+    { modelId: "gemini-3.5-flash", thinkingLevel: "minimal" },
+    { modelId: "gemma-4-26b-a4b-it", thinkingLevel: "minimal" },
+  ]);
+  assert.equal(result.status, "unavailable");
+  assert.equal(result.attemptLog[0].failureScope, "unknown");
+  assert.deepEqual(seen, ["gemini-3.5-flash"]);
+});
+
 test("daily quota with global, missing or wrong-model bindings never shops another model", async () => {
   for (const variant of [
     "global",
@@ -2916,7 +3010,7 @@ test("committed release expectations bind final default route, thinking and poli
       "utf8",
     ),
   );
-  assert.equal(model.configuration.routingPolicy.version, "ordered-fallback-2");
+  assert.equal(model.configuration.routingPolicy.version, "ordered-fallback-3");
   assert.equal(model.configuration.routingPolicy.maxGenerationAttempts, 2);
   assert.deepEqual(
     config.modelExpectation.routes,
