@@ -85,6 +85,36 @@ export default async function ReportPage({ params }: { params: Params }) {
     );
   const result = await fetchJob(id);
   if (!result.ok) notFound();
+  if (result.kind === "report")
+    return (
+      <div className="app">
+        <ViewerBar />
+        <main className="viewer viewer-status" id="main">
+          <div className="title-row">
+            <div>
+              <h1>Report ready</h1>
+              <p className="subtitle">
+                Check <code>{id.slice(0, 8)}</code>, report schema{" "}
+                {result.schemaVersion}
+              </p>
+            </div>
+          </div>
+          <section className="card status-card">
+            <p className="status-text-lg">
+              The analyzer finished this check. Its report opens in the
+              analyzer&rsquo;s own viewer for now; this page does not render
+              schema {result.schemaVersion} reports yet.
+            </p>
+            <p className="status-links">
+              <a className="btn" href={`${result.analyzer}/r/${id}`}>
+                Open the report
+              </a>
+              <a href={`/api/reports/${id}`}>Download JSON</a>
+            </p>
+          </section>
+        </main>
+      </div>
+    );
   const { job } = result;
   return (
     <div className="app">

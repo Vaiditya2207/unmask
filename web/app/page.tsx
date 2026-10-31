@@ -234,7 +234,7 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
               style={{ ["--part" as string]: 3 }}
             >
               {connected ? (
-                "You get a report link at once. A check of the same release reuses its report for 24 hours."
+                "A check sends the package name and version to the UNMASK server, which may send bounded public excerpts to Google for advisory explanations. Reports are kept for up to 30 minutes."
               ) : (
                 <>
                   The analyzer is not connected to this site yet. Until it is,

@@ -22,11 +22,16 @@ Google Fonts at build time and serves them from this site.
 
 ## The analyzer connection
 
-Set `UNMASK_API_URL` to the analyzer's origin. The site then forwards
-`POST /check` to `${UNMASK_API_URL}/check` and expects either a redirect to
-`/r/<id>` or a JSON body with an `id`. It reads `${UNMASK_API_URL}/r/<id>.json`
-for the job, in the shape of `Job` in `lib/analyzer.ts`, with a `report` in the
-shape of `Report` in `lib/report.ts` once the job is `completed`.
+Set `UNMASK_API_URL` to the origin of the analysis server (`src/server`). The
+site then forwards `POST /check` to `${UNMASK_API_URL}/check`, follows its `303`
+to `/r/<id>`, and reads `${UNMASK_API_URL}/r/<id>.json`:
+
+- While a check is queued, running, incomplete or failed, that JSON is the job
+  (`Job` in `lib/analyzer.ts`), and this site shows its status, refreshing every
+  three seconds while it is active.
+- Once it completes, that JSON is the analyzer's schema 1 report. This site
+  links to the analyzer's own report page and the JSON; rendering schema 1 in
+  this viewer (mapping it onto `Report` in `lib/report.ts`) is not done yet.
 
 Without `UNMASK_API_URL`, `/check` returns to the form with a notice, and only
 the sample report exists.
@@ -37,13 +42,14 @@ the sample report exists.
   `registry.npmjs.org/<name>/<version>` (the version manifest only; nothing is
   downloaded or run). Without script, the same form works through
   `/?release=<name>@<version>`.
-- **Sample:** `/r/sample` and the fragments on the home page. File lists,
+- **Sample:** `/r/sample` and the fragments on the home page use the viewer's
+  own `Report` shape. File lists,
   sizes and SHA-256 hashes are computed from the real `clsx@2.1.1` tarball and
   its source at gitHead `925494c`. One synthetic change (152 bytes appended to
   `dist/clsx.js`) was added to show a finding. The explanations and the model
-  hypothesis are written by hand; the Gemma integration is not connected.
+  hypothesis are written by hand; this site never calls the model.
   `npm test` checks that the sample's hashes and totals agree.
 - **Incident list:** the five incidents link to public write-ups and advisories.
-- **Planned behavior described in copy:** the 24-hour report retention and the
-  limit of six new checks per ten minutes come from the website foundation
-  design and are enforced by the analyzer, not by this site.
+- **Server behavior described in copy:** the 30-minute report retention, the
+  limit of six new checks per ten minutes and the Google disclosure follow
+  `docs/website.md` and `src/server`; they are enforced by the server, not here.

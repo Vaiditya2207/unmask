@@ -178,9 +178,8 @@ export function HowItWorks({
           Last, every difference gets its evidence.
         </p>
         <p className="exchange-text">
-          A file that matches byte for byte needs no argument. A built file is
-          explained by the line of the build script that writes it. Whatever is
-          left becomes a finding: the bytes, the checks run on them and a
+          A file that matches byte for byte needs no argument. Every other file
+          is evidence to review: its bytes, the checks run on them and a
           model&rsquo;s hypothesis, kept apart from the facts.
         </p>
         <form className="call call-form" action="/check" method="post">

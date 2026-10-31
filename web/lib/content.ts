@@ -39,7 +39,7 @@ export const questions = [
   },
   {
     q: "Does it run the package?",
-    a: "No. The tarball is read as files. Install scripts, build scripts and tests are never executed; a build is explained by reading the script that produces it.",
+    a: "No. The tarball is read as files. Install scripts, build scripts and tests are never executed.",
   },
   {
     q: "Which releases can it check?",
@@ -47,15 +47,15 @@ export const questions = [
   },
   {
     q: "Where does the source come from?",
-    a: "From the repository and the commit the registry records for the release (its gitHead). When no commit is recorded, the report says which source it used and marks the match uncertain.",
+    a: "From the source the registry points to for the release, such as its repository and gitHead commit. The report names the source it compared and says when that match is incomplete.",
   },
   {
     q: "What does the model do?",
-    a: "Gemma (gemma4:e4b) will propose explanations for transformed code. Each one is a hypothesis: a program checks every byte it cites before it is shown. The model is planned and not connected yet.",
+    a: "Gemma (gemma-4-26b-a4b-it, hosted by Google) explains bounded evidence as hypotheses with exact quotations. Quotations are checked for location, and model output never clears a difference. Hosted generation is not validated yet.",
   },
   {
     q: "How long is a report kept?",
-    a: "Up to 24 hours, and a restart loses it. Download the JSON to keep the evidence. Checks of the same release reuse one report.",
+    a: "Up to 30 minutes after it finishes, and capacity eviction or a restart can remove it sooner. Download the JSON to keep the evidence. Checks of the same release share one report.",
   },
 ] as const;
 

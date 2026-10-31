@@ -30,9 +30,22 @@ export interface Job {
   report?: Report;
 }
 
-export async function fetchJob(
-  id: string,
-): Promise<{ ok: true; job: Job } | { ok: false; status: number }> {
+const STATUSES: JobStatus[] = [
+  "queued",
+  "running",
+  "incomplete",
+  "failed",
+  "completed",
+];
+
+// The analyzer serves the job while it is pending and the schema 1 report itself
+// once it completes; that report is linked, not rendered, until a mapping exists.
+export type Fetched =
+  | { ok: true; kind: "job"; job: Job }
+  | { ok: true; kind: "report"; schemaVersion: string; analyzer: string }
+  | { ok: false; status: number };
+
+export async function fetchJob(id: string): Promise<Fetched> {
   const base = analyzerUrl();
   if (!base || !REPORT_ID.test(id)) return { ok: false, status: 404 };
   try {
@@ -41,7 +54,25 @@ export async function fetchJob(
       headers: { accept: "application/json" },
     });
     if (!response.ok) return { ok: false, status: response.status };
-    return { ok: true, job: (await response.json()) as Job };
+    const body = (await response.json()) as Record<string, unknown>;
+    if (typeof body.schemaVersion === "string")
+      return {
+        ok: true,
+        kind: "report",
+        schemaVersion: body.schemaVersion,
+        analyzer: base,
+      };
+    if (
+      typeof body.nameAtExactVersion === "string" &&
+      STATUSES.includes(body.status as JobStatus) &&
+      typeof body.createdAt === "number"
+    )
+      return {
+        ok: true,
+        kind: "job",
+        job: { ...(body as unknown as Job), id },
+      };
+    return { ok: false, status: 502 };
   } catch {
     return { ok: false, status: 502 };
   }

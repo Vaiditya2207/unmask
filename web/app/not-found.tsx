@@ -11,7 +11,7 @@ export default function NotFound() {
           <div>
             <h1>No report here</h1>
             <p className="subtitle">
-              Reports are kept for up to 24 hours, and this site may have no
+              Reports are kept for up to 30 minutes, and this site may have no
               analyzer connected.
             </p>
           </div>

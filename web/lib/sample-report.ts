@@ -14,7 +14,7 @@ const notListed = 'Not matched by "files" in package.json';
 export const sampleReport: Report = {
   id: "sample",
   sample: {
-    note: "Sample report. The tarball is the real clsx@2.1.1 with one file altered by the UNMASK team to show a finding. Explanations are written by hand; the model is not connected yet.",
+    note: "Sample report. The tarball is the real clsx@2.1.1 with one file altered by the UNMASK team to show a finding. Build explanations and the hypothesis are written by hand to illustrate the layout; the analyzer compares bytes and does not establish build equivalence.",
   },
   analyzedAt: "2026-10-31T19:15:00Z",
   release: {
@@ -215,7 +215,7 @@ export const sampleReport: Report = {
         },
       ],
       hypothesis: {
-        model: "gemma4:e4b",
+        model: "gemma-4-26b-a4b-it",
         text: "The appended block sends every environment variable of the process that loads clsx to collect.example.invalid. Joining class names needs no network access.",
         citedBytes: [
           builtClsxJs.length,
