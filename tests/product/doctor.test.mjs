@@ -153,7 +153,7 @@ test("doctor refuses linked config without reading its target", async (t) => {
   assert.doesNotMatch(rt.output.join(""), /DO_NOT_PRINT/);
 });
 
-test("doctor aborts an unresponsive service and sanitizes redirect responses", async (t) => {
+test("doctor sanitizes aborted requests and redirect responses", async (t) => {
   for (const fetchImpl of [
     async (_url, { signal }) => {
       assert.ok(signal);
@@ -226,6 +226,7 @@ test("doctor text output includes observed Node and service versions", async (t)
 test("standalone doctor labels recognized fallback config as only partially validated", async (t) => {
   const { writeFile } = await import("node:fs/promises");
   const rt = runtime(await fixture(t));
+  rt.configInspector = null;
   await writeFile(
     path.join(rt.cwd, ".unmask.json"),
     '{"schemaVersion":1,"profile":"strict"}',

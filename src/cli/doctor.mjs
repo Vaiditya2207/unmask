@@ -162,6 +162,7 @@ async function fallbackConfig(cwd) {
   }
 }
 async function projectConfig(cwd, inspector) {
+  if (inspector === null) return fallbackConfig(cwd);
   try {
     if (!inspector) {
       try {
