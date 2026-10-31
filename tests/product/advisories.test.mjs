@@ -46,6 +46,7 @@ function scripted(responses) {
 const lookup = (responses, options = {}) =>
   lookupNpmAdvisories("fixture@1.0.0", {
     clock,
+    limits: { retries: 0 },
     ...scripted(responses),
     ...options,
   });
@@ -339,4 +340,103 @@ test("transport bounds cannot be expanded by caller overrides", async () => {
   });
   assert.equal(result.status, "unavailable");
   assert.deepEqual(result.reasons, ["invalid-limits"]);
+});
+
+const fast = { retries: 1, retryDelayMs: 1 };
+test("healthy provider reports one request and no failures", async () => {
+  const r = await lookup([{ vulns: [record()] }]);
+  assert.deepEqual(
+    { ...r.diagnostics.provider, durationMs: 0 },
+    {
+      name: "OSV",
+      availability: "available",
+      requests: 1,
+      retries: 0,
+      timeouts: 0,
+      failures: [],
+      durationMs: 0,
+    },
+  );
+});
+for (const transient of [
+  new Response("SYNTHETIC_SECRET", { status: 503 }),
+  new Error("SYNTHETIC_SECRET api_key=sk-test at fetch (/srv/secret.mjs:1)"),
+])
+  test("one transient failure is retried and disclosed as degraded", async () => {
+    const r = await lookup([transient, { vulns: [record()] }], {
+      limits: fast,
+    });
+    assert.equal(r.status, "found");
+    assert.equal(r.complete, true);
+    assert.deepEqual(r.reasons, []);
+    const p = r.diagnostics.provider;
+    assert.equal(p.availability, "degraded");
+    assert.equal(p.requests, 2);
+    assert.equal(p.retries, 1);
+    assert.deepEqual(
+      p.failures,
+      transient instanceof Response
+        ? [{ attempt: 1, reason: "http-error", httpStatus: 503 }]
+        : [{ attempt: 1, reason: "request-failed" }],
+    );
+    assert.doesNotMatch(
+      JSON.stringify(r),
+      /SYNTHETIC_SECRET|api_key|sk-test|secret\.mjs|stack/,
+    );
+  });
+test("retry budget is bounded and exhausted failures stay unavailable", async () => {
+  const r = await lookup(
+    [
+      new Response("busy", { status: 503 }),
+      new Response("busy", { status: 502 }),
+    ],
+    { limits: fast },
+  );
+  assert.equal(r.status, "unavailable");
+  assert.deepEqual(r.reasons, ["http-error"]);
+  assert.equal(r.diagnostics.provider.availability, "unavailable");
+  assert.equal(r.diagnostics.provider.requests, 2);
+  assert.deepEqual(
+    r.diagnostics.provider.failures.map((f) => f.httpStatus),
+    [503, 502],
+  );
+});
+for (const response of [
+  new Response("no", { status: 404 }),
+  new Response("slow down", { status: 429, headers: { "retry-after": "30" } }),
+  new Response("bad-json", { headers: { "content-type": "application/json" } }),
+])
+  test("non-transient or provider-throttled failures are not retried", async () => {
+    const r = await lookup([response], { limits: fast });
+    assert.equal(r.status, "unavailable");
+    assert.equal(r.diagnostics.provider.requests, 1);
+    assert.equal(r.diagnostics.provider.retries, 0);
+  });
+test("timeouts are counted without retrying past the deadline", async () => {
+  const c = controlledClock();
+  const promise = lookupNpmAdvisories("fixture@1.0.0", {
+    clock: c,
+    fetchImpl: () => new Promise(() => {}),
+  });
+  c.expire();
+  const r = await promise;
+  assert.deepEqual(r.reasons, ["timeout"]);
+  assert.equal(r.diagnostics.provider.timeouts, 1);
+  assert.equal(r.diagnostics.provider.requests, 1);
+  assert.equal(r.diagnostics.provider.retries, 0);
+  assert.equal(r.diagnostics.provider.availability, "unavailable");
+  assert.deepEqual(r.diagnostics.provider.failures, [
+    { attempt: 1, reason: "timeout" },
+  ]);
+});
+test("rejected input reports the provider as not queried", async () => {
+  const r = await lookupNpmAdvisories("fixture@latest", { clock });
+  assert.equal(r.diagnostics.provider.availability, "not-queried");
+  assert.equal(r.diagnostics.provider.requests, 0);
+  const capped = await lookupNpmAdvisories("fixture@1.0.0", {
+    clock,
+    limits: { retries: 2 },
+    fetchImpl: () => assert.fail("Invalid retry limit fetched"),
+  });
+  assert.deepEqual(capped.reasons, ["invalid-limits"]);
 });

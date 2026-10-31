@@ -49,7 +49,11 @@ function cacheWith(script, options = {}) {
   const upstream = osv(script);
   const cache = createAdvisoryCache({
     clock,
-    lookupOptions: { fetchImpl: upstream.fetchImpl, clock },
+    lookupOptions: {
+      fetchImpl: upstream.fetchImpl,
+      clock,
+      limits: { retries: 0 },
+    },
     ...options,
   });
   return { clock, upstream, cache };
@@ -316,4 +320,40 @@ test("total byte cap below the entry cap is rejected and at-cap stores never thr
   assert.equal((await cache.lookup("fixture@1.0.1")).cache.status, "hit");
   assert.equal((await cache.lookup("fixture@1.0.0")).cache.status, "miss");
   assert.equal(upstream.requests.length, 3);
+});
+
+test("freshness and provider diagnostics distinguish live, cached, stale and none", async () => {
+  const { clock, upstream, cache } = cacheWith(() =>
+    upstream.requests.length === 1
+      ? { vulns: [record()] }
+      : new Response("SYNTHETIC_SECRET", { status: 503 }),
+  );
+  const live = await cache.lookup("fixture@1.0.0");
+  assert.equal(live.diagnostics.provider.availability, "available");
+  assert.deepEqual(live.diagnostics.freshness, {
+    state: "live",
+    queriedAt: "2026-11-01T00:00:00.000Z",
+    ageMs: 0,
+    freshUntil: "2026-11-01T00:15:00.000Z",
+  });
+  clock.advance(1000);
+  const hit = await cache.lookup("fixture@1.0.0");
+  assert.equal(hit.diagnostics.provider.availability, "not-contacted");
+  assert.equal(hit.diagnostics.provider.requests, 0);
+  assert.equal(hit.diagnostics.freshness.state, "cached");
+  assert.equal(hit.diagnostics.freshness.ageMs, 1000);
+  clock.advance(ADVISORY_CACHE_LIMITS.ttlMs);
+  const stale = await cache.lookup("fixture@1.0.0");
+  assert.equal(stale.diagnostics.freshness.state, "stale");
+  assert.equal(stale.diagnostics.freshness.queriedAt, live.queriedAt);
+  assert.equal(stale.diagnostics.freshness.freshUntil, undefined);
+  assert.equal(stale.diagnostics.provider.availability, "unavailable");
+  assert.deepEqual(stale.diagnostics.provider.failures, [
+    { attempt: 1, reason: "http-error", httpStatus: 503 },
+  ]);
+  const kept = boundedVulnerabilityCheck(stale, "fixture@1.0.0", clock);
+  assert.deepEqual(kept.diagnostics, stale.diagnostics);
+  const none = await cache.lookup("fixture@3.0.0");
+  assert.deepEqual(none.diagnostics.freshness, { state: "none" });
+  assert.doesNotMatch(JSON.stringify([stale, none]), /SYNTHETIC_SECRET/);
 });

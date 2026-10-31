@@ -37,6 +37,23 @@ function unavailable(claim, clock, reasons) {
   };
 }
 
+const NOT_CONTACTED = Object.freeze({
+  name: "OSV",
+  availability: "not-contacted",
+  requests: 0,
+  retries: 0,
+  timeouts: 0,
+  failures: [],
+  durationMs: 0,
+});
+const FRESHNESS = {
+  hit: "cached",
+  miss: "live",
+  coalesced: "live",
+  stale: "stale",
+  bypass: "none",
+};
+
 export function createAdvisoryCache({
   lookup = lookupNpmAdvisories,
   lookupOptions = {},
@@ -155,6 +172,7 @@ export function createAdvisoryCache({
         status: "incomplete",
         complete: false,
         reasons: [...new Set(["stale-cache", ...result.reasons])].sort(),
+        diagnostics: result.diagnostics,
         cache: {
           ...provenance("stale", prior, now),
           snapshotStatus: snapshot.status,
@@ -165,7 +183,36 @@ export function createAdvisoryCache({
     return { ...result, cache: provenance("uncached", null, now) };
   }
 
-  async function cachedLookup(spec, { signal } = {}) {
+  async function cachedLookup(spec, options) {
+    const result = await resolve(spec, options);
+    const now = clock.now();
+    const { status, storedAt } = result.cache;
+    const state =
+      FRESHNESS[status] ?? (result.status === "unavailable" ? "none" : "live");
+    const queried = Date.parse(result.queriedAt);
+    const provider =
+      status === "hit" ? NOT_CONTACTED : result.diagnostics?.provider;
+    return {
+      ...result,
+      diagnostics: {
+        ...(provider ? { provider: structuredClone(provider) } : {}),
+        freshness: {
+          state,
+          ...(state !== "none" && Number.isFinite(queried)
+            ? { queriedAt: result.queriedAt, ageMs: Math.max(0, now - queried) }
+            : {}),
+          ...(storedAt && state !== "stale"
+            ? {
+                freshUntil: new Date(
+                  Date.parse(storedAt) + limits.ttlMs,
+                ).toISOString(),
+              }
+            : {}),
+        },
+      },
+    };
+  }
+  async function resolve(spec, { signal } = {}) {
     const claim = identity(spec);
     if (!claim) {
       const result = await lookup(spec, { ...lookupOptions, signal });
