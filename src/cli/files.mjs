@@ -1,12 +1,12 @@
 import { LocalInputError } from "../core/pipeline.mjs";
-import { getHostedDetails } from "./hosted.mjs";
-import { exactPackage, hostedOptions, terminalText } from "./info.mjs";
+import { getHostedDetails, getHostedDetailsForReport } from "./hosted.mjs";
+import { exactPackage, hostedOptions, terminalText, aiLines } from "./info.mjs";
 
 const states = ["byte-identical", "changed", "artifact-only", "not-compared"];
 const usage = () =>
   new LocalInputError(
     "usage",
-    "Use files name@exact-version [--path TEXT] [--state STATE] [--limit 1..200] [--offset N]",
+    "Use files name@exact-version [--report ID] [--path TEXT] [--state STATE] [--limit 1..200] [--offset N]",
   );
 function parse(args) {
   if (!args[0]) throw usage();
@@ -23,13 +23,18 @@ function parse(args) {
     const flag = args[index];
     const value = args[index + 1];
     if (
-      !["--path", "--state", "--limit", "--offset"].includes(flag) ||
+      !["--path", "--state", "--limit", "--offset", "--report"].includes(
+        flag,
+      ) ||
       seen.has(flag) ||
       value === undefined
     )
       throw usage();
     seen.add(flag);
-    if (flag === "--path") {
+    if (flag === "--report") {
+      if (!/^[a-f0-9]{32}$/.test(value)) throw usage();
+      options.reportId = value;
+    } else if (flag === "--path") {
       if (value.length > 1024) throw usage();
       options.path = value;
     } else if (flag === "--state") {
@@ -71,6 +76,9 @@ function validateFiles(list) {
 }
 
 export function renderFiles({ details, report, reportUrl }, options) {
+  const reportId = new URL(reportUrl).pathname
+    .split("/")[2]
+    .replace(/\.json$/, "");
   const inventory = details.inventory;
   validateFiles(inventory.files);
   const order = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
@@ -109,19 +117,25 @@ export function renderFiles({ details, report, reportUrl }, options) {
     lines.push(
       `Next offset: ${options.offset + page.length} (use the same filters and limit).`,
     );
-  lines.push(
-    `AI: ${text(report.model.status)}${report.model.reason ? " (" + text(report.model.reason) + ")" : ""}`,
-  );
+  lines.push(...aiLines(report.model));
   lines.push(
     "This is not a safety verdict; byte-identical means only recorded byte correspondence.",
     `Report: ${text(reportUrl)}`,
+    `Report ID: ${reportId}`,
+    `Reuse this report for paging: --report ${reportId} (with the same exact package spec and filters; no new check).`,
   );
   return lines.join("\n") + "\n";
 }
 
 export async function filesCommand(args, runtime = {}) {
   const options = parse(args);
-  const result = await getHostedDetails(options.spec, hostedOptions(runtime));
+  const result = options.reportId
+    ? await getHostedDetailsForReport(
+        options.spec,
+        options.reportId,
+        hostedOptions(runtime),
+      )
+    : await getHostedDetails(options.spec, hostedOptions(runtime));
   (runtime.stdout ?? process.stdout).write(renderFiles(result, options));
   return 0;
 }

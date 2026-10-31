@@ -39,7 +39,7 @@ OSV exact-package query: not-assessed; complete=false
 AI: disabled
 Inventory complete: true; coverage complete: true
 This is not a safety verdict. No findings never means safe; missing or omitted facts remain unassessed.
-Report: http://127.0.0.1:50548/r/96e9010a829a452db116a7ca73de98a3.json
+Report: http://127.0.0.1:62887/r/ebb32657ce156f47debde7dafb1eb529.json
 
 $ unmask files example@1.2.3 --state changed --limit 2
 UNMASK files example@1.2.3
@@ -51,5 +51,7 @@ index.js [changed] 10 bytes
   artifact-sha256=e8b2086bcd01cd7ae249908d0de7c81d2f5ca9c49d96c75097c790e629434065 source-sha256=fbc020523a89b9dde134af1eedc34980295b71bb736242f9ea8995b39eac5148
 AI: disabled
 This is not a safety verdict; byte-identical means only recorded byte correspondence.
-Report: http://127.0.0.1:50548/r/96e9010a829a452db116a7ca73de98a3.json
+Report: http://127.0.0.1:62887/r/ebb32657ce156f47debde7dafb1eb529.json
+Report ID: ebb32657ce156f47debde7dafb1eb529
+Reuse this report for paging: --report ebb32657ce156f47debde7dafb1eb529 (with the same exact package spec and filters; no new check).
 

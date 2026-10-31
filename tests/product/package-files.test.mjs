@@ -159,3 +159,73 @@ test("files preserves mixed correspondence states and source digests from the re
     assert.match(result.stdout, /AI: disabled/);
   }
 });
+
+test("files report-bound paging reads one existing report without submitting or rerunning providers", async (t) => {
+  let submissions = 0,
+    providers = 0;
+  const report = explorerReport();
+  report.model = { status: "unavailable", reason: "quota-exceeded" };
+  const server = createApp({
+    versionInfo: {
+      version: "0.0.0",
+      commit: "b".repeat(40),
+      tarballSha256: "c".repeat(64),
+    },
+    runAnalysis: async () => {
+      providers++;
+      return report;
+    },
+  });
+  server.on("request", (req) => {
+    if (req.method === "POST") submissions++;
+  });
+  const origin = await listen(t, server);
+  const first = await runExplorer(
+    ["files", "example@1.2.3", "--limit", "2"],
+    origin,
+  );
+  assert.equal(first.code, 0, first.stderr);
+  const id = /Report ID: ([a-f0-9]{32})/.exec(first.stdout)?.[1];
+  assert.ok(id, "first page exposes reusable report identity");
+  const second = await runExplorer(
+    ["files", "example@1.2.3", "--report", id, "--offset", "2", "--limit", "2"],
+    origin,
+  );
+  assert.equal(second.code, 0, second.stderr);
+  assert.match(second.stdout, /Rows 3-4 of 4/);
+  assert.ok(second.stdout.includes(`Report ID: ${id}`));
+  assert.ok(first.stdout.includes(`--report ${id}`));
+  assert.equal(submissions, 1, "paging did not submit a new check");
+  assert.equal(providers, 1, "paging did not rerun the analysis/model path");
+});
+
+test("files report IDs fail closed and report-bound identities still match the requested spec", async (t) => {
+  for (const id of [
+    "../check",
+    "https://example.invalid/r/" + "a".repeat(32),
+    "a".repeat(31),
+  ]) {
+    const result = await runExplorer(
+      ["files", "example@1.2.3", "--report", id],
+      "http://127.0.0.1:1",
+    );
+    assert.equal(result.code, 2);
+    assert.doesNotMatch(result.stderr, /hosted-unavailable/);
+  }
+  let posts = 0;
+  const origin = await listen(
+    t,
+    createServer((req, res) => {
+      if (req.method === "POST") posts++;
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(explorerReport()));
+    }),
+  );
+  const result = await runExplorer(
+    ["files", "other@1.2.3", "--report", "a".repeat(32)],
+    origin,
+  );
+  assert.equal(result.code, 2);
+  assert.match(result.stderr, /hosted-report-invalid/);
+  assert.equal(posts, 0);
+});

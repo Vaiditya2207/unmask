@@ -58,8 +58,21 @@ it is never a regex or glob. `--state` is `all` (default), `byte-identical`,
 `changed`, `artifact-only` or `not-compared`. `--limit` defaults to 50, accepts
 1–200, and `--offset` defaults to zero and accepts nonnegative safe integers.
 Flags may each appear once. Rows sort by UTF-16 path order, then original path,
-and pagination applies after filtering. Pagination is over one job's returned
-projection; a later invocation can reflect a newer hosted job.
+and pagination applies after filtering. For later pages, reuse the printed report
+ID so pagination stays bound to the same hosted job:
+
+```sh
+unmask files example@1.2.3 --report <32-character-report-id> --path .js --state changed --limit 50 --offset 50
+```
+
+`--report ID` accepts only the recorded 32-character lowercase hexadecimal ID.
+It reads that existing job's strict report and details using GET, retaining exact
+package identity and artifact-digest validation, without submitting a check or
+starting analysis/provider work. The configured origin must be the origin where
+the report was created. Expired, missing or invalid reports fail explicitly and
+never trigger a new check. Omitting `--report` submits the normal hosted check;
+use the printed ID when browsing later pages, particularly when AI is unavailable
+or a prior check is incomplete.
 
 The terminal shows upstream total/omitted records separately from matching rows
 and the current page. Filtering cannot recover upstream omitted records, and zero
@@ -79,3 +92,12 @@ UNMASK_TEST_BUILT=1 node --test tests/product/package-info.test.mjs tests/produc
 
 The last command exercises the generated CLI artifact against local HTTP fixtures.
 It does not verify the public deployment, model provider or OSV availability.
+
+`getHostedDetailsForReport(spec, reportId, options)` exposes the same read-only
+report-bound flow to CLI consumers. It reuses the bounded hosted transport with
+an `existingReportId` option; integrations must preserve P01's independent
+`optionalDetails` option as well. `info` and `files` continue to require details
+by default. Advisory unavailability is never converted to `none-reported`.
+Recorded nonempty AI summaries are displayed only for `model.status=complete`;
+other statuses remain explicit without a fabricated summary. Zero-width
+U+200B–U+200D, U+2060 and U+FEFF are escaped alongside terminal/bidi controls.
