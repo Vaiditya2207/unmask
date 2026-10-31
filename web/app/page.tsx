@@ -238,7 +238,7 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
             style={{ ["--part" as string]: 3 }}
           >
             {connected ? (
-              "A check sends the package name and version to the UNMASK server. Reports are kept for up to 30 minutes."
+              "A check sends the package name and version to the UNMASK server, which may send bounded public package and source excerpts to Google for advisory explanations. Reports are kept for up to 30 minutes."
             ) : (
               <>
                 Checks run on the UNMASK analyzer, which this deployment does
