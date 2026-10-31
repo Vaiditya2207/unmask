@@ -6,6 +6,7 @@ package-lock.json
 .next/
 next-env.d.ts
 .taste-skill/
+.playwright-mcp/
 examples/**/input/**
 examples/**/output/**
 

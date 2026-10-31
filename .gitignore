@@ -16,6 +16,7 @@ artifacts/
 next-env.d.ts
 *.tsbuildinfo
 .taste-skill/
+.playwright-mcp/
 
 # Internal planning/research notes: never commit (keep them in ../unmask-research)
 internal/

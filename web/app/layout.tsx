@@ -1,42 +1,30 @@
 import type { Metadata, Viewport } from "next";
-import {
-  JetBrains_Mono,
-  Libre_Franklin,
-  Source_Serif_4,
-} from "next/font/google";
+import { Bricolage_Grotesque, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
-const display = Libre_Franklin({
+const sans = Bricolage_Grotesque({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-display",
+  axes: ["opsz"],
+  variable: "--font-sans",
   display: "swap",
 });
 
-const text = Source_Serif_4({
-  subsets: ["latin"],
-  weight: ["400", "600"],
-  style: ["normal", "italic"],
-  variable: "--font-text",
-  display: "swap",
-});
-
-const code = JetBrains_Mono({
+const mono = IBM_Plex_Mono({
   subsets: ["latin"],
   weight: ["400", "500"],
-  variable: "--font-code",
+  variable: "--font-mono",
   display: "swap",
 });
 
 export const metadata: Metadata = {
   title: "UNMASK · See what actually shipped",
   description:
-    "UNMASK compares a published npm release with the source commit it claims, file by file, and shows the evidence for every difference.",
+    "UNMASK compares a published npm release with the source it claims, byte by byte, and shows the evidence for every difference.",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0f0f0f",
-  colorScheme: "dark light",
+  themeColor: "#1f2de6",
+  colorScheme: "light",
 };
 
 export default function RootLayout({
@@ -47,7 +35,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${display.variable} ${text.variable} ${code.variable}`}
+      className={`${sans.variable} ${mono.variable}`}
       suppressHydrationWarning
     >
       <head>
