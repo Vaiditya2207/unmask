@@ -130,6 +130,9 @@ export function parseLockfile(text, limits = LOCKFILE_LIMITS) {
       "lockfile-unsupported",
       "Only npm lockfileVersion 2 or 3 (with a packages map) is supported.",
     );
+  // npm writes an empty packages map for a project with no dependencies.
+  if (isObject(data.packages) && Object.keys(data.packages).length === 0)
+    data.packages = { "": {} };
   if (!isObject(data.packages) || !isObject(data.packages[""]))
     throw invalid("Lockfile packages map with a root entry is required.");
   const keys = Object.keys(data.packages);
@@ -186,6 +189,12 @@ export function parseLockfile(text, limits = LOCKFILE_LIMITS) {
       edgesValid,
     });
   }
+  // npm omits name on workspace entries; the linking node_modules key carries it.
+  for (const entry of entries.values()) {
+    const target = entry.kind === "link" && entries.get(entry.resolved ?? "");
+    if (target?.kind === "workspace" && target.name === target.key)
+      target.name = nameFromKey(entry.key);
+  }
   return { lockfileVersion: data.lockfileVersion, entries };
 }
 
@@ -238,37 +247,52 @@ export function resolveEdge(lock, fromKey, name) {
   return null;
 }
 
-export function unresolvedEdges(lock, { omitDev = false } = {}) {
+function scanEdges(lock, omitDev) {
   const missing = [];
+  const omitted = { optional: 0, peerOptional: 0, devEdges: 0 };
   for (const entry of lock.entries.values()) {
     if (entry.kind === "link" || (omitDev && entry.dev)) continue;
     const project = ["root", "workspace"].includes(entry.kind);
     for (const edge of entry.edges) {
-      if (
-        ["optional", "peer-optional"].includes(edge.type) ||
-        (edge.type === "dev" && (!project || omitDev))
-      )
-        continue;
-      if (!resolveEdge(lock, entry.key, edge.name))
-        missing.push({ from: entry.key, name: edge.name, type: edge.type });
+      if (edge.type === "dev" && !project) continue;
+      const found = resolveEdge(lock, entry.key, edge.name);
+      if (edge.type === "dev" && omitDev) omitted.devEdges++;
+      else if (found) continue;
+      else if (edge.type === "optional") omitted.optional++;
+      else if (edge.type === "peer-optional") omitted.peerOptional++;
+      else missing.push({ from: entry.key, name: edge.name, type: edge.type });
     }
   }
-  return missing;
+  return { missing, omitted };
+}
+
+export function unresolvedEdges(lock, { omitDev = false } = {}) {
+  return scanEdges(lock, omitDev).missing;
 }
 
 export function exactTargets(lock, { omitDev = false } = {}) {
   const unique = new Map();
   const skipped = {};
   let considered = 0;
-  const unresolved = unresolvedEdges(lock, { omitDev });
+  const { missing: unresolved, omitted } = scanEdges(lock, omitDev);
+  omitted.devEntries = 0;
   if (unresolved.length) skipped["unresolved-dependency"] = unresolved.length;
   const badEdges = [...lock.entries.values()].filter(
     (entry) => !entry.edgesValid && !(omitDev && entry.dev),
   ).length;
   if (badEdges) skipped["invalid-dependencies"] = badEdges;
   for (const entry of lock.entries.values()) {
+    if (omitDev && entry.dev) {
+      if (!["root", "workspace", "link"].includes(entry.kind))
+        omitted.devEntries++;
+      continue;
+    }
+    // A link whose target entry is absent means unlocked local code.
+    if (entry.kind === "link" && !lock.entries.has(entry.resolved ?? "")) {
+      skipped["dangling-link"] = (skipped["dangling-link"] ?? 0) + 1;
+      continue;
+    }
     if (["root", "workspace", "link"].includes(entry.kind)) continue;
-    if (omitDev && entry.dev) continue;
     considered++;
     if (entry.kind !== "registry") {
       skipped[entry.reason] = (skipped[entry.reason] ?? 0) + 1;
@@ -282,8 +306,12 @@ export function exactTargets(lock, { omitDev = false } = {}) {
       locations: [],
       bound: true,
       integrity: [],
+      aliases: [],
     };
     target.locations.push(entry.key);
+    const alias = nameFromKey(entry.key);
+    if (alias !== entry.name && !target.aliases.includes(alias))
+      target.aliases.push(alias);
     target.bound &&= entry.bound;
     if (entry.integrity && !target.integrity.includes(entry.integrity))
       target.integrity.push(entry.integrity);
@@ -296,6 +324,7 @@ export function exactTargets(lock, { omitDev = false } = {}) {
       a.spec < b.spec ? -1 : a.spec > b.spec ? 1 : 0,
     ),
     skipped,
+    omitted,
     unresolved: unresolved.slice(0, 100),
   };
 }

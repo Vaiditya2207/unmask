@@ -75,8 +75,19 @@ test("lockfile parser rejects malformed, unsupported and invalid shapes", () => 
     [text({ lockfileVersion: 1, dependencies: {} }), "lockfile-unsupported"],
     [text({ lockfileVersion: 3 }), "lockfile-invalid"],
     [text({ lockfileVersion: 3, packages: { x: {} } }), "lockfile-invalid"],
+    [
+      text({ lockfileVersion: 3, packages: { "node_modules/a": {} } }),
+      "lockfile-invalid",
+    ],
   ])
     assert.throws(() => parseLockfile(input), { code });
+  const empty = exactTargets(
+    parseLockfile(text({ lockfileVersion: 3, requires: true, packages: {} })),
+  );
+  assert.deepEqual(
+    [empty.considered, empty.targets, empty.skipped],
+    [0, [], {}],
+  );
   const partial = parseLockfile(
     text({
       lockfileVersion: 2,
@@ -433,6 +444,141 @@ test("lockfile compatibility: legacy names, unresolved, bundled, encoded and tra
     }),
   );
   assert.equal(exactTargets(conflict).targets[0].bound, false);
+});
+
+test("graph truth: aliases, workspace links and optional or dev omissions are reported", async () => {
+  const lock = parseLockfile(
+    text({
+      lockfileVersion: 3,
+      packages: {
+        "": {
+          workspaces: ["packages/w", "packages/gone"],
+          dependencies: { foo: "npm:real@1.0.0", noname: "npm:x@1.0.0" },
+          optionalDependencies: { fsevents: "2" },
+          devDependencies: { devonly: "1.0.0" },
+        },
+        "node_modules/foo": pkg("real", "1.0.0", { name: "real" }),
+        "node_modules/noname": pkg("x", "1.0.0"),
+        "node_modules/w": { resolved: "packages/w", link: true },
+        "node_modules/gone": { resolved: "packages/gone", link: true },
+        "packages/w": {
+          name: "w",
+          version: "0.0.1",
+          dependencies: { bar: "npm:real@1.0.0", w2: "*" },
+          peerDependencies: { react: "18" },
+          peerDependenciesMeta: { react: { optional: true } },
+        },
+        "packages/w/node_modules/bar": pkg("real", "1.0.0", { name: "real" }),
+        "node_modules/w2": { resolved: "packages/w2", link: true },
+        "packages/w2": { name: "w2", version: "0.0.1" },
+        "node_modules/w3": { resolved: "packages/w3", link: true },
+        "packages/w3": { version: "0.0.1" },
+      },
+    }),
+  );
+  const all = exactTargets(lock);
+  assert.deepEqual(
+    all.targets.map((t) => [t.spec, t.aliases, t.locations]),
+    [
+      [
+        "real@1.0.0",
+        ["foo", "bar"],
+        ["node_modules/foo", "packages/w/node_modules/bar"],
+      ],
+    ],
+  );
+  assert.equal(
+    lock.entries.get("node_modules/noname").reason,
+    "non-registry-source",
+  );
+  assert.equal(resolveEdge(lock, "packages/w", "w2").key, "packages/w2");
+  assert.equal(lock.entries.get("packages/w3").name, "w3");
+  assert.deepEqual(all.skipped, {
+    "unresolved-dependency": 1,
+    "non-registry-source": 1,
+    "dangling-link": 1,
+  });
+  assert.deepEqual(all.unresolved, [
+    { from: "", name: "devonly", type: "dev" },
+  ]);
+  assert.deepEqual(all.omitted, {
+    optional: 1,
+    peerOptional: 1,
+    devEdges: 0,
+    devEntries: 0,
+  });
+  const prod = exactTargets(lock, { omitDev: true });
+  assert.equal(prod.skipped["unresolved-dependency"], undefined);
+  assert.equal(prod.omitted.devEdges, 1);
+  const clean = parseLockfile(
+    text({
+      lockfileVersion: 3,
+      packages: {
+        "": {
+          dependencies: { foo: "npm:real@1.0.0" },
+          optionalDependencies: { fsevents: "2" },
+          devDependencies: { d: "1.0.0" },
+        },
+        "node_modules/foo": pkg("real", "1.0.0", { name: "real" }),
+        "node_modules/d": pkg("d", "1.0.0", { dev: true }),
+      },
+    }),
+  );
+  const result = await auditLock(clean, {
+    check: async () => bound(0),
+    omitDev: true,
+  });
+  assert.equal(result.coverage.complete, true);
+  assert.deepEqual(result.coverage.omitted, {
+    optional: 1,
+    peerOptional: 0,
+    devEdges: 1,
+    devEntries: 1,
+  });
+  assert.deepEqual(result.results[0].aliases, ["foo"]);
+  assert.equal(result.exitCode, 0);
+});
+
+// Generated offline by npm 11.19.1 --package-lock-only for two local workspaces.
+const npmWorkspaceLock = {
+  name: "ws-root",
+  version: "1.0.0",
+  lockfileVersion: 3,
+  requires: true,
+  packages: {
+    "": { name: "ws-root", version: "1.0.0", workspaces: ["packages/*"] },
+    "node_modules/a": { resolved: "packages/a", link: true },
+    "node_modules/b": { resolved: "packages/b", link: true },
+    "packages/a": {
+      version: "1.0.0",
+      dependencies: { b: "1.0.0" },
+      peerDependencies: { b: "*" },
+      peerDependenciesMeta: { b: { optional: true } },
+    },
+    "packages/b": { version: "1.0.0", optionalDependencies: { a: "1.0.0" } },
+  },
+};
+
+test("npm-generated workspace lockfile names workspaces and has no false gaps", async () => {
+  const lock = parseLockfile(text(npmWorkspaceLock));
+  assert.deepEqual(
+    [...lock.entries.values()].map((e) => [e.key, e.kind, e.name]),
+    [
+      ["", "root", "ws-root"],
+      ["node_modules/a", "link", "a"],
+      ["node_modules/b", "link", "b"],
+      ["packages/a", "workspace", "a"],
+      ["packages/b", "workspace", "b"],
+    ],
+  );
+  assert.equal(resolveEdge(lock, "packages/a", "b").key, "packages/b");
+  const result = await auditLock(lock, {
+    check: async () => assert.fail("no registry targets"),
+  });
+  assert.deepEqual(
+    [result.coverage.complete, result.coverage.skipped, result.exitCode],
+    [true, {}, 0],
+  );
 });
 
 test("unmask audit CLI uses the real hosted transport against a local server", async (t) => {
