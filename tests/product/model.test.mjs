@@ -101,6 +101,7 @@ function client(fetchImpl, extra = {}) {
     dailyRequests: 20,
     requestsPerMinute: 20,
     inputTokensPerMinute: 20000,
+    totalMs: 90000,
     fetchImpl,
     ...extra,
   });
@@ -1545,6 +1546,7 @@ function routedClient(fetchImpl, options = {}) {
     requestsPerMinute: 40,
     inputTokensPerMinute: 200000,
     route: testRoute,
+    totalMs: 90000,
     fetchImpl,
     ...options,
   });
@@ -1765,7 +1767,7 @@ test("route identity binds ordered tiers and full configurations but excludes cr
     assert.throws(() => routedClient(forbidden, { route }), /route|model/i);
 });
 
-test("default Google route is Flash high then Lite minimal; explicit model IDs never expand", () => {
+test("default Google route is Flash high then 3 Flash then Gemma minimal; explicit model IDs never expand", () => {
   const forbidden = () => {
     throw new Error("synthetic transport must not run");
   };
@@ -1787,7 +1789,8 @@ test("default Google route is Flash high then Lite minimal; explicit model IDs n
     ]),
     [
       ["gemini-3.5-flash", "high"],
-      ["gemini-3.5-flash-lite", "minimal"],
+      ["gemini-3-flash-preview", "minimal"],
+      ["gemma-4-26b-a4b-it", "minimal"],
     ],
   );
   assert.equal(model.configuration.providerQuota, "unknown");
@@ -1860,12 +1863,12 @@ test("shared factory enables bounded local caps without pretending upstream quot
   const model = await modelClientFromEnv(env);
   assert.equal(model.configuration.enabled, true);
   assert.equal(model.modelId, "gemini-3.5-flash");
-  assert.equal(model.configuration.route.length, 2);
+  assert.equal(model.configuration.route.length, 3);
   assert.equal(model.configuration.providerQuota, "unknown");
   assert.equal(model.configuration.quota.counting, "generations");
   assert.deepEqual(model.configuration.localLimits, {
-    generationsPerMinute: 2,
-    inputTokensPerMinute: 8000,
+    generationsPerMinute: 3,
+    inputTokensPerMinute: 12000,
     generationsPerDay: 100,
   });
   const unverified = await modelClientFromEnv({
@@ -2169,4 +2172,112 @@ test("only an explicit model-bound minute quota window permits tier fallthrough"
     assert.equal(result.attempts, 1);
     assert.equal(calls, 2);
   }
+});
+
+test("three explicit tiers have at most one transient generation each within shared limits", async () => {
+  const route = [
+    { modelId: "gemini-3.5-flash", thinkingLevel: "high" },
+    { modelId: "gemini-3-flash-preview", thinkingLevel: "minimal" },
+    { modelId: "gemma-4-26b-a4b-it", thinkingLevel: "minimal" },
+  ];
+  for (const [rate, elapsed, allowed] of [
+    [2, false, false],
+    [2, true, true],
+    [3, false, true],
+  ]) {
+    let time = 0;
+    const seen = [];
+    const model = createGemmaClient({
+      apiKey: "test-only-key",
+      provider: "google",
+      route,
+      localLimits: {
+        generationsPerMinute: rate,
+        inputTokensPerMinute: rate * 4000,
+        generationsPerDay: 100,
+      },
+      now: () => time,
+      fetchImpl: async (url) => {
+        seen.push(url);
+        if (url.endsWith(":countTokens"))
+          return new Response('{"totalTokens":100}');
+        if (url.includes("gemma-4-26b-a4b-it:"))
+          return output({ hypotheses: [hypothesis()] });
+        if (elapsed) time += 31000;
+        return new Response("transient", {
+          status: 503,
+          headers: { "Retry-After": "0" },
+        });
+      },
+    });
+    const result = await model.explain(report(), { allowLocal: true });
+    assert.equal(result.routingPolicy.maxGenerationAttempts, 3);
+    assert.equal(result.attempts, allowed ? 3 : 2);
+    assert.equal(result.preflightCalls, allowed ? 3 : 2);
+    assert.equal(result.status, allowed ? "complete" : "unavailable");
+    assert.equal(result.limits.totalMs, 135000);
+    if (allowed) assert.equal(result.modelId, "gemma-4-26b-a4b-it");
+    else {
+      assert.equal(result.reason, "quota");
+      assert.equal(result.attemptLog.at(-1).failureScope, "local");
+    }
+    assert.equal(seen.length, allowed ? 6 : 4);
+  }
+});
+
+test("default three-tier policy never sends a fourth generation", async () => {
+  const seen = [];
+  const model = createGemmaClient({
+    apiKey: "test-only-key",
+    provider: "google",
+    localLimits: {
+      generationsPerMinute: 3,
+      inputTokensPerMinute: 12000,
+      generationsPerDay: 100,
+    },
+    fetchImpl: async (url) => {
+      seen.push(url);
+      return url.endsWith(":countTokens")
+        ? new Response('{"totalTokens":100}')
+        : new Response("transient", {
+            status: 503,
+            headers: { "Retry-After": "0" },
+          });
+    },
+  });
+  const result = await model.explain(report(), { allowLocal: true });
+  assert.equal(result.status, "unavailable");
+  assert.equal(result.attempts, 3);
+  assert.equal(result.preflightCalls, 3);
+  assert.equal(seen.length, 6);
+  assert.deepEqual(
+    result.attemptLog.map((item) => item.modelId),
+    ["gemini-3.5-flash", "gemini-3-flash-preview", "gemma-4-26b-a4b-it"],
+  );
+  assert.equal(result.limits.totalMs, 135000);
+});
+
+test("three-slot default invalid-output retries stay on the first tier and stop at three", async () => {
+  const seen = [];
+  const model = createGemmaClient({
+    apiKey: "test-only-key",
+    provider: "google",
+    localLimits: {
+      generationsPerMinute: 3,
+      inputTokensPerMinute: 12000,
+      generationsPerDay: 100,
+    },
+    fetchImpl: async (url) => {
+      seen.push(url);
+      return url.endsWith(":countTokens")
+        ? new Response('{"totalTokens":100}')
+        : new Response("{}");
+    },
+  });
+  const result = await model.explain(report(), { allowLocal: true });
+  assert.equal(result.reason, "invalid-output");
+  assert.equal(result.attempts, 3);
+  assert.equal(result.preflightCalls, 3);
+  assert.equal(seen.length, 6);
+  assert.ok(seen.every((url) => url.includes("gemini-3.5-flash:")));
 });

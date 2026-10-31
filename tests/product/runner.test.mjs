@@ -241,12 +241,12 @@ test("model rejection preserves deterministic policy and records unavailable sta
   assert.ok(!JSON.stringify(result).includes("private provider failure"));
 });
 
-test("model deadline aborts the explanation at 90 seconds without changing policy", async (t) => {
+test("model deadline aborts the explanation at 135 seconds without changing policy", async (t) => {
   const f = await setup(
     t,
     `await writeFile(request.workDir+'/report.json',${JSON.stringify(JSON.stringify(report()))});`,
   );
-  let modelSignal;
+  let modelSignal, abortedAtNinety;
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const run = await createRunner({
     tempRoot: f.tempRoot,
@@ -254,7 +254,11 @@ test("model deadline aborts the explanation at 90 seconds without changing polic
     modelClient: {
       explain(input, { signal }) {
         modelSignal = signal;
-        queueMicrotask(() => t.mock.timers.tick(90000));
+        queueMicrotask(() => {
+          t.mock.timers.tick(90000);
+          abortedAtNinety = signal.aborted;
+          t.mock.timers.tick(45000);
+        });
         return new Promise(() => {});
       },
     },
@@ -262,6 +266,7 @@ test("model deadline aborts the explanation at 90 seconds without changing polic
   const result = await run("fixture@1.0.0");
   assert.equal(result.policy.exitCode, 0);
   assert.equal(result.model.status, "timeout");
+  assert.equal(abortedAtNinety, false);
   assert.equal(modelSignal.aborted, true);
 });
 

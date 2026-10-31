@@ -158,7 +158,7 @@ async function explainReport(report, client, signal, cap) {
     timer = setTimeout(() => {
       controller.abort();
       resolve({ status: "timeout" });
-    }, 90000);
+    }, 135000);
   });
   try {
     if (signal?.aborted) throw fail("analysis-aborted");
