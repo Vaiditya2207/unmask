@@ -374,3 +374,23 @@ test("conflicting integrity, new unresolved required dependencies and invalid de
   });
   assert.equal(unchanged.status, "pass");
 });
+
+test("a new link without a locked target keeps preflight incomplete", async () => {
+  const base = JSON.stringify({ lockfileVersion: 3, packages: { "": {} } });
+  const next = JSON.stringify({
+    lockfileVersion: 3,
+    packages: {
+      "": { workspaces: ["packages/x"] },
+      "node_modules/x": { resolved: "packages/x", link: true },
+    },
+  });
+  const result = await preflight({
+    baselineText: base,
+    lockfileText: next,
+    checkPackage: async () => assert.fail("nothing to check"),
+  });
+  assert.deepEqual(
+    [result.status, result.exitCode, result.coverage.unsupported],
+    ["incomplete", 2, [{ path: "node_modules/x", reason: "dangling-link" }]],
+  );
+});

@@ -21,6 +21,13 @@ export function lockIdentities(text) {
         version: entry.version,
         resolved: entry.resolved,
       });
+    if (entry.kind === "link" && !lock.entries.has(entry.resolved ?? ""))
+      unsupported.push({
+        path: entry.key,
+        reason: "dangling-link",
+        version: entry.version,
+        resolved: entry.resolved,
+      });
     const claimsArtifact =
       entry.kind === "workspace" && (entry.resolved || entry.integrity);
     if (["root", "workspace", "link"].includes(entry.kind) && !claimsArtifact)
