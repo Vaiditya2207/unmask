@@ -1,6 +1,6 @@
 {
   "enabled": false,
-  "approvedPackageName": null,
+  "approvedPackageName": "@xagents_in/unmask",
   "sourceFiles": [],
   "cli": null,
   "server": null,
