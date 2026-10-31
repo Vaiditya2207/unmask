@@ -140,6 +140,28 @@ name/archive size/archive digest/lock digest/source hash, and Linux AMD64 image
 digest. Attaching a tarball to GitHub does not publish it to npm. When
 `npmPublishEnabled` is false the manifest reports `package.registryPublished: false`.
 
+Future release notes retain the candidate, image, checks and deployment evidence
+and append linked commit subjects since the highest published stable release.
+Drafts and prereleases do not define that baseline. The GitHub comparison uses
+the exact candidate SHA, includes merge commits, and lists at most 100 commits in
+chronological order with subjects limited to 200 characters. A full compare link
+and an explicit truncation notice cover longer ranges. The first release instead
+links its commit history. Comparison failures or a non-ancestor baseline stop
+publication before reserving the Git tag; the workflow's shallow checkout does
+not limit the history. Future publication does not change existing release bodies
+or immutable artifacts.
+
+The separate `Sync existing release notes` workflow runs on main pushes changing
+its workflow or notes scripts, or a manual dispatch on main. It uses only the
+sync job's Contents-write GitHub token to append notes to the highest published
+stable release. The release must be immutable and its resolved tag commit must
+match its full target SHA. Only strictly older stable releases define the baseline.
+Existing body evidence is retained; equivalent generated notes are a no-op and a
+different existing commit section requires review. The only write is a body-only
+release PATCH, followed by body, release metadata, artifact metadata and tag
+readback. This workflow shares the publication queue and never creates or modifies
+tags, assets, package versions, images or deployments.
+
 With `npmPublishEnabled: true`, the main-push workflow injects the existing
 `NPM_TOKEN` secret only into the npm publication step after exact candidate smoke.
 It publishes the prepared archive with `--ignore-scripts --access public` to the
