@@ -455,7 +455,7 @@ test("shared model configuration imports without server modules and retains the 
   assert.equal(main.modelClientFromEnv, modelClientFromEnv);
   const root = await mkdtemp(path.join(os.tmpdir(), "unmask-model-config-"));
   t.after(() => rm(root, { recursive: true, force: true }));
-  for (const name of ["config", "client"])
+  for (const name of ["config", "client", "summary"])
     await writeFile(
       path.join(root, `${name}.mjs`),
       await readFile(new URL(`../../src/model/${name}.mjs`, import.meta.url)),

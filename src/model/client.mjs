@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { SUMMARY_POLICY, summaryBundle, validSummary } from "./summary.mjs";
 
 const HOST = "generativelanguage.googleapis.com";
 const MODELS = new Set([
@@ -504,7 +505,8 @@ function hypothesesFor(envelope, selected, secret, evidenceGroups) {
     throw new Failure("invalid-output", true);
   }
   if (
-    !exactKeys(result, ["hypotheses"]) ||
+    !exactKeys(result, ["summary", "hypotheses"]) ||
+    !validSummary(result.summary, secret) ||
     !Array.isArray(result.hypotheses) ||
     result.hypotheses.length > 5
   )
@@ -579,12 +581,15 @@ function hypothesesFor(envelope, selected, secret, evidenceGroups) {
     )
       throw new Failure("invalid-output", true);
   }
-  return result.hypotheses.map((item) => ({
-    ...item,
-    evidenceIds: [
-      ...new Set(item.citations.map((citation) => citation.evidenceId)),
-    ].sort(order),
-  }));
+  return {
+    summary: result.summary,
+    hypotheses: result.hypotheses.map((item) => ({
+      ...item,
+      evidenceIds: [
+        ...new Set(item.citations.map((citation) => citation.evidenceId)),
+      ].sort(order),
+    })),
+  };
 }
 async function jsonResponse(response, signal) {
   const declared = response.headers.get("content-length");
@@ -865,6 +870,7 @@ export function createGemmaClient(options = {}) {
         attemptMs,
         totalMs,
         quota,
+        summaryPolicy: SUMMARY_POLICY,
         enabled: Boolean(configured && process.env.UNMASK_MODEL !== "off"),
       }),
     );
@@ -939,6 +945,7 @@ export function createGemmaClient(options = {}) {
         quota: { ...quota },
         providerQuota: "unknown",
         operatorDeclaredVerified: options.quotaVerified === true,
+        summaryPolicy: SUMMARY_POLICY,
         ...(local ? { localLimits: structuredClone(local) } : {}),
         enabled: Boolean(configured && process.env.UNMASK_MODEL !== "off"),
       };
@@ -961,23 +968,13 @@ export function createGemmaClient(options = {}) {
             report.inputs.sourceArchive.kind !== "remote"))
       )
         return { status: "not-sent", reason: "local-input" };
-      if (
-        Array.isArray(report.files) &&
-        report.files.length <= 20000 &&
-        report.files.every((file) => file?.state === "byte-identical") &&
-        Array.isArray(report.cues) &&
-        report.cues.length === 0 &&
-        Array.isArray(report.policy?.findings) &&
-        report.policy.findings.length === 0
-      )
-        return { status: "not-sent", reason: "no-eligible-evidence" };
       if (active) return { status: "unavailable", reason: "busy" };
       const effectiveConfigHash = configurationHash();
       const started = now();
       const deadline = started + totalMs;
       let bundle;
       try {
-        bundle = promptFor(report, inputLimit);
+        bundle = summaryBundle(promptFor, report, inputLimit);
       } catch (error) {
         return {
           status: "unavailable",
@@ -990,10 +987,10 @@ export function createGemmaClient(options = {}) {
         )
       )
         return { status: "not-sent", reason: "sensitive-input" };
-      if (!bundle.selected.size)
+      if (Buffer.byteLength(bundle.prompt) + 256 > inputLimit)
         return {
           status: "unavailable",
-          reason: "no-evidence",
+          reason: "input-budget",
           omittedEvidenceIds: bundle.omittedEvidenceIds,
           omittedEvidenceGroups: bundle.omittedEvidenceGroups,
           evidenceGroups: [],
@@ -1027,6 +1024,8 @@ export function createGemmaClient(options = {}) {
         omittedEvidenceIds: [...bundle.omittedEvidenceIds],
         evidenceGroups: structuredClone(bundle.evidenceGroups),
         omittedEvidenceGroups: structuredClone(bundle.omittedEvidenceGroups),
+        summaryPolicy: SUMMARY_POLICY,
+        scope: structuredClone(bundle.scope),
         attempts,
         preflightCalls,
         latencyMs: Math.max(0, Math.floor(now() - started)),
@@ -1195,21 +1194,21 @@ export function createGemmaClient(options = {}) {
               { contents, generationConfig: tier.generationConfig },
               count.totalTokens,
             );
-            const hypotheses = hypothesesFor(
+            const validated = hypothesesFor(
               result,
               bundle.selected,
               apiKey,
               bundle.evidenceGroups,
             );
             check();
-            return hypotheses;
+            return validated;
           };
           let failed;
           try {
-            const hypotheses = await Promise.race([run(), timeout, cancelled]);
+            const validated = await Promise.race([run(), timeout, cancelled]);
             record.status = "complete";
             record.latencyMs = Math.max(0, Math.floor(now() - attemptStarted));
-            return { status: "complete", hypotheses, ...metadata() };
+            return { status: "complete", ...validated, ...metadata() };
           } catch (error) {
             failed =
               error instanceof Failure ? error : new Failure("invalid-output");

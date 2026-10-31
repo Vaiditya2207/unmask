@@ -836,63 +836,75 @@ test(
     const eligible = syntheticAnalysis("changed");
     assert.equal(eligible.files[0].state, "changed");
     const cited = eligible.evidence.find((item) => item.side === "artifact");
-    const client = syntheticClient(async (url, options) => {
-      const endpoint = new URL(url);
-      assert.equal(
-        endpoint.origin,
-        "https://generativelanguage.googleapis.com",
-      );
-      assert.equal(options.method, "POST");
-      assert.equal(options.redirect, "error");
-      const method = endpoint.pathname.split(":").at(-1);
-      assert.equal(
-        endpoint.pathname,
-        `/v1beta/models/gemma-4-26b-a4b-it:${method}`,
-      );
-      const body = JSON.parse(options.body);
-      const prompt = JSON.parse(body.contents[0].parts[0].text);
-      assert.ok(
-        prompt.evidence.some(
-          (item) =>
-            item.id === cited.id && item.excerpt.includes(cited.excerpt),
-        ),
-      );
-      if (method === "countTokens") {
-        calls.countTokens++;
-        counting.resolve();
-        await releaseCount.promise;
-        return new Response('{"totalTokens":100}');
-      }
-      assert.equal(method, "generateContent");
-      calls.generateContent++;
-      return new Response(
-        JSON.stringify({
-          candidates: [
-            {
-              content: {
-                parts: [
-                  {
-                    text: JSON.stringify({
-                      hypotheses: [
-                        {
-                          category: "review-concern",
-                          explanation: "The artifact excerpt warrants review.",
-                          uncertainty: "Execution was not observed.",
-                          alternative: "This may be an intentional edit.",
-                          citations: [
-                            { evidenceId: cited.id, quote: cited.excerpt },
-                          ],
-                        },
-                      ],
-                    }),
-                  },
-                ],
+    const client = syntheticClient(
+      async (url, options) => {
+        const endpoint = new URL(url);
+        assert.equal(
+          endpoint.origin,
+          "https://generativelanguage.googleapis.com",
+        );
+        assert.equal(options.method, "POST");
+        assert.equal(options.redirect, "error");
+        const method = endpoint.pathname.split(":").at(-1);
+        assert.equal(
+          endpoint.pathname,
+          `/v1beta/models/gemma-4-26b-a4b-it:${method}`,
+        );
+        const body = JSON.parse(options.body);
+        const prompt = JSON.parse(body.contents[0].parts[0].text);
+        if (prompt.scope.files) {
+          assert.ok(
+            prompt.evidence.some(
+              (item) =>
+                item.id === cited.id && item.excerpt.includes(cited.excerpt),
+            ),
+          );
+        } else assert.deepEqual(prompt.evidence, []);
+        if (method === "countTokens") {
+          calls.countTokens++;
+          counting.resolve();
+          await releaseCount.promise;
+          return new Response('{"totalTokens":100}');
+        }
+        assert.equal(method, "generateContent");
+        calls.generateContent++;
+        return new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: JSON.stringify({
+                        summary: "One changed file has an excerpt to review.",
+                        hypotheses: prompt.evidence.length
+                          ? [
+                              {
+                                category: "review-concern",
+                                explanation:
+                                  "The artifact excerpt warrants review.",
+                                uncertainty: "Execution was not observed.",
+                                alternative: "This may be an intentional edit.",
+                                citations: [
+                                  {
+                                    evidenceId: cited.id,
+                                    quote: cited.excerpt,
+                                  },
+                                ],
+                              },
+                            ]
+                          : [],
+                      }),
+                    },
+                  ],
+                },
               },
-            },
-          ],
-        }),
-      );
-    });
+            ],
+          }),
+        );
+      },
+      { dailyRequests: 4, requestsPerMinute: 4 },
+    );
     const build = { ...versionInfo, modelConfigDigest: client.configHash };
     const s = await start(t, {
       versionInfo: build,
@@ -971,10 +983,10 @@ test(
     const second = await (
       await finished(s, fresh.headers.get("location"))
     ).json();
-    assert.deepEqual(second.model, {
-      status: "not-sent",
-      reason: "no-eligible-evidence",
-    });
+    assert.equal(second.model.status, "complete");
+    assert.match(second.model.summary, /changed file/);
+    assert.deepEqual(second.model.hypotheses, []);
+    assert.equal(second.model.scope.files, 0);
     assert.equal((await s.post("third@1.0.0")).status, 429);
     assert.equal(
       (await s.post("eligible@1.0.0")).headers.get("location"),
@@ -983,14 +995,14 @@ test(
     assert.deepEqual(calls, {
       analysis: 2,
       model: 2,
-      countTokens: 1,
-      generateContent: 1,
+      countTokens: 2,
+      generateContent: 2,
     });
   },
 );
 
 test(
-  "synthetic analysis/provider: identical and empty HTTP reports skip provider calls and remain reusable",
+  "synthetic analysis/provider: identical and empty HTTP reports receive one real summary call and reuse it",
   { timeout: 5000 },
   async (t) => {
     enableSyntheticModel(t);
@@ -1006,17 +1018,41 @@ test(
       const input = syntheticAnalysis(state);
       assert.equal(input.files.length, state === "empty" ? 0 : 1);
       assert.ok(input.files.every((file) => file.state === "byte-identical"));
-      const client = syntheticClient(async (url) => {
-        assert.equal(
-          new URL(url).origin,
-          "https://generativelanguage.googleapis.com",
-        );
-        if (url.endsWith(":countTokens")) calls.countTokens++;
-        if (url.endsWith(":generateContent")) calls.generateContent++;
-        throw new Error(
-          "synthetic provider must never be called for ineligible evidence",
-        );
-      });
+      const client = syntheticClient(
+        async (url, options) => {
+          assert.equal(
+            new URL(url).origin,
+            "https://generativelanguage.googleapis.com",
+          );
+          const prompt = JSON.parse(
+            JSON.parse(options.body).contents[0].parts[0].text,
+          );
+          assert.equal(prompt.scope.findings + prompt.scope.cues, 0);
+          assert.equal(prompt.evidence.length, input.evidence.length);
+          if (url.endsWith(":countTokens")) {
+            calls.countTokens++;
+            return new Response('{"totalTokens":100}');
+          }
+          calls.generateContent++;
+          return Response.json({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: JSON.stringify({
+                        summary: `Scope lists ${prompt.scope.files} files; matching bytes are not proof the package is safe.`,
+                        hypotheses: [],
+                      }),
+                    },
+                  ],
+                },
+              },
+            ],
+          });
+        },
+        { dailyRequests: 4, requestsPerMinute: 4 },
+      );
       const build = { ...versionInfo, modelConfigDigest: client.configHash };
       const s = await start(t, {
         versionInfo: build,
@@ -1050,10 +1086,18 @@ test(
       });
       releaseAnalysis.resolve();
       const result = await (await finished(s, path)).json();
-      assert.deepEqual(result.model, {
-        status: "not-sent",
-        reason: "no-eligible-evidence",
-      });
+      assert.equal(
+        result.model.status,
+        "complete",
+        JSON.stringify([
+          result.model.reason,
+          result.model.attemptLog,
+          result.evidence?.length,
+        ]),
+      );
+      assert.match(result.model.summary, /not proof the package is safe/);
+      assert.deepEqual(result.model.hypotheses, []);
+      assert.equal(result.model.scope.files, input.files.length);
       assert.equal(canonicalReport(result), canonicalReport(input));
       assert.equal(client.configHash, build.modelConfigDigest);
       for (const route of [path, path + ".json", "/healthz", "/version"])
@@ -1065,8 +1109,8 @@ test(
       assert.deepEqual(calls, {
         analysis: 1,
         model: 1,
-        countTokens: 0,
-        generateContent: 0,
+        countTokens: 1,
+        generateContent: 1,
       });
       const fresh = await s.post("second@1.0.0");
       assert.equal(fresh.status, 303);
@@ -1076,8 +1120,8 @@ test(
       assert.deepEqual(calls, {
         analysis: 2,
         model: 2,
-        countTokens: 0,
-        generateContent: 0,
+        countTokens: 2,
+        generateContent: 2,
       });
       assert.equal(client.configHash, build.modelConfigDigest);
     }
