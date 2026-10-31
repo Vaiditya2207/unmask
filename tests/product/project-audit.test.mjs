@@ -75,19 +75,32 @@ test("lockfile parser rejects malformed, unsupported and invalid shapes", () => 
     [text({ lockfileVersion: 1, dependencies: {} }), "lockfile-unsupported"],
     [text({ lockfileVersion: 3 }), "lockfile-invalid"],
     [text({ lockfileVersion: 3, packages: { x: {} } }), "lockfile-invalid"],
-    [
-      text({ lockfileVersion: 2, packages: { "": { dependencies: [] } } }),
-      "lockfile-invalid",
-    ],
-    [
-      text({
-        lockfileVersion: 3,
-        packages: { "": {}, "node_modules/a": "1.0.0" },
-      }),
-      "lockfile-invalid",
-    ],
   ])
     assert.throws(() => parseLockfile(input), { code });
+  const partial = parseLockfile(
+    text({
+      lockfileVersion: 2,
+      packages: {
+        "": { dependencies: [] },
+        "node_modules/a": "1.0.0",
+        "node_modules/b": pkg("b", "1.0.0", { dependencies: { c: 1 } }),
+        "node_modules/ok": pkg("ok", "1.0.0"),
+      },
+    }),
+  );
+  assert.deepEqual(
+    [...partial.entries.values()].map((e) => [e.key, e.kind, e.edgesValid]),
+    [
+      ["", "root", false],
+      ["node_modules/a", "invalid", true],
+      ["node_modules/b", "registry", false],
+      ["node_modules/ok", "registry", true],
+    ],
+  );
+  assert.deepEqual(exactTargets(partial).skipped, {
+    "invalid-dependencies": 2,
+    "invalid-entry": 1,
+  });
   assert.throws(
     () => parseLockfile(text(fixtureLock()), { maxBytes: 10, maxEntries: 9 }),
     { code: "lockfile-invalid" },
@@ -174,7 +187,13 @@ test("exact targets deduplicate locations and honour omitDev", () => {
       ["d@1.0.0", ["node_modules/d"]],
     ],
   );
-  assert.deepEqual(all.skipped, { "non-registry-source": 1 });
+  assert.deepEqual(all.skipped, {
+    "unresolved-dependency": 1,
+    "non-registry-source": 1,
+  });
+  assert.deepEqual(all.unresolved, [
+    { from: "node_modules/c", name: "missing", type: "peer" },
+  ]);
   assert.equal(
     exactTargets(lock, { omitDev: true }).targets.some((t) => t.name === "d"),
     false,
@@ -267,12 +286,13 @@ test("audit keeps unbound, mismatched and unreported artifact hashes incomplete"
         "node_modules/b": pkg("b", "1.0.0"),
         "node_modules/c": { version: "1.0.0" },
         "node_modules/d": pkg("d", "1.0.0", { integrity: "sha1-AAAA" }),
+        "node_modules/f": pkg("f", "1.0.0", { integrity: "sha512-AAAA" }),
         "node_modules/e": pkg("e", "1.0.0"),
       },
     }),
   );
   const result = await auditLock(lock, {
-    max: 5,
+    max: 6,
     check: async (spec) =>
       spec === "b@1.0.0"
         ? { ...bound(0), inputs: { artifact: { sha512: "f".repeat(128) } } }
@@ -288,12 +308,13 @@ test("audit keeps unbound, mismatched and unreported artifact hashes incomplete"
       ["c@1.0.0", "no-findings", "unbound"],
       ["d@1.0.0", "no-findings", "unbound"],
       ["e@1.0.0", "no-findings", "unavailable"],
+      ["f@1.0.0", "no-findings", "unbound"],
     ],
   );
   assert.deepEqual(result.coverage.binding, {
     verified: 1,
     mismatch: 1,
-    unbound: 2,
+    unbound: 3,
     unavailable: 1,
   });
   assert.equal(result.coverage.complete, false);
@@ -328,6 +349,90 @@ test("lockfile reads are bounded and reject FIFOs and identities parsePackageSpe
     [...lock.entries.values()].slice(1).map((e) => e.reason),
     ["inexact-version", null, "invalid-name"],
   );
+});
+
+test("lockfile compatibility: legacy names, unresolved, bundled, encoded and traversal entries", async () => {
+  const lock = parseLockfile(
+    text({
+      lockfileVersion: 3,
+      packages: {
+        "": {
+          dependencies: { JSONStream: "1.3.5", a: "1.0.0", gone: "1.0.0" },
+        },
+        "node_modules/JSONStream": pkg("JSONStream", "1.3.5"),
+        "node_modules/a": pkg("a", "1.0.0", {
+          optionalDependencies: { fsevents: "2" },
+          peerDependencies: { react: "18", vue: "3" },
+          peerDependenciesMeta: { react: { optional: true } },
+          dependencies: { z: "1" },
+        }),
+        "node_modules/a/node_modules/z": { version: "1.0.0", inBundle: true },
+        "node_modules/@s/e": pkg("@s/e", "1.0.0", {
+          resolved: "https://registry.npmjs.org/@s%2fe/-/e-1.0.0.tgz",
+        }),
+      },
+    }),
+  );
+  const kinds = [...lock.entries.values()].map((e) => [
+    e.key,
+    e.kind,
+    e.reason,
+  ]);
+  assert.deepEqual(kinds.slice(1), [
+    ["node_modules/JSONStream", "invalid", "invalid-name"],
+    ["node_modules/a", "registry", null],
+    ["node_modules/a/node_modules/z", "bundled", "bundled-dependency"],
+    ["node_modules/@s/e", "url", "non-registry-source"],
+  ]);
+  const { targets, skipped, unresolved } = exactTargets(lock);
+  assert.deepEqual(
+    targets.map((t) => t.spec),
+    ["a@1.0.0"],
+  );
+  assert.deepEqual(unresolved, [
+    { from: "", name: "gone", type: "prod" },
+    { from: "node_modules/a", name: "vue", type: "peer" },
+  ]);
+  assert.deepEqual(skipped, {
+    "unresolved-dependency": 2,
+    "invalid-name": 1,
+    "bundled-dependency": 1,
+    "non-registry-source": 1,
+  });
+  const result = await auditLock(lock, { check: async () => bound(0) });
+  assert.equal(result.coverage.complete, false);
+  assert.equal(result.exitCode, 2);
+  const traversal = parseLockfile(
+    text({
+      lockfileVersion: 3,
+      packages: {
+        "": {},
+        "../node_modules/x": pkg("x", "1.0.0"),
+        "node_modules//y": pkg("y", "1.0.0"),
+        "node_modules/./z": pkg("z", "1.0.0"),
+      },
+    }),
+  );
+  assert.deepEqual(
+    [...traversal.entries.values()].slice(1).map((e) => e.reason),
+    ["invalid-location", "invalid-location", "invalid-location"],
+  );
+  assert.deepEqual(exactTargets(traversal).targets, []);
+  const conflict = parseLockfile(
+    text({
+      lockfileVersion: 3,
+      packages: {
+        "": { dependencies: { a: "1.0.0", b: "1.0.0" } },
+        "node_modules/a": pkg("a", "1.0.0"),
+        "node_modules/b": pkg("b", "1.0.0", { dependencies: { a: "1.0.0" } }),
+        "node_modules/b/node_modules/a": pkg("a", "1.0.0", {
+          integrity:
+            "sha512-" + createHash("sha512").update("other").digest("base64"),
+        }),
+      },
+    }),
+  );
+  assert.equal(exactTargets(conflict).targets[0].bound, false);
 });
 
 test("unmask audit CLI uses the real hosted transport against a local server", async (t) => {
