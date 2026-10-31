@@ -24,6 +24,7 @@ jobs:
     outputs:
       ready: ${{ steps.gate.outputs.ready }}
       npm_publish: ${{ steps.gate.outputs.npm_publish }}
+      production_deploy: ${{ steps.gate.outputs.production_deploy }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -109,11 +110,12 @@ jobs:
           NPM_RESULT: ${{ steps.npm.outcome }}
           CANDIDATE_IMAGE_ID: ${{ steps.image.outputs.image_id }}
           SMOKE_RESULT: ${{ steps.smoke.outcome }}
+          PRODUCTION_DEPLOY: ${{ needs.readiness.outputs.production_deploy }}
         run: node scripts/release.mjs publish
 
   deploy:
-    needs: publish
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.publish.outputs.complete == 'true' && needs.publish.outputs.npm_published == 'true'
+    needs: [readiness, publish]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.readiness.outputs.production_deploy == 'true' && needs.publish.outputs.complete == 'true' && needs.publish.outputs.npm_published == 'true'
     environment:
       name: production
       url: ${{ steps.deploy.outputs.url }}
@@ -158,8 +160,8 @@ jobs:
         run: node scripts/cloud-run-deploy.mjs
 
   deploy-web:
-    needs: [publish, deploy]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.publish.outputs.complete == 'true' && needs.publish.outputs.npm_published == 'true' && needs.deploy.result == 'success'
+    needs: [readiness, publish, deploy]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.readiness.outputs.production_deploy == 'true' && needs.publish.outputs.complete == 'true' && needs.publish.outputs.npm_published == 'true' && needs.deploy.result == 'success'
     environment:
       name: production
       url: ${{ steps.web.outputs.url }}

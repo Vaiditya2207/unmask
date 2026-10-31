@@ -11,5 +11,6 @@
   "server": "dist/server/main.mjs",
   "web": "dist/viewer/shell.mjs",
   "dockerfile": "Dockerfile",
-  "productTestDirectory": "tests/product"
+  "productTestDirectory": "tests/product",
+  "productionDeployVersion": null
 }
