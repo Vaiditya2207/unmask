@@ -13,26 +13,31 @@ const USAGE =
   "Use config show|profiles [--json] [--project DIR], config set KEY VALUE [--project DIR] or config unset KEY [--project DIR]";
 const STRENGTH = { strict: 2, balanced: 1, audit: 0 };
 
-export function parseCommandOptions(args, flags = ["--json"]) {
+export function parseCommandOptions(
+  args,
+  flags = ["--json"],
+  values = ["--project"],
+) {
   const positional = [];
-  const options = { project: undefined, json: false };
+  const options = { json: false };
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
-    if (arg === "--project") {
+    const name = arg.slice(2);
+    if (values.includes(arg)) {
       const value = args[++index];
-      if (options.project !== undefined || value === undefined || !value)
+      if (options[name] !== undefined || value === undefined || !value)
         throw new GuardConfigError(
           "missing-value",
-          "--project requires one directory",
+          `${arg} requires exactly one value`,
         );
-      options.project = value;
+      options[name] = value;
     } else if (flags.includes(arg)) {
-      if (options[arg.slice(2)] === true)
+      if (options[name] === true)
         throw new GuardConfigError(
           "duplicate-option",
           "Each option may be supplied only once",
         );
-      options[arg.slice(2)] = true;
+      options[name] = true;
     } else if (arg.startsWith("--"))
       throw new GuardConfigError("unknown-option", "Unsupported option");
     else positional.push(arg);

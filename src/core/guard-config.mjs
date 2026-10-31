@@ -2,6 +2,7 @@ import { lstat, open, realpath, rename, unlink } from "node:fs/promises";
 import { constants } from "node:fs";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
+import { AcquisitionError, parsePackageSpec } from "./acquire.mjs";
 
 export const GUARD_CONFIG_SCHEMA = 1;
 export const GUARD_CONFIG_FILE = ".unmask.json";
@@ -48,6 +49,11 @@ export const SETTINGS = Object.freeze({
   blockAtSeverity: SEVERITIES,
 });
 const MAX_CONFIG_BYTES = 64 * 1024;
+export const MAX_EXCEPTIONS = 200;
+export const MAX_EXCEPTION_DAYS = 90;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const SECRET_LIKE =
+  /(npm_[A-Za-z0-9]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN|xox[abpr]-[A-Za-z0-9-]{10,})/u;
 
 export class GuardConfigError extends Error {
   constructor(code, message) {
@@ -88,7 +94,7 @@ export function validateGuardConfig(value) {
   if (!plainObject(value))
     fail("invalid-config", "Guard configuration must be a JSON object");
   for (const key of Object.keys(value))
-    if (!["schemaVersion", "profile", "overrides"].includes(key))
+    if (!["schemaVersion", "profile", "overrides", "exceptions"].includes(key))
       fail("invalid-config", "Guard configuration contains an unknown field");
   if (value.schemaVersion !== GUARD_CONFIG_SCHEMA)
     fail("invalid-config", "Unsupported guard configuration schemaVersion");
@@ -105,7 +111,142 @@ export function validateGuardConfig(value) {
     }
     if (Object.keys(overrides).length) config.overrides = overrides;
   }
+  if (value.exceptions !== undefined) {
+    if (
+      !Array.isArray(value.exceptions) ||
+      value.exceptions.length > MAX_EXCEPTIONS
+    )
+      fail(
+        "invalid-config",
+        `Guard exceptions must be an array of at most ${MAX_EXCEPTIONS}`,
+      );
+    const seen = new Set();
+    const exceptions = value.exceptions.map(validateException);
+    for (const entry of exceptions) {
+      const key = `${entry.name}@${entry.version}`;
+      if (seen.has(key))
+        fail("duplicate-exception", `Duplicate exception for ${key}`);
+      seen.add(key);
+    }
+    if (exceptions.length) config.exceptions = exceptions;
+  }
   return config;
+}
+
+export function exactPackage(spec) {
+  try {
+    return parsePackageSpec(spec);
+  } catch (error) {
+    if (error instanceof AcquisitionError)
+      fail(
+        "invalid-package-spec",
+        "Exceptions require one exact name@version; ranges, tags and wildcards are refused",
+      );
+    throw error;
+  }
+}
+
+function timestamp(value, field) {
+  if (
+    typeof value !== "string" ||
+    Number.isNaN(Date.parse(value)) ||
+    new Date(value).toISOString() !== value
+  )
+    fail("invalid-config", `Exception ${field} must be an ISO UTC timestamp`);
+  return Date.parse(value);
+}
+
+export function validateReason(reason) {
+  if (
+    typeof reason !== "string" ||
+    reason.trim().length < 3 ||
+    reason.length > 200 ||
+    /[\0-\x1f\x7f]/u.test(reason)
+  )
+    fail(
+      "invalid-reason",
+      "Exception reason must be 3-200 printable characters",
+    );
+  if (SECRET_LIKE.test(reason))
+    fail("invalid-reason", "Exception reason looks like a credential");
+  return reason;
+}
+
+export function validateException(value) {
+  if (!plainObject(value))
+    fail("invalid-config", "Each guard exception must be an object");
+  for (const key of Object.keys(value))
+    if (!["name", "version", "reason", "expires", "created"].includes(key))
+      fail("invalid-config", "Guard exception contains an unknown field");
+  if (typeof value.name !== "string" || typeof value.version !== "string")
+    fail("invalid-package-spec", "Exception requires exact name and version");
+  const { name, version } = exactPackage(`${value.name}@${value.version}`);
+  if (name !== value.name || version !== value.version)
+    fail("invalid-package-spec", "Exception identity must be exact");
+  const created = timestamp(value.created, "created");
+  const expires = timestamp(value.expires, "expires");
+  if (expires <= created || expires - created > MAX_EXCEPTION_DAYS * DAY_MS)
+    fail(
+      "invalid-expiry",
+      `Exception expiry must be after creation and within ${MAX_EXCEPTION_DAYS} days`,
+    );
+  return {
+    name,
+    version,
+    reason: validateReason(value.reason),
+    expires: value.expires,
+    created: value.created,
+  };
+}
+
+export function newException(spec, reason, expires, now = new Date()) {
+  const { name, version } = exactPackage(spec);
+  const day = /^\d{4}-\d{2}-\d{2}$/u.test(expires ?? "")
+    ? `${expires}T00:00:00.000Z`
+    : expires;
+  if (typeof day !== "string" || Number.isNaN(Date.parse(day)))
+    fail(
+      "invalid-expiry",
+      "Exception requires --expires YYYY-MM-DD or an ISO timestamp",
+    );
+  const expiry = Date.parse(day);
+  if (expiry <= now.getTime())
+    fail("expired-exception", "Exception expiry must be in the future");
+  if (expiry - now.getTime() > MAX_EXCEPTION_DAYS * DAY_MS)
+    fail(
+      "invalid-expiry",
+      `Exception expiry must be within ${MAX_EXCEPTION_DAYS} days`,
+    );
+  return validateException({
+    name,
+    version,
+    reason,
+    expires: new Date(expiry).toISOString(),
+    created: now.toISOString(),
+  });
+}
+
+export function exceptionStatuses(config, now = new Date()) {
+  return (config.exceptions ?? []).map((entry) => ({
+    ...entry,
+    status: Date.parse(entry.expires) > now.getTime() ? "active" : "expired",
+  }));
+}
+
+export function activeExceptionFor(
+  config,
+  identity,
+  { now = new Date(), knownMalware = false } = {},
+) {
+  if (knownMalware) return null;
+  return (
+    exceptionStatuses(config, now).find(
+      (entry) =>
+        entry.status === "active" &&
+        entry.name === identity?.name &&
+        entry.version === identity?.version,
+    ) ?? null
+  );
 }
 
 export function effectiveGuardSettings(config) {
