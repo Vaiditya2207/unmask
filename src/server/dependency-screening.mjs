@@ -22,7 +22,20 @@ const systemClock = { now: Date.now, setTimeout, clearTimeout };
 const STATEMENT =
   "Coverage describes exact registry identities only; the project root, local, rejected and unscreened entries were not checked. No reported advisory is not a safety verdict.";
 
-function advisorySummary(item) {
+// Keeps only fields the guard classifier needs, with affected severity limited to the screened package.
+function advisorySummary(item, name) {
+  const affected = (Array.isArray(item.affected) ? item.affected : [])
+    .filter(
+      (entry) =>
+        entry?.package?.ecosystem === "npm" &&
+        entry.package.name === name &&
+        typeof entry.ecosystemSeverity === "string",
+    )
+    .slice(0, 8)
+    .map((entry) => ({
+      package: { ecosystem: "npm", name },
+      ecosystemSeverity: entry.ecosystemSeverity,
+    }));
   return {
     id: item.id,
     aliases: Array.isArray(item.aliases) ? item.aliases.slice(0, 16) : [],
@@ -33,6 +46,7 @@ function advisorySummary(item) {
     ...(typeof item.withdrawn === "string"
       ? { withdrawn: item.withdrawn }
       : {}),
+    ...(affected.length ? { affected } : {}),
   };
 }
 
@@ -60,7 +74,7 @@ function normalize(identity, lookup, limits) {
     return unscreened(identity, "unavailable", "identity-mismatch");
   const advisories = lookup.advisories
     .filter((item) => item && typeof item.id === "string")
-    .map(advisorySummary);
+    .map((item) => advisorySummary(item, identity.name));
   const reasons = Array.isArray(lookup.reasons)
     ? lookup.reasons.filter((reason) => typeof reason === "string")
     : [];

@@ -303,6 +303,16 @@ test("dependency screening API screens a submitted lockfile over local HTTP with
             {
               id: "GHSA-pjwm-rvh2-c87w",
               summary: "Embedded malware in ua-parser-js",
+              affected: [
+                {
+                  package: { ecosystem: "npm", name: "ua-parser-js" },
+                  ecosystem_specific: { severity: "CRITICAL" },
+                },
+                {
+                  package: { ecosystem: "npm", name: "unrelated" },
+                  ecosystem_specific: { severity: "LOW" },
+                },
+              ],
             },
           ]
         : [];
@@ -330,6 +340,12 @@ test("dependency screening API screens a submitted lockfile over local HTTP with
   );
   assert.equal(flagged.status, "found");
   assert.equal(flagged.advisories[0].id, "GHSA-pjwm-rvh2-c87w");
+  assert.deepEqual(flagged.advisories[0].affected, [
+    {
+      package: { ecosystem: "npm", name: "ua-parser-js" },
+      ecosystemSeverity: "CRITICAL",
+    },
+  ]);
   assert.deepEqual(flagged.locations, [
     "node_modules/ua-parser-js",
     "node_modules/left/node_modules/ua-parser-js",
