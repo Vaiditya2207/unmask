@@ -41,5 +41,6 @@ Report URLs are temporary and may expire after 30 minutes, capacity eviction or 
 | [Stack and decisions](stack.md)                   | Pinned dependencies, model tiers, budgets and remaining acceptance limits              |
 | [CI, releases and manual deployment](releases.md) | Release tooling and artifact/deployment checks; each candidate needs its own evidence  |
 | [Advisory cache operations](advisory-cache.md)    | OSV cache limits, stale/freshness fields, retries and opt-in aggregate statistics      |
+| [Advisory-only results](advisory-recovery.md)     | Failed or timed-out checks keep exact-version advisories; `/api/advisory` endpoint     |
 
 For setup and contribution rules, see the [project overview](../README.md) and [contribution guide](../CONTRIBUTING.md). These pages document observed behavior and source contracts; documentation checks do not rerun provider evaluation or deployment acceptance.
