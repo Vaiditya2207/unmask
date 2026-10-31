@@ -10,7 +10,7 @@
   "scripts": {
     "check": "prettier --check .",
     "format": "prettier --write .",
-    "test": "node --test tests/tooling/*.test.mjs",
+    "test": "node --test tests/tooling/*.test.mjs tests/product/*.test.mjs",
     "check:package": "node scripts/check-package.mjs",
     "release:readiness": "node scripts/release-readiness.mjs"
   },
