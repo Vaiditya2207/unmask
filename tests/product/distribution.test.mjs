@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  writeFile,
+  rm,
+  chmod,
+  symlink,
+} from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { gzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
@@ -39,18 +47,45 @@ test("built npm artifact runs its bin outside the source checkout and contains n
   );
   const install = path.join(temporary, "install");
   await mkdir(install);
-  await writeFile(path.join(install, "package.json"), '{"private":true}');
+  const archivePath = path.join(temporary, packed.filename);
+  const packageBytes = command(
+    "tar",
+    ["-xOf", archivePath, "package/package.json"],
+    root,
+  );
+  const metadata = JSON.parse(packageBytes);
+  await writeFile(path.join(install, "package.json"), packageBytes);
+  await writeFile(
+    path.join(install, "package-lock.json"),
+    await readFile(path.join(root, "package-lock.json")),
+  );
   command(
     "npm",
     [
-      "install",
+      "ci",
       "--offline",
       "--ignore-scripts",
+      "--omit=dev",
       "--no-audit",
       "--no-fund",
-      path.join(temporary, packed.filename),
     ],
     install,
+  );
+  const installedPackage = path.join(install, "node_modules", metadata.name);
+  await mkdir(installedPackage, { recursive: true });
+  command(
+    "tar",
+    ["-xzf", archivePath, "--strip-components=1", "-C", installedPackage],
+    install,
+  );
+  const bin =
+    typeof metadata.bin === "string" ? metadata.bin : metadata.bin.unmask;
+  await chmod(path.join(installedPackage, bin), 0o755);
+  const binDirectory = path.join(install, "node_modules/.bin");
+  await mkdir(binDirectory, { recursive: true });
+  await symlink(
+    path.relative(binDirectory, path.join(installedPackage, bin)),
+    path.join(binDirectory, "unmask"),
   );
   const archive = tar.pack(),
     chunks = [];
