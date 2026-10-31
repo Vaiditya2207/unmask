@@ -10,6 +10,8 @@ import { addConfiguredModel } from "../core/online.mjs";
 import { modelClientFromEnv } from "../model/config.mjs";
 import { checkHosted } from "./hosted.mjs";
 import { runAudit } from "./audit.mjs";
+import { runConfig } from "./config.mjs";
+import { runExceptions } from "./exceptions.mjs";
 
 const names = {
   "--tarball": "tarballPath",
@@ -162,6 +164,8 @@ async function configuredModel(allowModel, runtime) {
 }
 
 export async function main(argv = process.argv.slice(2), runtime = {}) {
+  if (argv[0] === "config") return runConfig(argv.slice(1), runtime);
+  if (argv[0] === "exceptions") return runExceptions(argv.slice(1), runtime);
   try {
     if (argv[0] === "audit") return await runAudit(argv.slice(1), runtime);
     const { out, offline, allowModel, registrySpec, ...options } = parse(argv);
