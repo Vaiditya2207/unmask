@@ -87,15 +87,21 @@ and a reproducible command under `examples/`. Follow its
 
 ## Restrict required approval to the designated reviewers
 
-The designated group of three or four GitHub handles is pending. Once supplied,
-a maintainer should add those real handles to a catch-all rule in
-`.github/CODEOWNERS`, including ownership of `CODEOWNERS` itself. Do not add
-placeholder owners. The CODEOWNERS file on the PR's base branch governs review
+The designated reviewers are `@pranay0083`, `@visheshrao17`, and `@Vaiditya2207`.
+One approval from this group is intended; a fourth reviewer can be added later.
+`.github/CODEOWNERS` assigns the group to every file and to CODEOWNERS itself.
+The CODEOWNERS file on the PR's base branch governs review
 requests; adding it only on the proposed branch does not establish that policy.
 
 A maintainer must separately configure the `main` ruleset to require a PR, at
 least one code-owner approval from that group, dismissal of stale approvals,
 resolved conversations and passing `Repository checks`, with no bypass actors.
 Confirm repository permissions and that the chosen owners have write access.
-CODEOWNERS alone does not enforce approval or prevent merging. This change does
-not create CODEOWNERS, change permissions or configure repository rules.
+CODEOWNERS alone does not enforce approval or prevent merging. This change adds
+the file but does not change permissions or configure repository rules. At the
+31 October check, both teammates had read access; they must receive and accept
+Write access before GitHub can recognize them as code owners. The active main
+ruleset required one approval but had code-owner review disabled, no required
+status check, and an administrator PR bypass. Those settings must be updated
+before claiming this reviewer restriction is enforced. Other users can still
+submit reviews; their approvals cannot satisfy the required code-owner review.
