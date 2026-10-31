@@ -10,7 +10,12 @@ import { test } from "node:test";
 import tar from "tar-stream";
 import { createApp } from "../../src/server/app.mjs";
 import { analyzeLocal } from "../../src/core/pipeline.mjs";
-import { renderCheckSummary, safeText } from "../../src/cli/terminal.mjs";
+import {
+  createProgress,
+  renderCheckSummary,
+  safeText,
+} from "../../src/cli/terminal.mjs";
+import { main } from "../../src/cli/main.mjs";
 
 const entrypoint = fileURLToPath(
   new URL("../../src/cli/main.mjs", import.meta.url),
@@ -231,4 +236,140 @@ test("summary escapes terminal control characters and never claims safety for un
   assert.match(summary, /AI        unavailable \(quota\\u001b\[2J\)/);
   assert.match(summary, /Open \/tmp\/out\/report\.html/);
   assert.doesNotMatch(summary, /No deterministic findings/);
+});
+
+const ESC = "\u001b";
+function stream(isTTY) {
+  return {
+    isTTY,
+    text: "",
+    write(chunk) {
+      this.text += chunk;
+      return true;
+    },
+  };
+}
+async function lifecycleReport(t) {
+  const f = await fixture(t, true);
+  const report = await analyzeLocal({
+    tarballPath: f.tarballPath,
+    sourceArchivePath: f.sourceArchivePath,
+    sourceRoot: "root",
+    commit: "d".repeat(40),
+    claim: f.manifest,
+  });
+  report.model = { status: "unavailable", reason: "quota" };
+  return report;
+}
+function hostedRuntime(report, env, { submitStatus = 303 } = {}) {
+  const id = "a".repeat(32);
+  let polls = 0;
+  return {
+    env: { UNMASK_SERVER_URL: "https://synthetic.invalid", ...env },
+    stdout: stream(env.TTY === "1"),
+    stderr: stream(env.TTY === "1"),
+    hostedLimits: { pollMs: 1, totalTimeoutMs: 2000, requestTimeoutMs: 1000 },
+    async fetchImpl(url) {
+      if (url.endsWith("/check"))
+        return new Response(null, {
+          status: submitStatus,
+          headers: { location: `/r/${id}` },
+        });
+      if (url.endsWith(".details.json"))
+        return new Response(null, { status: 404 });
+      polls++;
+      if (polls < 3)
+        return Response.json(
+          { id, status: polls === 1 ? "queued" : "running" },
+          { status: 202 },
+        );
+      return Response.json(report);
+    },
+  };
+}
+
+test("non-TTY check prints plain progress phases to stderr and keeps stdout free of escapes", async (t) => {
+  const runtime = hostedRuntime(await lifecycleReport(t), {});
+  assert.equal(await main(["check", "fixture@1.0.0"], runtime), 3);
+  assert.deepEqual(runtime.stderr.text.trimEnd().split("\n"), [
+    "unmask: Submitting exact package to the hosted service fixture@1.0.0",
+    "unmask: Queued on the hosted service fixture@1.0.0",
+    "unmask: Hosted analysis running fixture@1.0.0",
+    "unmask: Fetching package details and advisories fixture@1.0.0",
+  ]);
+  assert.doesNotMatch(runtime.stderr.text + runtime.stdout.text, /\u001b|\r/);
+  assert.match(runtime.stdout.text, /^Result    Deterministic findings/m);
+});
+
+test("TTY check animates and clears progress and colors the result unless NO_COLOR or TERM=dumb", async (t) => {
+  const report = await lifecycleReport(t);
+  const colored = hostedRuntime(report, { TTY: "1", TERM: "xterm" });
+  assert.equal(await main(["check", "fixture@1.0.0"], colored), 3);
+  assert.match(
+    colored.stderr.text,
+    /\r\u001b\[2K\u001b\[36m\|\u001b\[0m Submitting/,
+  );
+  assert.ok(colored.stderr.text.endsWith(`\r${ESC}[2K`));
+  assert.match(
+    colored.stdout.text,
+    /\u001b\[33mResult    Deterministic findings/,
+  );
+  assert.match(colored.stdout.text, /\u001b\[1mCoverage\u001b\[0m  complete/);
+
+  const plain = hostedRuntime(report, {
+    TTY: "1",
+    TERM: "xterm",
+    NO_COLOR: "1",
+  });
+  assert.equal(await main(["check", "fixture@1.0.0"], plain), 3);
+  assert.match(plain.stderr.text, /\r\u001b\[2K\| Submitting/);
+  assert.doesNotMatch(plain.stderr.text, /\u001b\[\d+m/);
+  assert.doesNotMatch(plain.stdout.text, /\u001b/);
+
+  const dumb = hostedRuntime(report, { TTY: "1", TERM: "dumb" });
+  assert.equal(await main(["check", "fixture@1.0.0"], dumb), 3);
+  assert.doesNotMatch(dumb.stderr.text + dumb.stdout.text, /\u001b|\r/);
+  assert.match(dumb.stderr.text, /^unmask: Submitting/);
+});
+
+test("errors clear progress, keep exit codes, color only on terminals and include a hint", async (t) => {
+  const report = await lifecycleReport(t);
+  const failed = hostedRuntime(
+    report,
+    { TTY: "1", TERM: "xterm" },
+    { submitStatus: 500 },
+  );
+  assert.equal(await main(["check", "fixture@1.0.0"], failed), 2);
+  assert.match(
+    failed.stderr.text,
+    /\r\u001b\[2K\u001b\[31munmask error hosted-submit-failed\u001b\[0m: The hosted service did not accept the check \(HTTP 500\)/,
+  );
+  assert.equal(failed.stdout.text, "");
+
+  const usage = { env: {}, stdout: stream(false), stderr: stream(false) };
+  assert.equal(await main(["check"], usage), 2);
+  assert.equal(
+    usage.stderr.text,
+    "unmask error usage: Local tarball check requires --offline\nHint: Run unmask check name@exact-version, or see docs/cli.md.\n",
+  );
+});
+
+test("progress timer redraws elapsed time, ignores repeated phases and stop clears the line", (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  let clock = 0;
+  const out = stream(true);
+  const progress = createProgress(out, {
+    env: { TERM: "xterm", NO_COLOR: "1" },
+    now: () => clock,
+    intervalMs: 100,
+  });
+  progress.update("local");
+  progress.update("local");
+  clock = 2500;
+  t.mock.timers.tick(100);
+  progress.stop();
+  assert.equal(
+    out.text,
+    "\r\u001b[2K| Analyzing local artifact 0s\r\u001b[2K/ Analyzing local artifact 2s\r\u001b[2K",
+  );
 });

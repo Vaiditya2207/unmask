@@ -190,7 +190,35 @@ function nextActions(report, { details, outDir }) {
   return actions;
 }
 
-export function renderCheckSummary(report, { details, outDir } = {}) {
+const codes = { bold: 1, red: 31, yellow: 33, cyan: 36, dim: 2 };
+const label =
+  /^(UNMASK|Result|Coverage|Source|Findings|Failures|Advisory|AI|Next)\b/;
+
+export function terminalStyle(stream, env = process.env) {
+  const tty = stream?.isTTY === true && env.TERM !== "dumb";
+  const color = tty && !env.NO_COLOR;
+  return {
+    tty,
+    color,
+    paint: (name, text) =>
+      color ? `\u001b[${codes[name]}m${text}\u001b[0m` : text,
+  };
+}
+
+function resultColor(report, details) {
+  if (report.policy?.exitCode === 2) return "red";
+  if (
+    report.policy?.exitCode === 3 ||
+    details?.vulnerabilityCheck?.status === "found"
+  )
+    return "yellow";
+  return "bold";
+}
+
+export function renderCheckSummary(
+  report,
+  { details, outDir, style = terminalStyle() } = {},
+) {
   const lines = [
     `UNMASK ${safeText(identity(report), 120)}`,
     `Result    ${verdict(report.policy?.exitCode)}`,
@@ -203,5 +231,86 @@ export function renderCheckSummary(report, { details, outDir } = {}) {
       (action) => `  - ${action}`,
     ),
   ];
-  return lines.join("\n") + "\n";
+  const tone = resultColor(report, details);
+  return (
+    lines
+      .map((line) => {
+        const match = label.exec(line);
+        if (!match) return line;
+        const rest = line.slice(match[0].length);
+        if (match[0] === "Result") return style.paint(tone, line);
+        if (match[0] === "Advisory" && / known for /.test(rest))
+          return style.paint("yellow", line);
+        return style.paint("bold", match[0]) + rest;
+      })
+      .join("\n") + "\n"
+  );
+}
+
+const frames = ["|", "/", "-", "\\"];
+const phases = {
+  submitting: "Submitting exact package to the hosted service",
+  queued: "Queued on the hosted service",
+  running: "Hosted analysis running",
+  details: "Fetching package details and advisories",
+  local: "Analyzing local artifact",
+  model: "Requesting AI explanation",
+  writing: "Writing report files",
+};
+
+export function createProgress(
+  stream,
+  { env = process.env, now = Date.now, intervalMs = 120, subject = "" } = {},
+) {
+  const style = terminalStyle(stream, env);
+  const started = now();
+  let phase,
+    frame = 0,
+    timer;
+  const message = () =>
+    `${phases[phase] ?? safeText(phase, 60)}${subject ? ` ${safeText(subject, 120)}` : ""}`;
+  const draw = () => {
+    const seconds = Math.floor((now() - started) / 1000);
+    stream.write(
+      `\r\u001b[2K${style.paint("cyan", frames[frame++ % frames.length])} ${message()} ${style.paint("dim", `${seconds}s`)}`,
+    );
+  };
+  return {
+    update(next) {
+      if (next === phase) return;
+      phase = next;
+      if (!style.tty) {
+        stream.write(`unmask: ${message()}\n`);
+        return;
+      }
+      draw();
+      if (!timer) {
+        timer = setInterval(draw, intervalMs);
+        timer.unref?.();
+      }
+    },
+    stop() {
+      clearInterval(timer);
+      timer = undefined;
+      if (style.tty && phase !== undefined) stream.write("\r\u001b[2K");
+    },
+  };
+}
+
+const hints = {
+  usage: "Run unmask check name@exact-version, or see docs/cli.md.",
+  "unknown-option": "See docs/cli.md for the supported check options.",
+  "missing-value": "Each option needs a value, for example --out ./report.",
+  "output-write-failed":
+    "Choose a fresh --out folder; existing report files are never replaced.",
+  "hosted-unavailable": "Check your network or UNMASK_SERVER_URL, then retry.",
+  "hosted-timeout": "Retry later; the hosted service may be busy.",
+};
+
+export function renderError(code, message, style) {
+  const head = style.paint("red", `unmask error ${safeText(code, 60)}`);
+  const hint = hints[code]
+    ? `\n${style.paint("dim", `Hint: ${hints[code]}`)}`
+    : "";
+  return `${head}: ${safeText(message, 400)}${hint}\n`;
 }

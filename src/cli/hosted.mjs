@@ -96,6 +96,7 @@ async function runHosted(
     signal,
     limits: overrides = {},
     optionalDetails = false,
+    onStatus,
   } = {},
   withDetails = false,
 ) {
@@ -149,7 +150,13 @@ async function runHosted(
       if (response) await discard(response);
     }
   }
+  const status = (phase) => {
+    try {
+      onStatus?.(phase);
+    } catch {}
+  };
   try {
+    status("submitting");
     const reportUrl = await request(
       origin + "/check",
       {
@@ -210,6 +217,7 @@ async function runHosted(
                 "hosted-response",
                 "The hosted service returned an invalid pending report.",
               );
+            status(value.status);
             return null;
           }
           try {
@@ -231,6 +239,7 @@ async function runHosted(
       );
       if (result) {
         if (!withDetails) return result;
+        status("details");
         const detailsUrl = reportUrl.replace(/\.json$/, ".details.json");
         const fetchDetails = () =>
           request(

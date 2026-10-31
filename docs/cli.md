@@ -27,7 +27,11 @@ same-origin report. Hosted failure is visible; there is no local fallback.
 
 Every check prints a terminal summary: result, coverage, findings, failures,
 known advisories, AI explanation status and next steps. Untrusted text is
-escaped so it cannot inject terminal control sequences. `--out` is optional and
+escaped so it cannot inject terminal control sequences. Progress goes to stderr:
+an animated, self-clearing status line on an interactive terminal, or one plain
+`unmask:` line per phase when stderr is not a TTY or `TERM=dumb`. Color is used
+only on a TTY and is disabled by any nonempty `NO_COLOR`. Errors print as
+`unmask error CODE: message`, with a hint where one applies. `--out` is optional and
 nothing is written without it; `--cache-dir` is optional and unused in hosted
 mode. Hosted mode validates the returned schema, requested name/version and
 policy against deterministic report evidence before printing or creating

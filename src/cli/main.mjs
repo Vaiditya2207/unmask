@@ -10,7 +10,12 @@ import { addConfiguredModel } from "../core/online.mjs";
 import { modelClientFromEnv } from "../model/config.mjs";
 import { getHostedDetails } from "./hosted.mjs";
 import { infoCommand } from "./info.mjs";
-import { renderCheckSummary } from "./terminal.mjs";
+import {
+  createProgress,
+  renderCheckSummary,
+  renderError,
+  terminalStyle,
+} from "./terminal.mjs";
 
 const names = {
   "--tarball": "tarballPath",
@@ -161,21 +166,30 @@ async function configuredModel(allowModel, runtime) {
 }
 
 export async function main(argv = process.argv.slice(2), runtime = {}) {
+  const stdout = runtime.stdout ?? process.stdout;
+  const stderr = runtime.stderr ?? process.stderr;
+  const env = runtime.env ?? process.env;
+  const errorStyle = terminalStyle(stderr, env);
+  let progress;
   try {
     if (argv[0] === "info") return await infoCommand(argv.slice(1), runtime);
     const { out, offline, allowModel, registrySpec, ...options } = parse(argv);
+    progress = createProgress(stderr, { env, subject: registrySpec });
     let report, details;
     if (registrySpec)
       ({ report, details } = await getHostedDetails(registrySpec, {
-        serverUrl: (runtime.env ?? process.env).UNMASK_SERVER_URL,
+        serverUrl: env.UNMASK_SERVER_URL,
         fetchImpl: runtime.fetchImpl,
         signal: runtime.signal,
         limits: runtime.hostedLimits,
         optionalDetails: true,
+        onStatus: progress.update,
       }));
     else {
       const model = await configuredModel(allowModel, runtime);
+      progress.update("local");
       report = await analyzeLocal({ ...options, limits: runtime.limits });
+      if (allowModel) progress.update("model");
       if (allowModel) report = await addConfiguredModel(report, model);
       if (!allowModel)
         report = {
@@ -184,16 +198,29 @@ export async function main(argv = process.argv.slice(2), runtime = {}) {
         };
     }
     const outDir = out === undefined ? undefined : path.resolve(out);
+    if (outDir) progress.update("writing");
     if (outDir) await writeReports(outDir, report);
-    process.stdout.write(renderCheckSummary(report, { details, outDir }));
+    progress.stop();
+    stdout.write(
+      renderCheckSummary(report, {
+        details,
+        outDir,
+        style: terminalStyle(stdout, env),
+      }),
+    );
     return report.policy.exitCode;
   } catch (error) {
+    progress?.stop();
     if (error instanceof LocalInputError) {
-      process.stderr.write(`${error.code}: ${error.message}\n`);
+      stderr.write(renderError(error.code, error.message, errorStyle));
       return 2;
     }
-    process.stderr.write(
-      "Internal analysis error; no completed result is claimed.\n",
+    stderr.write(
+      renderError(
+        "internal",
+        "Internal analysis error; no completed result is claimed.",
+        errorStyle,
+      ),
     );
     return 1;
   }
