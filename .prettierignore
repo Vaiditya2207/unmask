@@ -3,6 +3,9 @@ dist/
 build/
 coverage/
 package-lock.json
+.next/
+next-env.d.ts
+.taste-skill/
 examples/**/input/**
 examples/**/output/**
 

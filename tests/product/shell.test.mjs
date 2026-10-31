@@ -16,7 +16,7 @@ test("home is a registry-only accessible evidence workspace", () => {
   assert.match(html, /exact version/);
   assert.match(html, /never declares a package safe/);
   assert.match(html, /restart/);
-  assert.doesNotMatch(html, /type="file"|https?:\/\//);
+  assert.doesNotMatch(html, /type="file"|(?:src|action)="https?:\/\//);
   const css = html.match(/<style>([\s\S]*?)<\/style>/)[1];
   assert.ok(html.includes(createHash("sha256").update(css).digest("base64")));
   assert.match(css, /focus-visible/);
@@ -76,7 +76,14 @@ test("every standalone screen permits only its exact style asset and has no scri
     assert.match(html, /default-src &#39;none&#39;/);
     assert.match(html, /base-uri &#39;none&#39;/);
     assert.match(html, /form-action &#39;self&#39;/);
-    assert.doesNotMatch(html, /<script|(?:src|href)="https?:/);
+    assert.doesNotMatch(
+      html,
+      /<script|(?:src|action)="https?:|<link\b[^>]*href="https?:/,
+    );
+    assert.deepEqual(
+      [...html.matchAll(/href="(https?:[^"]+)"/g)].map((match) => match[1]),
+      ["https://github.com/Vaiditya2207/unmask"],
+    );
   }
 });
 
@@ -158,7 +165,51 @@ test("completed action chrome preserves trusted report HTML and escapes supplied
   assert.match(html, /download="unmask-report.json"/);
   assert.match(html, /href="\/r\/&quot;&gt;&lt;img src=x&gt;.json"/);
   assert.match(html, /1970-01-01T00:00:00.000Z/);
-  assert.match(html, /Reports expire within 24 hours/);
+  assert.match(html, /up to 30 minutes after completion/);
   assert.doesNotMatch(html, /<img/);
   assert.equal(job.id, '"><img src=x>');
+});
+
+test("headerless report documents receive escaped actions before the closing body without changing CSP", () => {
+  const css = "body{color:#13294b}";
+  const hash = createHash("sha256").update(css).digest("base64");
+  const head = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Trusted fixture</title><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-${hash}'"><style>${css}</style></head>`;
+  for (const closingBody of ["</body>", "</BODY >"]) {
+    const input = `${head}<body><main>Headerless fixture only</main>${closingBody}</html>`;
+    const html = renderCompleted(input, {
+      id: '\"><img src=x>',
+      finishedAt: 0,
+    });
+    assert.equal(html.slice(0, head.length), head);
+    assert.equal([...html.matchAll(/aria-label="Report actions"/g)].length, 1);
+    assert.ok(html.indexOf("<nav") > html.indexOf("</main>"));
+    assert.ok(html.indexOf("</nav>") < html.indexOf(closingBody));
+    assert.match(html, /href="\/r\/&quot;&gt;&lt;img src=x&gt;.json"/);
+    assert.match(html, /1970-01-01T00:00:00.000Z/);
+    assert.doesNotMatch(html, /<img|<script/);
+    assert.equal(
+      html.replace(/<nav class="summary"[\s\S]*?<\/nav>/, ""),
+      input,
+    );
+  }
+});
+
+test("trusted fragments without header or body markers receive actions at their end", () => {
+  for (const input of ["<main>Trusted fragment fixture</main>", ""]) {
+    const html = renderCompleted(input, { id: "e".repeat(32), finishedAt: 0 });
+    assert.ok(html.startsWith(input + '<nav class="summary"'));
+    assert.match(html, /download="unmask-report.json"/);
+    assert.equal([...html.matchAll(/aria-label="Report actions"/g)].length, 1);
+    assert.ok(html.endsWith("</nav>"));
+  }
+});
+
+test("completed actions keep their existing placement after the first report header", () => {
+  const input =
+    "<!doctype html><html><head><title>Fixture</title></head><body><header>First</header><main>Fixture</main><header>Second</header></body></html>";
+  const html = renderCompleted(input, { id: "f".repeat(32), finishedAt: 0 });
+  assert.match(html, /<header>First<\/header><nav class="summary"/);
+  assert.ok(html.indexOf("</nav>") < html.indexOf("<main>"));
+  assert.equal([...html.matchAll(/aria-label="Report actions"/g)].length, 1);
+  assert.equal(html.replace(/<nav class="summary"[\s\S]*?<\/nav>/, ""), input);
 });

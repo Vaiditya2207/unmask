@@ -129,6 +129,7 @@ export function readiness(root, { built = false, expectedSha } = {}) {
     enabled: config.enabled === true,
     reasons,
     version: pkg.version,
+    npmPublishEnabled: config.npmPublishEnabled === true,
   };
 }
 
@@ -157,7 +158,10 @@ if (
   if (process.argv.includes("--github-output")) {
     if (!process.env.GITHUB_OUTPUT)
       throw new Error("GITHUB_OUTPUT is required");
-    appendFileSync(process.env.GITHUB_OUTPUT, `ready=${result.ready}\n`);
+    appendFileSync(
+      process.env.GITHUB_OUTPUT,
+      `ready=${result.ready}\nnpm_publish=${result.npmPublishEnabled}\n`,
+    );
     if (
       result.enabled &&
       !result.ready &&

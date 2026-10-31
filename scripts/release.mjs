@@ -7,11 +7,24 @@ import {
 } from "node:fs";
 import { planRelease, verifyAsset } from "./release-policy.mjs";
 import { readiness } from "./release-readiness.mjs";
+import {
+  buildCandidateImage,
+  inspectCandidateImage,
+} from "./check-candidate.mjs";
+import { verifyBuild } from "./build.mjs";
+import path from "node:path";
 import { checkPackage } from "./check-package.mjs";
+import { publishNpm, verifyNpmReceipt } from "./npm-publication.mjs";
 
 const mode = process.argv[2];
-if (!["prepare", "publish"].includes(mode))
-  throw new Error("Expected prepare or publish");
+if (
+  !["prepare", "build", "publish", "npm-preflight", "npm-publish"].includes(
+    mode,
+  )
+)
+  throw new Error(
+    "Expected prepare, build, publish, npm-preflight or npm-publish",
+  );
 const {
   GITHUB_REPOSITORY: repository,
   GITHUB_SHA: sha,
@@ -22,14 +35,14 @@ const {
 } = process.env;
 if (
   !/^[\w.-]+\/[\w.-]+$/.test(repository || "") ||
-  !token ||
+  (["prepare", "publish"].includes(mode) && !token) ||
   !actor ||
   !/^\d+$/.test(runId || "")
 )
   throw new Error("Trusted GitHub Actions context is required");
 const pkg = JSON.parse(readFileSync("package.json"));
 const config = JSON.parse(readFileSync("release.config.json"));
-const ready = readiness(process.cwd(), { built: true });
+const ready = readiness(process.cwd(), { built: true, expectedSha: sha });
 if (!ready.ready)
   throw new Error(`Release blocked: ${ready.reasons.join("; ")}`);
 if (
@@ -62,6 +75,54 @@ async function api(
   return response.json();
 }
 
+async function requireImmutableReleases() {
+  const settings = await api("immutable-releases", {
+    credential: process.env.RELEASE_SETTINGS_TOKEN || token,
+  });
+  if (settings.enabled !== true)
+    throw new Error(
+      "GitHub release immutability must be enabled before publication",
+    );
+}
+
+async function registryInspector() {
+  const registryAuth = await fetch(
+    `https://ghcr.io/token?service=ghcr.io&scope=repository:${repository.toLowerCase()}:pull`,
+    {
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${actor}:${token}`).toString("base64")}`,
+      },
+    },
+  );
+  if (!registryAuth.ok)
+    throw new Error(`GHCR authentication failed (${registryAuth.status})`);
+  const registryToken = (await registryAuth.json()).token;
+  if (!registryToken) throw new Error("GHCR token missing");
+  return async function registryManifest(tag) {
+    return fetch(
+      `https://ghcr.io/v2/${repository.toLowerCase()}/manifests/${tag}`,
+      {
+        method: "HEAD",
+        headers: {
+          Authorization: `Bearer ${registryToken}`,
+          Accept:
+            "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
+        },
+      },
+    );
+  };
+}
+
+async function requireUnusedImageTags(registryManifest, plan) {
+  for (const tag of [plan.tag, plan.imageTag]) {
+    const existing = await registryManifest(tag);
+    if (existing.status !== 404)
+      throw new Error(
+        `Image tag ${tag} unavailable for creation (${existing.status}); never overwrite`,
+      );
+  }
+}
+
 async function inventory(endpoint, field) {
   const names = [];
   for (let page = 1; page <= 100; page++) {
@@ -78,15 +139,24 @@ const plan = planRelease({
   ref,
   checks: process.env.CHECKS_RESULT,
   ready: ready.ready,
-  tags: await inventory("tags", "name"),
-  releases: await inventory("releases", "tag_name"),
+  tags: ["build", "npm-preflight", "npm-publish"].includes(mode)
+    ? []
+    : await inventory("tags", "name"),
+  releases: ["build", "npm-preflight", "npm-publish"].includes(mode)
+    ? []
+    : await inventory("releases", "tag_name"),
 });
 const image = `ghcr.io/${repository.toLowerCase()}`;
 const imageRef = `${image}:${plan.imageTag}`;
 mkdirSync("artifacts", { recursive: true });
 
 if (mode === "prepare") {
-  const artifact = checkPackage(process.cwd(), "artifacts");
+  await requireImmutableReleases();
+  await requireUnusedImageTags(await registryInspector(), plan);
+  const artifact = checkPackage(process.cwd(), "artifacts", {
+    expectedSha: sha,
+    requireClean: true,
+  });
   for (const entry of [config.cli, config.server, config.web]) {
     if (!artifact.files.includes(entry))
       throw new Error(`Entrypoint missing from npm artifact: ${entry}`);
@@ -101,6 +171,70 @@ if (mode === "prepare") {
       `image=${imageRef}\npackage=artifacts/${artifact.filename}\ndockerfile=${config.dockerfile}\n`,
     );
   console.log(`Prepared ${plan.tag} at ${sha}; nothing published`);
+} else if (mode === "build") {
+  const prepared = JSON.parse(readFileSync("artifacts/release-plan.json"));
+  if (
+    prepared.sha !== sha ||
+    prepared.version !== pkg.version ||
+    prepared.imageRef !== imageRef
+  )
+    throw new Error("Prepared candidate binding differs");
+  const result = buildCandidateImage(process.cwd(), {
+    archive: path.resolve("artifacts", prepared.artifact.filename),
+    artifact: prepared.artifact,
+    sha,
+    image: imageRef,
+    dockerfile: config.dockerfile,
+  });
+  if (process.env.GITHUB_OUTPUT)
+    appendFileSync(
+      process.env.GITHUB_OUTPUT,
+      `image_id=${result.imageId}\npackage_sha256=${prepared.artifact.digest.slice(7)}\nlockfile_sha256=${prepared.artifact.lockDigest.slice(7)}\nversion=${pkg.version}\n`,
+    );
+  console.log(
+    `Built exact npm artifact image for ${plan.tag}; nothing published`,
+  );
+} else if (mode === "npm-preflight") {
+  if (config.npmPublishEnabled !== true)
+    throw new Error("Npm publication preparation gate is closed");
+  const prepared = JSON.parse(readFileSync("artifacts/release-plan.json"));
+  if (
+    prepared.sha !== sha ||
+    prepared.version !== pkg.version ||
+    prepared.imageRef !== imageRef
+  )
+    throw new Error("Prepared npm candidate differs");
+  verifyAsset(
+    readFileSync(path.join("artifacts", prepared.artifact.filename)),
+    prepared.artifact.digest,
+  );
+  verifyAsset(readFileSync("package-lock.json"), prepared.artifact.lockDigest);
+  const build = verifyBuild(process.cwd(), {
+    expectedSha: sha,
+    requireClean: true,
+  });
+  if (JSON.stringify(build) !== JSON.stringify(prepared.artifact.build))
+    throw new Error("Prepared npm build identity changed");
+  console.log(
+    "Local npm artifact preflight passed; registry authentication and publication were not attempted",
+  );
+} else if (mode === "npm-publish") {
+  const prepared = JSON.parse(readFileSync("artifacts/release-plan.json"));
+  if (
+    prepared.sha !== sha ||
+    prepared.version !== pkg.version ||
+    prepared.imageRef !== imageRef
+  )
+    throw new Error("Prepared npm candidate differs");
+  const receipt = await publishNpm(process.cwd(), {
+    prepared,
+    archive: path.resolve("artifacts", prepared.artifact.filename),
+  });
+  writeFileSync(
+    "artifacts/npm-publication.json",
+    JSON.stringify(receipt, null, 2) + "\n",
+  );
+  console.log("Verified exact public npm version; publication receipt saved");
 } else {
   if (process.env.SMOKE_RESULT !== "success")
     throw new Error(
@@ -115,57 +249,31 @@ if (mode === "prepare") {
     throw new Error("Prepared candidate binding differs");
   const bytes = readFileSync(`artifacts/${prepared.artifact.filename}`);
   verifyAsset(bytes, prepared.artifact.digest);
-  const settings = await api("immutable-releases", {
-    credential: process.env.RELEASE_SETTINGS_TOKEN || token,
-  });
-  if (settings.enabled !== true)
-    throw new Error(
-      "GitHub release immutability must be enabled before publication",
-    );
-  const registryAuth = await fetch(
-    `https://ghcr.io/token?service=ghcr.io&scope=repository:${repository.toLowerCase()}:pull`,
-    {
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${actor}:${token}`).toString("base64")}`,
-      },
-    },
-  );
-  if (!registryAuth.ok)
-    throw new Error(`GHCR authentication failed (${registryAuth.status})`);
-  const registryToken = (await registryAuth.json()).token;
-  if (!registryToken) throw new Error("GHCR token missing");
-  async function registryManifest(tag) {
-    return fetch(
-      `https://ghcr.io/v2/${repository.toLowerCase()}/manifests/${tag}`,
-      {
-        method: "HEAD",
-        headers: {
-          Authorization: `Bearer ${registryToken}`,
-          Accept:
-            "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
-        },
-      },
-    );
-  }
-  for (const tag of [plan.tag, plan.imageTag]) {
-    const existing = await registryManifest(tag);
-    if (existing.status !== 404)
+  let npmReceipt;
+  if (config.npmPublishEnabled === true) {
+    if (process.env.NPM_RESULT !== "success")
       throw new Error(
-        `Image tag ${tag} unavailable for creation (${existing.status}); never overwrite`,
+        "Exact npm publication step must succeed before the GitHub release",
       );
+    npmReceipt = await verifyNpmReceipt(process.cwd(), {
+      prepared,
+      archive: path.resolve("artifacts", prepared.artifact.filename),
+      receipt: JSON.parse(readFileSync("artifacts/npm-publication.json")),
+    });
   }
-  const [local] = JSON.parse(
-    execFileSync("docker", ["image", "inspect", imageRef], {
-      encoding: "utf8",
-    }),
-  );
-  if (
-    local.Id !== process.env.CANDIDATE_IMAGE_ID ||
-    local.Os !== "linux" ||
-    local.Architecture !== "amd64" ||
-    local.Config.Labels?.["org.opencontainers.image.revision"] !== sha
-  )
-    throw new Error("Image platform or revision differs from tested candidate");
+  await requireImmutableReleases();
+  const registryManifest = await registryInspector();
+  await requireUnusedImageTags(registryManifest, plan);
+  const testedId = inspectCandidateImage(process.cwd(), imageRef, {
+    commit: sha,
+    version: pkg.version,
+    packageDigest: prepared.artifact.digest,
+    lockDigest: prepared.artifact.lockDigest,
+  });
+  if (testedId !== process.env.CANDIDATE_IMAGE_ID)
+    throw new Error("Tested candidate image identity differs");
+  verifyAsset(readFileSync("package-lock.json"), prepared.artifact.lockDigest);
+  verifyBuild(process.cwd(), { expectedSha: sha, requireClean: true });
   const reserved = await api("git/refs", {
     method: "POST",
     body: { ref: `refs/tags/${plan.tag}`, sha },
@@ -203,10 +311,19 @@ if (mode === "prepare") {
     workflow: `https://github.com/${repository}/actions/runs/${runId}`,
     package: {
       name: pkg.name,
-      registryPublished: false,
+      registryPublished: Boolean(npmReceipt),
+      ...(npmReceipt
+        ? {
+            registry: npmReceipt.registry,
+            integrity: npmReceipt.integrity,
+            metadataUrl: npmReceipt.metadataUrl,
+          }
+        : {}),
       filename: prepared.artifact.filename,
       digest: prepared.artifact.digest,
       size: bytes.length,
+      lockDigest: prepared.artifact.lockDigest,
+      sourceSha256: prepared.artifact.build.sourceSha256,
     },
     image: { reference: `${image}@${digest}`, digest, platform: "linux/amd64" },
   };
