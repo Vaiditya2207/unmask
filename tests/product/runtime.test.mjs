@@ -369,7 +369,7 @@ test("model configuration is disabled until explicitly enabled and quota verifie
   };
   const client = await modelClientFromEnv(env);
   assert.equal(client.configuration.enabled, true);
-  assert.equal(client.modelId, "gemini-3.5-flash");
+  assert.equal(client.modelId, "gemini-3-flash-preview");
   assert.match(client.configHash, /^[a-f0-9]{64}$/);
   assert.ok(
     !JSON.stringify(client.configuration).includes("inert-fixture-key"),
@@ -464,7 +464,7 @@ test("shared model configuration imports without server modules and retains the 
   const script = path.join(root, "probe.mjs");
   await writeFile(
     script,
-    `import assert from 'node:assert/strict';import {modelClientFromEnv} from './config.mjs';assert.equal(await modelClientFromEnv({}),undefined);const client=await modelClientFromEnv({UNMASK_MODEL:'on',GEMINI_API_KEY:'inert-fixture-key',UNMASK_MODEL_QUOTA_VERIFIED:'true',UNMASK_MODEL_REQUESTS_PER_MINUTE:'2',UNMASK_MODEL_INPUT_TOKENS_PER_MINUTE:'8000',UNMASK_MODEL_DAILY_REQUESTS:'10'});assert.equal(client.configuration.enabled,true);assert.equal(client.modelId,'gemini-3.5-flash');console.log('standalone-config-ok');`,
+    `import assert from 'node:assert/strict';import {modelClientFromEnv} from './config.mjs';assert.equal(await modelClientFromEnv({}),undefined);const client=await modelClientFromEnv({UNMASK_MODEL:'on',GEMINI_API_KEY:'inert-fixture-key',UNMASK_MODEL_QUOTA_VERIFIED:'true',UNMASK_MODEL_REQUESTS_PER_MINUTE:'2',UNMASK_MODEL_INPUT_TOKENS_PER_MINUTE:'8000',UNMASK_MODEL_DAILY_REQUESTS:'10'});assert.equal(client.configuration.enabled,true);assert.equal(client.modelId,'gemini-3-flash-preview');console.log('standalone-config-ok');`,
   );
   const child = spawn(process.execPath, [script], {
     env: {},
