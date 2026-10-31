@@ -88,17 +88,28 @@ async function readJson(response, maxBytes) {
     throw failure("hosted-response", "The hosted response is not valid JSON.");
   }
 }
-export async function checkHosted(
+async function runHosted(
   spec,
   {
     serverUrl = DEFAULT_SERVER_URL,
     fetchImpl = globalThis.fetch,
     signal,
     limits: overrides = {},
+    existingReportId,
   } = {},
+  withDetails = false,
 ) {
   const claim = parsePackageSpec(spec);
   const origin = serverOrigin(serverUrl);
+  if (
+    existingReportId !== undefined &&
+    (typeof existingReportId !== "string" ||
+      !/^[a-f0-9]{32}$/.test(existingReportId))
+  )
+    throw failure(
+      "hosted-configuration",
+      "Use a recorded 32-character lowercase hexadecimal report ID.",
+    );
   const limits = { ...defaults, ...overrides };
   if (
     Object.keys(limits).some(
@@ -148,45 +159,47 @@ export async function checkHosted(
     }
   }
   try {
-    const reportUrl = await request(
-      origin + "/check",
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/x-www-form-urlencoded",
-          accept: "application/json",
-        },
-        body: new URLSearchParams({ package: spec }),
-      },
-      async (response) => {
-        if (response.status !== 303)
-          throw failure(
-            "hosted-submit-failed",
-            `The hosted service did not accept the check (HTTP ${response.status}). No local fallback was attempted.`,
-          );
-        const location = response.headers.get("location");
-        let url;
-        try {
-          url = new URL(location, origin);
-        } catch {}
-        if (
-          !location ||
-          location.length > 2048 ||
-          !url ||
-          url.origin !== origin ||
-          url.username ||
-          url.password ||
-          url.search ||
-          url.hash ||
-          !/^\/r\/[a-f0-9]{32}$/.test(url.pathname)
-        )
-          throw failure(
-            "hosted-response",
-            "The hosted service returned an invalid report location.",
-          );
-        return url.href + ".json";
-      },
-    );
+    const reportUrl = existingReportId
+      ? `${origin}/r/${existingReportId}.json`
+      : await request(
+          origin + "/check",
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/x-www-form-urlencoded",
+              accept: "application/json",
+            },
+            body: new URLSearchParams({ package: spec }),
+          },
+          async (response) => {
+            if (response.status !== 303)
+              throw failure(
+                "hosted-submit-failed",
+                `The hosted service did not accept the check (HTTP ${response.status}). No local fallback was attempted.`,
+              );
+            const location = response.headers.get("location");
+            let url;
+            try {
+              url = new URL(location, origin);
+            } catch {}
+            if (
+              !location ||
+              location.length > 2048 ||
+              !url ||
+              url.origin !== origin ||
+              url.username ||
+              url.password ||
+              url.search ||
+              url.hash ||
+              !/^\/r\/[a-f0-9]{32}$/.test(url.pathname)
+            )
+              throw failure(
+                "hosted-response",
+                "The hosted service returned an invalid report location.",
+              );
+            return url.href + ".json";
+          },
+        );
     const id = new URL(reportUrl).pathname.slice(3, -5);
     for (;;) {
       const result = await request(
@@ -227,7 +240,28 @@ export async function checkHosted(
           return value;
         },
       );
-      if (result) return result;
+      if (result) {
+        if (!withDetails) return result;
+        const detailsUrl = reportUrl.replace(/\.json$/, ".details.json");
+        const details = await request(
+          detailsUrl,
+          { headers: { accept: "application/json" } },
+          async (response) => {
+            if (response.status !== 200)
+              throw failure(
+                "hosted-details-failed",
+                `Hosted package details are unavailable (HTTP ${response.status}).`,
+              );
+            const value = await readJson(
+              response,
+              Math.min(limits.maxBodyBytes, 4194304),
+            );
+            validateDetails(value, result);
+            return value;
+          },
+        );
+        return { report: result, details, reportUrl, detailsUrl };
+      }
       await delay(limits.pollMs, undefined, { signal: lifetime });
     }
   } catch (error) {
@@ -248,4 +282,83 @@ export async function checkHosted(
   } finally {
     clearTimeout(totalTimer);
   }
+}
+
+function validateDetails(value, report) {
+  const list = (entry) =>
+    entry &&
+    Array.isArray(entry.items) &&
+    entry.items.length <= 20000 &&
+    entry.items.every(
+      (item) =>
+        item !== null && typeof item === "object" && !Array.isArray(item),
+    ) &&
+    ["total", "returned", "omitted"].every(
+      (key) => Number.isSafeInteger(entry[key]) && entry[key] >= 0,
+    ) &&
+    entry.returned === entry.items.length &&
+    entry.total === entry.returned + entry.omitted;
+  const identity = value?.identity?.items?.[0];
+  if (
+    value?.detailsVersion !== "1" ||
+    value?.reportSchemaVersion !== report.schemaVersion ||
+    !list(value.identity) ||
+    identity?.requested?.name !== report.inputs.claim.name ||
+    identity?.requested?.version !== report.inputs.claim.version ||
+    identity?.artifactDigests?.sha256 !== report.inputs.artifact.sha256 ||
+    !list(value.declarations?.fields) ||
+    !list(value.scripts?.entries) ||
+    !Array.isArray(value.dependencies?.categories) ||
+    value.dependencies.categories.length > 6 ||
+    value.dependencies.categories.some(
+      (category) => !list(category?.entries),
+    ) ||
+    !list(value.provenance?.facts) ||
+    !list(value.inventory?.files)
+  )
+    throw failure(
+      "hosted-details-invalid",
+      "Hosted details failed version, identity or inventory validation.",
+    );
+  const check = value.vulnerabilityCheck;
+  if (
+    check &&
+    (check.source !== "OSV" ||
+      ![
+        "found",
+        "none-reported",
+        "incomplete",
+        "unavailable",
+        "not-assessed",
+      ].includes(check.status) ||
+      typeof check.complete !== "boolean" ||
+      !Array.isArray(check.advisories) ||
+      check.complete !== ["found", "none-reported"].includes(check.status) ||
+      (check.status === "found" && check.advisories.length === 0) ||
+      (check.status === "none-reported" && check.advisories.length !== 0) ||
+      (check.package &&
+        (check.package.ecosystem !== "npm" ||
+          check.package.name !== report.inputs.claim.name ||
+          check.package.version !== report.inputs.claim.version)) ||
+      (check.complete &&
+        (!check.package || !["found", "none-reported"].includes(check.status))))
+  )
+    throw failure(
+      "hosted-details-invalid",
+      "Hosted OSV details failed status or identity validation.",
+    );
+}
+
+export async function checkHosted(spec, options) {
+  return runHosted(spec, options);
+}
+
+export async function getHostedDetails(spec, options) {
+  return runHosted(spec, options, true);
+}
+
+export async function getHostedDetailsForReport(spec, reportId, options = {}) {
+  if (reportId === undefined)
+    throw failure("hosted-configuration", "An existing report ID is required.");
+  return runHosted(spec, { ...options, existingReportId: reportId }, true);
 }
