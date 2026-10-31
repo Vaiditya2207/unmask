@@ -57,6 +57,53 @@ explanation status and next steps. Add `--out ./unmask-report` to also save
 `report.json` and an escaped `report.html`; nothing is written without it. Only the
 package name and version leave your machine; the hosted service does the rest.
 
+### What the terminal shows
+
+The examples below are real CLI output from a local test server with synthetic
+fixtures and recorded OSV advisory data. They are not live-service results.
+
+A completed check prints the result and exit code, coverage, findings, the OSV
+advisories for that exact version, the AI status and next steps. The AI summary
+appears only when the model actually returned one; otherwise the line names the
+status, such as `unavailable (quota)`, and nothing stands in for it.
+
+```text
+UNMASK fixture@1.0.0
+Result    Deterministic findings need review (exit 3)
+Coverage  complete: 1 file, 81 B
+          0 byte-identical, 1 changed, 0 artifact-only, 0 not-compared
+Source    selected via user-full-SHA at dddddddddddd
+Findings  1
+  - lifecycle-source-absent (script install)
+Advisory  none reported by OSV for this exact version
+AI        complete, 0 hypotheses (separate from deterministic evidence)
+  Summary: The artifact declares an install script that the selected source does not.
+  Scope: 1 evidence items supplied, 0 omitted; not checked: runtime-behavior
+  Uncertainty: The script was not executed, so its runtime effect is unknown.
+Next
+  - Review each finding and its cited evidence before installing.
+  - AI suggests: Compare the install script with the upstream repository before installing.
+  - Add --out DIR to save the full JSON and HTML evidence.
+```
+
+When the registry artifact cannot be analyzed, for example a removed release or
+a timed-out run, the check still shows the advisories for that exact version. It
+says that nothing was inspected and exits `2`:
+
+```text
+UNMASK ua-parser-js@0.7.29
+Result    Advisory-only: artifact not inspected; no verdict is claimed (exit 2)
+Artifact  not inspected (execution-timeout); source comparison not performed
+Advisory  1 known for this exact version (OSV)
+  - GHSA-pjwm-rvh2-c87w Embedded malware in ua-parser-js
+AI        not run; no artifact evidence to explain
+```
+
+Progress and errors go to stderr, so stdout stays clean for pipes. Color appears
+only on an interactive terminal; set `NO_COLOR=1` to turn it off. Exit `0` means
+no review rule fired in the inspected scope. It does not mean safe, and a
+missing advisory is not evidence of safety.
+
 ## What a check returns
 
 A real report for **`zod@4.6.7`**, from the live service:
