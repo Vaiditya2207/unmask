@@ -65,7 +65,7 @@ test("exceptions add stores an exact expiring entry and prints an audit line", a
       },
     ],
   });
-  const { config } = await readGuardConfig(root);
+  const { config } = await readGuardConfig(root, { now: NOW });
   const identity = { name: "left-pad", version: "1.3.0" };
   assert.equal(
     activeExceptionFor(config, identity, { now: NOW }).reason,
@@ -129,13 +129,17 @@ test("exceptions refuse wildcards, ranges, tags, past or long expiry, bad reason
     [["add", "a@1.0.0", "--expires", "2026-11-20"], "usage"],
     [["remove", "a@1.0.0"], "missing-exception"],
     [["list", "--reason", "x"], "usage"],
+    [
+      ["add", "a@1.0.0", "--reason", "--expires", "2026-11-20"],
+      "missing-value",
+    ],
   ];
   for (const [args, code] of cases) {
     const run = io(root);
     assert.equal(await runExceptions(args, run.runtime), 2, args.join(" "));
     assert.match(run.err(), new RegExp(`^${code}:`), args.join(" "));
   }
-  const { config } = await readGuardConfig(root);
+  const { config } = await readGuardConfig(root, { now: NOW });
   assert.deepEqual(
     config.exceptions.map((e) => `${e.name}@${e.version}`),
     ["@scope/pkg@2.0.0"],
@@ -176,7 +180,10 @@ test("expired entries stay visible, are never applied and can be pruned with aud
   run = io(root, later);
   assert.equal(await runExceptions(["remove", "fresh@2.0.0"], run.runtime), 0);
   assert.match(run.out(), /^audit: removed exception fresh@2\.0\.0 /);
-  assert.equal((await readGuardConfig(root)).config.exceptions, undefined);
+  assert.equal(
+    (await readGuardConfig(root, { now: NOW })).config.exceptions,
+    undefined,
+  );
 });
 
 test("hand-edited exceptions are validated on load", async (t) => {
@@ -195,6 +202,16 @@ test("hand-edited exceptions are validated on load", async (t) => {
     [[{ ...entry, expires: "2026-11-10" }], "invalid-config"],
     [[{ ...entry, scope: "*" }], "invalid-config"],
     [[entry, entry], "duplicate-exception"],
+    [
+      [
+        {
+          ...entry,
+          created: "2099-01-01T00:00:00.000Z",
+          expires: "2099-03-31T00:00:00.000Z",
+        },
+      ],
+      "invalid-expiry",
+    ],
   ]) {
     await writeFile(
       file,

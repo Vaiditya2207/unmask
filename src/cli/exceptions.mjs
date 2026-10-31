@@ -12,7 +12,7 @@ import { parseCommandOptions } from "./config.mjs";
 const USAGE =
   "Use exceptions list [--json], exceptions check NAME@VERSION [--json], exceptions add NAME@VERSION --reason TEXT --expires YYYY-MM-DD, exceptions remove NAME@VERSION or exceptions prune; each accepts --project DIR";
 const SCOPE =
-  "Exceptions apply only to the exact name@version listed, only until expiry, never to ranges, tags or wildcards, and never waive known malware.";
+  "Exceptions apply only to the exact name@version listed, only until expiry, never to ranges, tags or wildcards. In enforcing profiles (strict, balanced) they never waive known malware; the audit profile blocks nothing.";
 
 const line = (entry) =>
   `${entry.name}@${entry.version} ${entry.status === "active" ? "active" : "EXPIRED (not applied)"} expires=${entry.expires} created=${entry.created} reason=${JSON.stringify(entry.reason)}`;
@@ -40,7 +40,7 @@ export async function runExceptions(args, runtime = {}) {
     if (extra.length || (action !== "add" && mutation))
       throw new GuardConfigError("usage", USAGE);
     if (action === "list" && !spec) {
-      const loaded = await readGuardConfig(project);
+      const loaded = await readGuardConfig(project, { now });
       const entries = exceptionStatuses(loaded.config, now);
       if (options.json)
         stdout.write(
@@ -67,18 +67,22 @@ export async function runExceptions(args, runtime = {}) {
       return 0;
     }
     if (action === "prune" && !spec && !options.json) {
-      const loaded = await readGuardConfig(project);
+      const loaded = await readGuardConfig(project, { now });
       const current = loaded.config.exceptions ?? [];
       const expired = exceptionStatuses(loaded.config, now).filter(
         (entry) => entry.status === "expired",
       );
       const saved = expired.length
-        ? await writeGuardConfig(project, {
-            ...loaded.config,
-            exceptions: current.filter(
-              (entry) => Date.parse(entry.expires) > now.getTime(),
-            ),
-          })
+        ? await writeGuardConfig(
+            project,
+            {
+              ...loaded.config,
+              exceptions: current.filter(
+                (entry) => Date.parse(entry.expires) > now.getTime(),
+              ),
+            },
+            { now },
+          )
         : loaded;
       for (const entry of expired) audit(stdout, "pruned", entry, saved.file);
       stdout.write(`Pruned ${expired.length} expired exception(s)\n`);
@@ -86,7 +90,7 @@ export async function runExceptions(args, runtime = {}) {
     }
     if (action === "check" && spec) {
       const identity = exactPackage(spec);
-      const loaded = await readGuardConfig(project);
+      const loaded = await readGuardConfig(project, { now });
       const entry = activeExceptionFor(loaded.config, identity, { now });
       const result = {
         package: `${identity.name}@${identity.version}`,
@@ -109,7 +113,7 @@ export async function runExceptions(args, runtime = {}) {
           "Exceptions require --reason TEXT and --expires YYYY-MM-DD",
         );
       const entry = newException(spec, options.reason, options.expires, now);
-      const loaded = await readGuardConfig(project);
+      const loaded = await readGuardConfig(project, { now });
       const current = loaded.config.exceptions ?? [];
       if (
         current.some(
@@ -120,16 +124,20 @@ export async function runExceptions(args, runtime = {}) {
           "duplicate-exception",
           `An exception for ${spec} already exists; remove it first`,
         );
-      const saved = await writeGuardConfig(project, {
-        ...loaded.config,
-        exceptions: [...current, entry],
-      });
+      const saved = await writeGuardConfig(
+        project,
+        {
+          ...loaded.config,
+          exceptions: [...current, entry],
+        },
+        { now },
+      );
       audit(stdout, "added", entry, saved.file);
       return 0;
     }
     if (action === "remove") {
       const { name, version } = exactPackage(spec);
-      const loaded = await readGuardConfig(project);
+      const loaded = await readGuardConfig(project, { now });
       const current = loaded.config.exceptions ?? [];
       const entry = current.find(
         (e) => e.name === name && e.version === version,
@@ -139,10 +147,14 @@ export async function runExceptions(args, runtime = {}) {
           "missing-exception",
           `No exception exists for ${name}@${version}`,
         );
-      const saved = await writeGuardConfig(project, {
-        ...loaded.config,
-        exceptions: current.filter((e) => e !== entry),
-      });
+      const saved = await writeGuardConfig(
+        project,
+        {
+          ...loaded.config,
+          exceptions: current.filter((e) => e !== entry),
+        },
+        { now },
+      );
       audit(stdout, "removed", entry, saved.file);
       return 0;
     }

@@ -7,51 +7,42 @@ import { AcquisitionError, parsePackageSpec } from "./acquire.mjs";
 export const GUARD_CONFIG_SCHEMA = 1;
 export const GUARD_CONFIG_FILE = ".unmask.json";
 export const DEFAULT_PROFILE = "strict";
-export const SEVERITIES = Object.freeze([
-  "low",
-  "moderate",
-  "high",
-  "critical",
-  "none",
-]);
 export const PROFILES = Object.freeze({
   strict: Object.freeze({
-    unknown: "block",
-    blockAtSeverity: "moderate",
+    unknownDecision: "block",
+    blockSeverity: "medium",
     knownMalware: "block",
     aiSignals: "nonbinding",
-    enforcement: "enforcing",
+    enforcement: "enforce",
   }),
   balanced: Object.freeze({
-    unknown: "warn",
-    blockAtSeverity: "high",
+    unknownDecision: "unknown",
+    blockSeverity: "high",
     knownMalware: "block",
     aiSignals: "nonbinding",
-    enforcement: "enforcing",
+    enforcement: "enforce",
   }),
   audit: Object.freeze({
-    unknown: "warn",
-    blockAtSeverity: "none",
-    knownMalware: "warn",
+    unknownDecision: "unknown",
+    blockSeverity: "critical",
+    knownMalware: "block",
     aiSignals: "nonbinding",
-    enforcement: "nonenforcing",
+    enforcement: "audit",
   }),
 });
 export const GUARD_SEMANTICS = Object.freeze([
-  "blockAtSeverity blocks advisories at or above that severity (moderate is also called medium).",
-  "unknown=warn only changes presentation; incomplete evidence is never reported as permitted.",
-  "audit is nonenforcing: decisions are reported but never block installation.",
-  "AI signals are nonbinding and never permit or block on their own.",
+  "Profile names and settings mirror the S07 guard evaluator; there are no per-setting overrides.",
+  "strict blocks incomplete evidence and advisories of medium (moderate) severity or higher.",
+  "balanced blocks high or critical advisories; incomplete evidence stays unknown and is not permitted.",
+  "audit is nonenforcing: decisions are reported but nothing is blocked; a project-stored audit profile takes effect only when the invoking command explicitly opts in.",
+  "Known malware is always a block decision, and AI signals are nonbinding.",
 ]);
-export const SETTINGS = Object.freeze({
-  profile: Object.keys(PROFILES),
-  unknown: ["block", "warn"],
-  blockAtSeverity: SEVERITIES,
-});
+export const SETTINGS = Object.freeze({ profile: Object.keys(PROFILES) });
 const MAX_CONFIG_BYTES = 64 * 1024;
 export const MAX_EXCEPTIONS = 200;
 export const MAX_EXCEPTION_DAYS = 90;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const CLOCK_SKEW_MS = 5 * 60 * 1000;
 const SECRET_LIKE =
   /(npm_[A-Za-z0-9]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN|xox[abpr]-[A-Za-z0-9-]{10,})/u;
 
@@ -90,27 +81,16 @@ export function defaultGuardConfig() {
   return { schemaVersion: GUARD_CONFIG_SCHEMA, profile: DEFAULT_PROFILE };
 }
 
-export function validateGuardConfig(value) {
+export function validateGuardConfig(value, { now = new Date() } = {}) {
   if (!plainObject(value))
     fail("invalid-config", "Guard configuration must be a JSON object");
   for (const key of Object.keys(value))
-    if (!["schemaVersion", "profile", "overrides", "exceptions"].includes(key))
+    if (!["schemaVersion", "profile", "exceptions"].includes(key))
       fail("invalid-config", "Guard configuration contains an unknown field");
   if (value.schemaVersion !== GUARD_CONFIG_SCHEMA)
     fail("invalid-config", "Unsupported guard configuration schemaVersion");
   validateSetting("profile", value.profile);
   const config = { schemaVersion: GUARD_CONFIG_SCHEMA, profile: value.profile };
-  if (value.overrides !== undefined) {
-    if (!plainObject(value.overrides))
-      fail("invalid-config", "Guard configuration overrides must be an object");
-    const overrides = {};
-    for (const [key, setting] of Object.entries(value.overrides)) {
-      if (key === "profile")
-        fail("invalid-config", "Profile cannot be an override");
-      overrides[key] = validateSetting(key, setting);
-    }
-    if (Object.keys(overrides).length) config.overrides = overrides;
-  }
   if (value.exceptions !== undefined) {
     if (
       !Array.isArray(value.exceptions) ||
@@ -121,7 +101,9 @@ export function validateGuardConfig(value) {
         `Guard exceptions must be an array of at most ${MAX_EXCEPTIONS}`,
       );
     const seen = new Set();
-    const exceptions = value.exceptions.map(validateException);
+    const exceptions = value.exceptions.map((entry) =>
+      validateException(entry, now),
+    );
     for (const entry of exceptions) {
       const key = `${entry.name}@${entry.version}`;
       if (seen.has(key))
@@ -172,7 +154,7 @@ export function validateReason(reason) {
   return reason;
 }
 
-export function validateException(value) {
+export function validateException(value, now = new Date()) {
   if (!plainObject(value))
     fail("invalid-config", "Each guard exception must be an object");
   for (const key of Object.keys(value))
@@ -185,10 +167,15 @@ export function validateException(value) {
     fail("invalid-package-spec", "Exception identity must be exact");
   const created = timestamp(value.created, "created");
   const expires = timestamp(value.expires, "expires");
-  if (expires <= created || expires - created > MAX_EXCEPTION_DAYS * DAY_MS)
+  if (
+    expires <= created ||
+    expires - created > MAX_EXCEPTION_DAYS * DAY_MS ||
+    created > now.getTime() + CLOCK_SKEW_MS ||
+    expires - now.getTime() > MAX_EXCEPTION_DAYS * DAY_MS
+  )
     fail(
       "invalid-expiry",
-      `Exception expiry must be after creation and within ${MAX_EXCEPTION_DAYS} days`,
+      `Exception must be created no later than now and expire within ${MAX_EXCEPTION_DAYS} days of creation and of now`,
     );
   return {
     name,
@@ -217,13 +204,16 @@ export function newException(spec, reason, expires, now = new Date()) {
       "invalid-expiry",
       `Exception expiry must be within ${MAX_EXCEPTION_DAYS} days`,
     );
-  return validateException({
-    name,
-    version,
-    reason,
-    expires: new Date(expiry).toISOString(),
-    created: now.toISOString(),
-  });
+  return validateException(
+    {
+      name,
+      version,
+      reason,
+      expires: new Date(expiry).toISOString(),
+      created: now.toISOString(),
+    },
+    now,
+  );
 }
 
 export function exceptionStatuses(config, now = new Date()) {
@@ -250,15 +240,14 @@ export function activeExceptionFor(
 }
 
 export function effectiveGuardSettings(config) {
-  const base = PROFILES[config.profile];
-  const settings = { profile: config.profile };
-  const sources = { profile: "config" };
-  for (const [key, value] of Object.entries(base)) {
-    const override = config.overrides?.[key];
-    settings[key] = override ?? value;
-    sources[key] = override === undefined ? "profile" : "override";
-  }
-  return { settings, sources };
+  const settings = { profile: config.profile, ...PROFILES[config.profile] };
+  const warnings =
+    settings.enforcement === "audit"
+      ? [
+          "The audit profile is nonenforcing: nothing is blocked, and it applies only when the invoking command explicitly opts in.",
+        ]
+      : [];
+  return { settings, warnings };
 }
 
 export async function guardConfigLocation(projectDir) {
@@ -274,29 +263,67 @@ export async function guardConfigLocation(projectDir) {
   } catch {
     fail("invalid-project", "Project directory does not exist");
   }
-  if (!(await lstat(root)).isDirectory())
+  const stat = await lstat(root).catch(() => null);
+  if (!stat?.isDirectory())
     fail("invalid-project", "Project path must be a directory");
   return { root, file: path.join(root, GUARD_CONFIG_FILE) };
 }
 
-export async function readGuardConfig(projectDir) {
+const unreadable = () =>
+  fail("unreadable-config", "Guard configuration file cannot be read");
+
+async function readBounded(handle) {
+  const buffer = Buffer.alloc(MAX_CONFIG_BYTES + 1);
+  let total = 0;
+  while (total < buffer.length) {
+    const { bytesRead } = await handle.read(
+      buffer,
+      total,
+      buffer.length - total,
+      null,
+    );
+    if (!bytesRead) break;
+    total += bytesRead;
+  }
+  if (total > MAX_CONFIG_BYTES)
+    fail("invalid-config", "Guard configuration file is too large");
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(
+      buffer.subarray(0, total),
+    );
+  } catch {
+    fail("invalid-config", "Guard configuration is not valid UTF-8");
+  }
+}
+
+export async function readGuardConfig(projectDir, { now = new Date() } = {}) {
   const location = await guardConfigLocation(projectDir);
+  let before;
+  try {
+    before = await lstat(location.file);
+  } catch (error) {
+    if (error.code === "ENOENT")
+      return { ...location, source: "default", config: defaultGuardConfig() };
+    unreadable();
+  }
+  if (before.isSymbolicLink())
+    fail("path-escape", "Guard configuration file must not be a symlink");
+  if (!before.isFile())
+    fail("invalid-config", "Guard configuration must be a regular file");
   let handle;
   try {
     handle = await open(
       location.file,
-      constants.O_RDONLY | constants.O_NOFOLLOW,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
     );
   } catch (error) {
-    if (error.code === "ENOENT")
-      return { ...location, source: "default", config: defaultGuardConfig() };
     if (error.code === "ELOOP")
       fail("path-escape", "Guard configuration file must not be a symlink");
-    throw error;
+    unreadable();
   }
   try {
     const stat = await handle.stat();
-    if (!stat.isFile())
+    if (!stat.isFile() || stat.ino !== before.ino || stat.dev !== before.dev)
       fail("invalid-config", "Guard configuration must be a regular file");
     if (stat.mode & 0o022)
       fail(
@@ -305,20 +332,35 @@ export async function readGuardConfig(projectDir) {
       );
     if (stat.size > MAX_CONFIG_BYTES)
       fail("invalid-config", "Guard configuration file is too large");
+    let text;
+    try {
+      text = await readBounded(handle);
+    } catch (error) {
+      if (error instanceof GuardConfigError) throw error;
+      unreadable();
+    }
     let parsed;
     try {
-      parsed = JSON.parse(await handle.readFile("utf8"));
+      parsed = JSON.parse(text);
     } catch {
       fail("invalid-config", "Guard configuration is not valid JSON");
     }
-    return { ...location, source: "file", config: validateGuardConfig(parsed) };
+    return {
+      ...location,
+      source: "file",
+      config: validateGuardConfig(parsed, { now }),
+    };
   } finally {
     await handle.close();
   }
 }
 
-export async function writeGuardConfig(projectDir, config) {
-  const valid = validateGuardConfig(config);
+export async function writeGuardConfig(
+  projectDir,
+  config,
+  { now = new Date() } = {},
+) {
+  const valid = validateGuardConfig(config, { now });
   const location = await guardConfigLocation(projectDir);
   const existing = await lstat(location.file).catch((error) => {
     if (error.code === "ENOENT") return null;
@@ -344,21 +386,27 @@ export async function writeGuardConfig(projectDir, config) {
   return { ...location, source: "file", config: valid };
 }
 
-export async function loadGuardSettings(projectDir) {
-  const loaded = await readGuardConfig(projectDir);
+export async function loadGuardSettings(projectDir, options = {}) {
+  const loaded = await readGuardConfig(projectDir, options);
   return { ...loaded, ...effectiveGuardSettings(loaded.config) };
 }
 
-export async function inspectGuardConfig(projectDir) {
+export async function inspectGuardConfig(projectDir, options = {}) {
   try {
-    const loaded = await loadGuardSettings(projectDir);
+    const loaded = await loadGuardSettings(projectDir, options);
     return {
       status: loaded.source === "file" ? "ok" : "default",
       file: loaded.file,
       settings: loaded.settings,
+      warnings: loaded.warnings,
     };
   } catch (error) {
-    if (!(error instanceof GuardConfigError)) throw error;
-    return { status: "invalid", code: error.code, message: error.message };
+    return error instanceof GuardConfigError
+      ? { status: "invalid", code: error.code, message: error.message }
+      : {
+          status: "invalid",
+          code: "unreadable-config",
+          message: "Guard configuration could not be inspected",
+        };
   }
 }
