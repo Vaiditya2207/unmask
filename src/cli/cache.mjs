@@ -24,6 +24,12 @@ const usage = () =>
     "Use cache import --report FILE, cache inspect, or cache prune --older-than-days N --limit N [--apply]; optional --cache-dir DIR and --json.",
   );
 const digest = (text) => createHash("sha256").update(text).digest("hex");
+const terminalJson = (value, space) =>
+  JSON.stringify(value, null, space).replace(
+    /[\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/gu,
+    (character) =>
+      `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
 function parse(argv) {
   const action = argv[0];
   if (!["import", "inspect", "prune"].includes(action)) throw usage();
@@ -214,7 +220,7 @@ function scopeFor(report) {
   } catch {}
   return scope;
 }
-async function cachedEntry(cache, name, now) {
+async function readCachedEntry(cache, name, now) {
   if (!/^[a-f0-9]{64}\.json$/.test(name)) throw failure();
   const { text, stat } = await readRegular(
     path.join(cache.root, name),
@@ -251,15 +257,47 @@ async function cachedEntry(cache, name, now) {
     stat,
   };
 }
-async function inspect(cache, now) {
+async function cachedEntry(cache, name, now) {
+  if (!/^[a-f0-9]{64}\.json$/.test(name))
+    throw failure(
+      "cache-entry-invalid",
+      "Unrecognized entry in the managed cache root; inspect it locally. No deletion was started.",
+    );
+  try {
+    return await readCachedEntry(cache, name, now);
+  } catch {
+    throw failure(
+      "cache-entry-invalid",
+      `Cached report ${name} is invalid, linked, oversized or future-dated. Inspect this entry locally and check the clock before retrying; no deletion was started.`,
+    );
+  }
+}
+async function rejectBusyReader(cache) {
+  let lock;
+  try {
+    lock = await lstat(path.join(cache.root, LOCK));
+  } catch (error) {
+    if (error.code === "ENOENT") return;
+    throw error;
+  }
+  if (!lock.isFile() || lock.isSymbolicLink() || lock.nlink !== 1)
+    throw failure();
+  throw failure(
+    "cache-busy",
+    "A cache writer lock is present. Retry after the writer finishes; inspect a stale lock locally rather than removing an active lock.",
+  );
+}
+async function inspect(cache, now, ownsLock = false) {
   if (!cache.exists) return [];
   await assertRoot(cache);
+  if (!ownsLock) await rejectBusyReader(cache);
   const directory = await opendir(cache.root);
   const entries = [];
   let size = 0;
   for await (const item of directory) {
     if (item.name === MARKER) continue;
     if (item.name === LOCK) {
+      if (!ownsLock) await rejectBusyReader(cache);
       const lock = await readRegular(path.join(cache.root, LOCK), 64);
       if (lock.text !== "unmask-cache-write\n") throw failure();
       continue;
@@ -269,7 +307,14 @@ async function inspect(cache, now) {
         "cache-limit",
         "Cache scan exceeded 500 reports; no deletion was started.",
       );
-    const entry = await cachedEntry(cache, item.name, now);
+    let entry;
+    try {
+      if (!ownsLock) await rejectBusyReader(cache);
+      entry = await cachedEntry(cache, item.name, now);
+    } catch (error) {
+      if (!ownsLock) await rejectBusyReader(cache);
+      throw error;
+    }
     size += entry.sizeBytes;
     if (size > MAX_SCAN_BYTES)
       throw failure(
@@ -279,6 +324,7 @@ async function inspect(cache, now) {
     entries.push(entry);
   }
   await assertRoot(cache);
+  if (!ownsLock) await rejectBusyReader(cache);
   return entries.sort(
     (a, b) => a.cachedAt.localeCompare(b.cachedAt) || a.id.localeCompare(b.id),
   );
@@ -313,7 +359,7 @@ async function withLock(cache, operation) {
 }
 async function importReport(cache, report, now) {
   return withLock(cache, async () => {
-    const entries = await inspect(cache, now);
+    const entries = await inspect(cache, now, true);
     const reportJson = JSON.stringify(report);
     const id = digest(reportJson);
     const text =
@@ -384,7 +430,7 @@ export async function cacheCommand(argv, runtime = {}) {
       result.entries = (await inspect(cache, now)).map(publicEntry);
     else {
       const prune = async () => {
-        const entries = await inspect(cache, now);
+        const entries = await inspect(cache, now, !!options["--apply"]);
         const candidates = entries
           .filter(
             (entry) =>
@@ -418,14 +464,14 @@ export async function cacheCommand(argv, runtime = {}) {
     const stdout = runtime.stdout ?? process.stdout;
     stdout.write(
       options["--json"]
-        ? JSON.stringify(result, null, 2) + "\n"
-        : `UNMASK report cache ${JSON.stringify(result.root)}\n` +
+        ? terminalJson(result, 2) + "\n"
+        : `UNMASK report cache ${terminalJson(result.root)}\n` +
             (result.entry
-              ? `${result.imported ? "Imported" : "Already cached"}: ${JSON.stringify(result.entry.scope)}\n`
+              ? `${result.imported ? "Imported" : "Already cached"}: ${terminalJson(result.entry.scope)}\n`
               : (result.entries ?? result.candidates)
                   .map(
                     (entry) =>
-                      `${entry.id} ${entry.ageSeconds}s ${entry.sizeBytes} bytes ${JSON.stringify(entry.scope)} model=${JSON.stringify(entry.modelStatus)}`,
+                      `${entry.id} ${entry.ageSeconds}s ${entry.sizeBytes} bytes ${terminalJson(entry.scope)} model=${terminalJson(entry.modelStatus)}`,
                   )
                   .join("\n") + "\n") +
             (options.action === "prune"

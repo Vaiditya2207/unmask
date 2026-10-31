@@ -33,8 +33,11 @@ The complete bounded scan validates ownership, hashes and report schemas before
 any deletion begins. Unrecognized files, corrupt reports, linked files, linked
 ancestors, shared roots and malformed ownership markers cause refusal. Use a
 canonical path on systems where `/tmp` or `/var` is a symlink. Concurrent UNMASK
-writers use an exclusive lock; a stale lock after a crash needs manual local
-inspection. A hostile process running as the same OS user can still race path
+writers use an exclusive lock; readers report `cache-busy` even while that
+lock is still being initialized. A stale lock after a crash needs manual local
+inspection. Errors for a valid hex-named corrupt or future-dated entry identify
+that filename and suggest checking the local clock before retrying. Displayed
+C1 and bidirectional controls are escaped; stored report data is preserved. A hostile process running as the same OS user can still race path
 operations; this cache is not an isolation boundary against that user.
 
 Cache capacity is 500 reports / 64 MiB total, with at most 16 MiB per entry.

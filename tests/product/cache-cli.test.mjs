@@ -279,3 +279,63 @@ test("cache refuses altered ownership metadata and oversized import files", asyn
   await writeFile(f.filename, " ".repeat(16 * 1024 * 1024 + 1));
   assert.equal((await run(f, ["import", "--report", f.filename])).code, 2);
 });
+
+test("cache classifies an empty in-progress writer lock as busy", async (t) => {
+  const { cacheCommand } = await import("../../src/cli/cache.mjs");
+  const f = await fixture(t);
+  assert.equal((await run(f, ["import", "--report", f.filename])).code, 0);
+  await writeFile(path.join(f.root, ".unmask-write.lock"), "");
+  await assert.rejects(
+    cacheCommand(["inspect", "--cache-dir", f.cacheDir], {
+      now: () => Date.UTC(2026, 0, 15),
+    }),
+    { code: "cache-busy" },
+  );
+});
+
+test("cache terminal output escapes C1 and bidirectional controls without altering the stored status", async (t) => {
+  const { cacheCommand } = await import("../../src/cli/cache.mjs");
+  const f = await fixture(t);
+  const value = report();
+  value.model.status = "unavailable\u009b2J\u202espoof\u2066";
+  await writeFile(f.filename, JSON.stringify(value));
+  assert.equal((await run(f, ["import", "--report", f.filename])).code, 0);
+  const output = [];
+  assert.equal(
+    await cacheCommand(["inspect", "--cache-dir", f.cacheDir], {
+      now: () => Date.UTC(2026, 0, 15),
+      stdout: { write: (text) => output.push(text) },
+    }),
+    0,
+  );
+  assert.doesNotMatch(
+    output.join(""),
+    /[\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u,
+  );
+  assert.match(output.join(""), /\\u009b/);
+  assert.equal(
+    (await run(f, ["inspect"])).value.entries[0].modelStatus,
+    value.model.status,
+  );
+});
+
+test("cache identifies a future-dated owned filename for safe manual recovery", async (t) => {
+  const { cacheCommand } = await import("../../src/cli/cache.mjs");
+  const f = await fixture(t);
+  const imported = await run(f, ["import", "--report", f.filename]);
+  const id = imported.value.entry.id;
+  await assert.rejects(
+    cacheCommand(["inspect", "--cache-dir", f.cacheDir], {
+      now: () => Date.UTC(2026, 0, 14),
+    }),
+    (error) =>
+      error.code === "cache-entry-invalid" &&
+      error.message.includes(id + ".json") &&
+      error.message.includes("clock"),
+  );
+  assert.equal(
+    (await readdir(f.root)).filter((name) => /^[a-f0-9]{64}\.json$/.test(name))
+      .length,
+    1,
+  );
+});
