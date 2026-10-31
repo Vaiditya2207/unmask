@@ -1,11 +1,11 @@
 # CI, releases and manual deployment
 
-The repository now contains a CLI, HTTP server and website. Publication remains
-closed: `private: true`, version `0.0.0` and `release.config.json.enabled: false`
-are intentional gates. Passing local tests does not establish a working image,
-hosted model or deployment. No release, registry package or image was published
-while implementing this flow. The Docker adapter is runtime-unverified because
-no Docker daemon was available.
+The repository contains a CLI, HTTP server and website. Version `0.1.0` is
+configured with `private: false`, public npm access, and enabled release/npm
+publication gates. This configuration is not proof of npm publication, public
+Cloud Run access, image acceptance or useful model output. Root must verify the
+final exact artifact and deployed normal route before merging/releasing. Local
+tests alone do not establish those results.
 
 ## Local distribution checks
 
@@ -102,11 +102,13 @@ is needed or exposed by these core checks.
 
 ## Opening the publication gate
 
-Before enabling publication, configure the authorized public npm identity and
+The current candidate configures the authorized public npm identity and
 `publishConfig`, a positive stable version, matching lock identity and actual
 CLI/server/website source and output paths. Configure meaningful `build`,
 `test:product` and `test:release` commands. Keep these settings disabled until
-reviewed product and runtime prerequisites are satisfied.
+reviewed product and runtime prerequisites are satisfied. The current release
+configuration enables them under explicit release authorization; normal CI and
+final runtime verification still apply.
 
 The main workflow requires checks, product build, exact image smoke and a clean
 matching SHA before publishing. It inventories GitHub stable tags/releases and

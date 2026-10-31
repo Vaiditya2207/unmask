@@ -10,7 +10,7 @@ The CLI supports the following forms in the reviewed implementation. These
 commands require the pending package build; they are not scaffold commands.
 
 ```bash
-UNMASK_SERVER_URL="$YOUR_UNMASK_HTTPS_ORIGIN" unmask check package-name@1.2.3 --out OUTPUT
+unmask check package-name@1.2.3 --out OUTPUT
 unmask check --tarball PACKAGE.tgz --offline --cache-dir CACHE --out OUTPUT
 unmask check --tarball PACKAGE.tgz --source-archive SOURCE.tgz \
   --commit FULL_SHA --source-root ARCHIVE_ROOT --offline \
@@ -35,8 +35,9 @@ same-origin `/r/ID.json`. The hosted report is untrusted: the CLI bounds transpo
 validates the report schema, exact claim and deterministic policy, renders escaped
 HTML locally, and returns its validated policy exit code. No local/provider key
 is read or transmitted, and hosted failures never trigger local acquisition.
-`UNMASK_SERVER_URL` is required until the actual deployed default URL is configured
-before publication. See [CLI configuration](cli.md) for bounds and prerequisites.
+The default origin is `https://unmask-386156642190.asia-south1.run.app`;
+`UNMASK_SERVER_URL` selects another service. See [CLI configuration](cli.md) for
+bounds and release-verification prerequisites.
 
 `--allow-model` applies only to offline local evidence. It permits sending selected
 evidence even with `--offline`, whose scope is acquisition. Without the flag no

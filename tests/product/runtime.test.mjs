@@ -7,8 +7,11 @@ import { pathToFileURL } from "node:url";
 import { compareInventories } from "../../src/core/compare.mjs";
 import { createReport } from "../../src/core/report.mjs";
 
+const packageVersion = JSON.parse(
+  await readFile(new URL("../../package.json", import.meta.url), "utf8"),
+).version;
 const versionInfo = {
-  version: "0.0.0",
+  version: packageVersion,
   commit: "unknown",
   tarballSha256: "unknown",
 };
@@ -165,7 +168,7 @@ test("version endpoint metadata binds clean build commit and external tarball di
   const filename = path.join(root, "version.json");
   const { loadVersionInfo } = await import("../../src/server/main.mjs");
   const metadata = {
-    version: "0.0.0",
+    version: packageVersion,
     commit: "c".repeat(40),
     dirty: false,
     sourceSha256: "b".repeat(64),
@@ -176,7 +179,7 @@ test("version endpoint metadata binds clean build commit and external tarball di
     tarballSha256: "d".repeat(64),
   };
   assert.deepEqual(await loadVersionInfo(options), {
-    version: "0.0.0",
+    version: packageVersion,
     commit: "c".repeat(40),
     tarballSha256: "d".repeat(64),
   });

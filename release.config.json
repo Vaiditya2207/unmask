@@ -1,10 +1,15 @@
 {
-  "enabled": false,
+  "enabled": true,
+  "npmPublishEnabled": true,
   "approvedPackageName": "@xagents_in/unmask",
-  "sourceFiles": [],
-  "cli": null,
-  "server": null,
-  "web": null,
+  "sourceFiles": [
+    "src/cli/main.mjs",
+    "src/server/main.mjs",
+    "src/viewer/shell.mjs"
+  ],
+  "cli": "dist/cli/main.mjs",
+  "server": "dist/server/main.mjs",
+  "web": "dist/viewer/shell.mjs",
   "dockerfile": "Dockerfile",
   "productTestDirectory": "tests/product"
 }

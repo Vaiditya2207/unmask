@@ -1,7 +1,7 @@
 {
   "name": "@xagents_in/unmask",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "private": false,
   "description": "Evidence-based comparison of npm packages and their source archives",
   "license": "MIT",
   "repository": {
@@ -33,5 +33,9 @@
   "dependencies": {
     "acorn": "8.19.0",
     "tar-stream": "3.2.2"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
   }
 }

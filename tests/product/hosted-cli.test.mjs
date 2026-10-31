@@ -209,10 +209,10 @@ test("hosted transport sends only spec, polls pending and never reads provider c
   assert.equal(gets, 2);
   await assert.rejects(access(cache));
 });
-test("hosted URL configuration prerequisite and offline-only consent fail before any acquisition", async (t) => {
+test("invalid hosted URL override and offline-only consent fail before any acquisition", async (t) => {
   const root = await temp(t);
   for (const [env, args] of [
-    [{}, []],
+    [{ UNMASK_SERVER_URL: "" }, []],
     [{ UNMASK_SERVER_URL: "http://example.invalid" }, []],
     [{ UNMASK_SERVER_URL: "http://user:secret@127.0.0.1" }, []],
     [{ UNMASK_SERVER_URL: "http://127.0.0.1/path" }, []],
@@ -436,4 +436,38 @@ test("default hosted deadline covers queued plus running lifecycle without resub
   );
   assert.equal(posts, 1);
   assert.equal(polls, 181);
+});
+
+test("public CLI uses the configured deployment default when no override is supplied", async (t) => {
+  const root = await temp(t),
+    report = await synthetic(t);
+  const urls = [];
+  const runtime = options(undefined);
+  runtime.fetchImpl = async (url, request) => {
+    urls.push(url);
+    if (request.method === "POST") {
+      assert.equal(
+        url,
+        "https://unmask-386156642190.asia-south1.run.app/check",
+      );
+      return new Response(null, {
+        status: 303,
+        headers: { location: `/r/${id}` },
+      });
+    }
+    assert.equal(
+      url,
+      `https://unmask-386156642190.asia-south1.run.app/r/${id}.json`,
+    );
+    return Response.json(report);
+  };
+  assert.equal(
+    await main(["check", "fixture@1.0.0", "--out", root], runtime),
+    0,
+  );
+  assert.equal(urls.length, 2);
+  assert.deepEqual(
+    JSON.parse(await readFile(path.join(root, "report.json"), "utf8")),
+    report,
+  );
 });

@@ -15,8 +15,10 @@ Hacktoberfest 2026, Hack Day Sonipat. See [HACKATHON.md](HACKATHON.md).
 The local candidate includes an npm CLI, a shared analyzer, a website with a
 bounded job queue, and an optional hosted Gemma adapter. It uses plain ESM
 JavaScript on Node.js 24.22.2. The intended npm name is `@xagents_in/unmask`;
-the package is currently private and unreleased. No hosted URL or validated
-live model integration is available yet.
+version `0.1.0` is configured for public npm publication. The default service is
+`https://unmask-386156642190.asia-south1.run.app`. Publication, public access and final
+model/runtime acceptance must still be verified; this configuration is not a
+released-artifact claim.
 
 The analyzer reads package contents as data. It does not install the inspected
 package, run its scripts, follow archive links, or reproduce its build.
@@ -37,15 +39,15 @@ npm run check:package
 Check an exact public npm version through your configured UNMASK service:
 
 ```bash
-UNMASK_SERVER_URL="$YOUR_UNMASK_HTTPS_ORIGIN" node dist/cli/main.mjs check chalk@6.0.1 --out /tmp/unmask-chalk-report
+node dist/cli/main.mjs check chalk@6.0.1 --out /tmp/unmask-chalk-report
 ```
 
 Choose a fresh output directory for each check. The command writes `report.json`
 and `report.html` and refuses to replace existing report files. Public-package
 checks send only the exact package spec to the hosted service; the service owns
-acquisition and model policy. A deployed default URL is not configured yet, so
-`UNMASK_SERVER_URL` is required. It must be an HTTPS origin, or a loopback HTTP
-origin for local testing. Hosted failure never falls back to local acquisition.
+acquisition and model policy. `UNMASK_SERVER_URL` overrides the default service.
+It must be an HTTPS origin, or a loopback HTTP origin for local testing. Hosted
+failure never falls back to local acquisition.
 See [CLI configuration and data flow](docs/cli.md).
 
 To analyze local archives without network acquisition:
@@ -104,7 +106,8 @@ installed into a temporary directory and invoked through its real CLI binary.
 `npm run check` checks formatting; it is not static type checking. Product tests
 and local HTTP checks do not establish deployment readiness.
 
-Release publication remains disabled. The planned flow builds an immutable
+Release publication is enabled for the `0.1.0` candidate, subject to CI and runtime
+release gates. The flow builds an immutable
 versioned artifact in CI, then a deployer selects that release separately.
 See [release prerequisites](docs/releases.md). npm access is not required for
 local builds or testing.

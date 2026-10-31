@@ -5,13 +5,14 @@ only the package spec, not local files, environment values or a provider key. Th
 service owns registry/source acquisition and any advisory model processing under
 its published model/data disclosure. Read that service's disclosure before use.
 
-No deployed default URL is configured in this candidate. Before publication, the
-release owner must configure the actual deployed HTTPS origin and repeat the
-installed-package and normal deployed-route checks. Until then, set
-`UNMASK_SERVER_URL` explicitly; do not infer a live domain from these examples.
+The default service origin is
+`https://unmask-386156642190.asia-south1.run.app`. Set `UNMASK_SERVER_URL` to
+select a self-hosted service instead. This release configuration does not establish
+public access, model usefulness or final installed-artifact acceptance; the release
+owner verifies those through the deployed normal route before merging/releasing.
 
 ```bash
-UNMASK_SERVER_URL="$YOUR_UNMASK_HTTPS_ORIGIN" unmask check package-name@1.2.3 --out OUTPUT
+unmask check package-name@1.2.3 --out OUTPUT
 UNMASK_SERVER_URL=http://127.0.0.1:3000 unmask check package-name@1.2.3 --out OUTPUT
 ```
 

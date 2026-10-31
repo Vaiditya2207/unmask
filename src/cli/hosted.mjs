@@ -3,7 +3,7 @@ import { parsePackageSpec } from "../core/acquire.mjs";
 import { LocalInputError } from "../core/pipeline.mjs";
 import { validateReport } from "../core/report.mjs";
 
-const DEFAULT_SERVER_URL = "";
+const DEFAULT_SERVER_URL = "https://unmask-386156642190.asia-south1.run.app";
 const defaults = Object.freeze({
   totalTimeoutMs: 600000,
   requestTimeoutMs: 15000,
@@ -15,7 +15,7 @@ function serverOrigin(value) {
   if (!value)
     throw failure(
       "hosted-configuration",
-      "Set UNMASK_SERVER_URL to the deployed UNMASK HTTPS service; no default deployment is configured yet.",
+      "UNMASK_SERVER_URL must be a nonempty service origin.",
     );
   let url;
   try {
