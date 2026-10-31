@@ -1,0 +1,5 @@
+"fixture@1.0.0" x2: completed; policy exit 0; findings 0; AI status "unavailable"
+"missing@1.0.0" x1: error; hosted-report-failed
+"fixture@latest" x1: error; invalid-package-spec
+Batch: 1 completed, 2 errors, 0 not checked; 1 duplicate inputs coalesced.
+No findings do not establish safety.
