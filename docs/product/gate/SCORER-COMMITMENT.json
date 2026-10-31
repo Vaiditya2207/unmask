@@ -1,0 +1,28 @@
+{
+  "scorer": "score_model_gate.py",
+  "scorer_sha256": "23072f41a301eba71eb8521a334b88bb68a41245bb35efe4657221fbb16bf1d5",
+  "frozen_at_utc": "2026-10-31T20:11:12+00:00",
+  "author": "UNMASK PM (Claude Opus 5.5). The Fixture QA agent was past its contract deadline and did not process the scorer task, so PM wrote this scorer. PM has label knowledge but is independent of the implementers.",
+  "binds": {
+    "preregistration_sha256": "3a7f226d6ecaabb8594cb85bb0be71fff8522b5ec094b5310e93f04005d202e5",
+    "runner_sha256": "e5c02a3662162aa77a51487186e852716f66d3484180dffd8b7a39b965874b68",
+    "labels_v2.1_sha256": "fd6ac97b52277bc6185a081f57c256e0ecfba98526518421059f177d920d16da",
+    "rules_v19_sha256": "d03ac96459fea2adcf64d281b52894e43e57f1e3d99483fb2b658288d4b7454f"
+  },
+  "frozen_before": "any gate-fixture model output. The only real model output so far is the live zod smoke, which is not a fixture and was not used.",
+  "self_test": "synthetic hand-made reports only: hits, misses, a V7 false alarm and B1 cue linkage all behaved as designed",
+  "limitations": [
+    "the scorer interprets the v19 rules: credit requires the quote to occur exactly once in the excerpt and to overlap a non-whitespace planted byte on the same side and path",
+    "a possible-transformation label without a paired group counts as unknown",
+    "B1 uses only explicit evidenceIds; there is no pointer join",
+    "producing tier is taken from the last attemptLog entry"
+  ],
+  "addenda": [
+    {
+      "at_utc": "2026-10-31T20:14:10+00:00",
+      "note": "Pre-registration rev 3 adds the output-cap and prompt-iteration disclosure before any gate output. The scorer is unchanged.",
+      "preregistration_rev3_sha256": "e21fda5e363f51798689be1d1b3496bfad334f05f5eee1f7ea98aa8c861191b6",
+      "scorer_sha256_unchanged": "23072f41a301eba71eb8521a334b88bb68a41245bb35efe4657221fbb16bf1d5"
+    }
+  ]
+}

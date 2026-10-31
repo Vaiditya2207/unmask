@@ -14,3 +14,6 @@ HACKATHON.md
 internal/
 research/
 *.internal.md
+
+# Hash-frozen model-gate files; formatting would change their committed bytes.
+docs/product/gate/
