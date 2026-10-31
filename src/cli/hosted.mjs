@@ -97,6 +97,8 @@ async function runHosted(
     signal,
     limits: overrides = {},
     existingReportId,
+    optionalDetails = false,
+    onStatus,
   } = {},
   withDetails = false,
 ) {
@@ -159,7 +161,13 @@ async function runHosted(
       if (response) await discard(response);
     }
   }
+  const status = (phase) => {
+    try {
+      onStatus?.(phase);
+    } catch {}
+  };
   try {
+    if (!existingReportId) status("submitting");
     const reportUrl = existingReportId
       ? `${origin}/r/${existingReportId}.json`
       : await request(
@@ -222,8 +230,14 @@ async function runHosted(
                 "hosted-response",
                 "The hosted service returned an invalid pending report.",
               );
+            status(value.status);
             return null;
           }
+          if (
+            ["failed", "incomplete"].includes(value?.status) &&
+            value.id === id
+          )
+            throw advisoryOnly(value.advisoryResult, claim);
           try {
             validateReport(value);
             if (
@@ -243,24 +257,30 @@ async function runHosted(
       );
       if (result) {
         if (!withDetails) return result;
+        status("details");
         const detailsUrl = reportUrl.replace(/\.json$/, ".details.json");
-        const details = await request(
-          detailsUrl,
-          { headers: { accept: "application/json" } },
-          async (response) => {
-            if (response.status !== 200)
-              throw failure(
-                "hosted-details-failed",
-                `Hosted package details are unavailable (HTTP ${response.status}).`,
+        const fetchDetails = () =>
+          request(
+            detailsUrl,
+            { headers: { accept: "application/json" } },
+            async (response) => {
+              if (response.status !== 200)
+                throw failure(
+                  "hosted-details-failed",
+                  `Hosted package details are unavailable (HTTP ${response.status}).`,
+                );
+              const value = await readJson(
+                response,
+                Math.min(limits.maxBodyBytes, 4194304),
               );
-            const value = await readJson(
-              response,
-              Math.min(limits.maxBodyBytes, 4194304),
-            );
-            validateDetails(value, result);
-            return value;
-          },
-        );
+              validateDetails(value, result);
+              return value;
+            },
+          );
+        // Check summaries keep a completed report when only details fail.
+        const details = optionalDetails
+          ? await fetchDetails().catch(() => null)
+          : await fetchDetails();
         return { report: result, details, reportUrl, detailsUrl };
       }
       await delay(limits.pollMs, undefined, { signal: lifetime });
@@ -348,6 +368,80 @@ function validateDetails(value, report) {
       "hosted-details-invalid",
       "Hosted OSV details failed status or identity validation.",
     );
+}
+
+const ADVISORY_ASSESSMENTS = {
+  found: "advisories-reported",
+  "none-reported": "no-advisory-reported",
+  incomplete: "advisory-lookup-incomplete",
+  unavailable: "advisory-lookup-unavailable",
+};
+const bounded = (value, max, optional = false) =>
+  (optional && value === undefined) ||
+  (typeof value === "string" && Buffer.byteLength(value) <= max);
+const strings = (value, count, max) =>
+  Array.isArray(value) &&
+  value.length <= count &&
+  value.every((item) => bounded(item, max));
+function advisoryRecord(item) {
+  return (
+    item !== null &&
+    typeof item === "object" &&
+    !Array.isArray(item) &&
+    typeof item.id === "string" &&
+    /^[a-zA-Z0-9:_.-]{1,256}$/.test(item.id) &&
+    bounded(item.summary, 2048, true) &&
+    bounded(item.databaseSeverity, 64, true) &&
+    (item.aliases === undefined || strings(item.aliases, 16, 256))
+  );
+}
+function advisoryOnly(result, claim) {
+  const check = result?.vulnerabilityCheck;
+  const exact = (item) =>
+    item?.ecosystem === "npm" &&
+    item.name === claim.name &&
+    item.version === claim.version;
+  const complete = ["found", "none-reported"].includes(check?.status);
+  if (
+    result?.schemaVersion !== "1" ||
+    result.kind !== "advisory-only" ||
+    result.safetyVerdict !== "not-provided" ||
+    result.artifactVerification?.status !== "not-performed" ||
+    result.sourceComparison?.status !== "not-performed" ||
+    !bounded(result.artifactVerification.reason, 128, true) ||
+    !bounded(result.notice, 1024) ||
+    !exact(result.package) ||
+    !exact(check?.package) ||
+    check.schemaVersion !== "1" ||
+    check.source !== "OSV" ||
+    !bounded(check.queriedAt, 64) ||
+    !Number.isFinite(Date.parse(check.queriedAt)) ||
+    !Number.isSafeInteger(check.pagesFetched) ||
+    check.pagesFetched < 0 ||
+    check.pagesFetched > 100 ||
+    (complete && (check.pagesFetched === 0 || check.reasons.length !== 0)) ||
+    (!complete && check.reasons.length === 0) ||
+    !Object.hasOwn(ADVISORY_ASSESSMENTS, check.status) ||
+    result.assessment !== ADVISORY_ASSESSMENTS[check.status] ||
+    check.complete !== complete ||
+    !strings(check.reasons, 16, 128) ||
+    !Array.isArray(check.advisories) ||
+    check.advisories.length > 100 ||
+    !check.advisories.every(advisoryRecord) ||
+    result.advisoryCount !== check.advisories.length ||
+    (check.status === "found" && check.advisories.length === 0) ||
+    (check.status === "none-reported" && check.advisories.length !== 0)
+  )
+    return failure(
+      "hosted-report-failed",
+      "The hosted analysis did not finish and returned no valid advisory-only result. No local fallback was attempted.",
+    );
+  const error = failure(
+    "hosted-advisory-only",
+    "The registry artifact could not be analyzed; only exact-version advisories are available. No verdict is claimed.",
+  );
+  error.advisoryResult = result;
+  return error;
 }
 
 export async function checkHosted(spec, options) {

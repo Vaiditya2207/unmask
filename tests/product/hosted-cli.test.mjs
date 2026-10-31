@@ -173,7 +173,8 @@ test("hosted transport sends only spec, polls pending and never reads provider c
   const report = await synthetic(t),
     root = await temp(t);
   let gets = 0,
-    posts = 0;
+    posts = 0,
+    details = 0;
   const origin = await listen(
     t,
     createServer(async (req, res) => {
@@ -186,6 +187,10 @@ test("hosted transport sends only spec, polls pending and never reads provider c
         for await (const c of req) body += c;
         assert.equal(body, "package=fixture%401.0.0");
         res.writeHead(303, { location: `/r/${id}` });
+        res.end();
+      } else if (req.url === `/r/${id}.details.json`) {
+        details++;
+        res.writeHead(404);
         res.end();
       } else {
         assert.equal(req.url, `/r/${id}.json`);
@@ -207,6 +212,7 @@ test("hosted transport sends only spec, polls pending and never reads provider c
   assert.equal(code, 0);
   assert.equal(posts, 1);
   assert.equal(gets, 2);
+  assert.equal(details, 1);
   await assert.rejects(access(cache));
 });
 test("invalid hosted URL override and offline-only consent fail before any acquisition", async (t) => {
@@ -455,6 +461,8 @@ test("public CLI uses the configured deployment default when no override is supp
         headers: { location: `/r/${id}` },
       });
     }
+    if (url.endsWith(".details.json"))
+      return new Response(null, { status: 404 });
     assert.equal(
       url,
       `https://unmask-386156642190.asia-south1.run.app/r/${id}.json`,
@@ -465,7 +473,10 @@ test("public CLI uses the configured deployment default when no override is supp
     await main(["check", "fixture@1.0.0", "--out", root], runtime),
     0,
   );
-  assert.equal(urls.length, 2);
+  assert.deepEqual(urls.slice(1), [
+    `https://unmask-386156642190.asia-south1.run.app/r/${id}.json`,
+    `https://unmask-386156642190.asia-south1.run.app/r/${id}.details.json`,
+  ]);
   assert.deepEqual(
     JSON.parse(await readFile(path.join(root, "report.json"), "utf8")),
     report,

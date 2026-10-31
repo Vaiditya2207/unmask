@@ -101,3 +101,101 @@ by default. Advisory unavailability is never converted to `none-reported`.
 Recorded nonempty AI summaries are displayed only for `model.status=complete`;
 other statuses remain explicit without a fabricated summary. Zero-width
 U+200B–U+200D, U+2060 and U+FEFF are escaped alongside terminal/bidi controls.
+
+## Reuse one analysis while exploring
+
+1. Set `UNMASK_SERVER_URL` to the same hosted origin for the whole session.
+2. Run `unmask info NAME@EXACT_VERSION` once. Keep the printed report link; its
+   32-character ID is the part after `/r/` and before `.json`.
+3. Browse `unmask files NAME@EXACT_VERSION --report REPORT_ID --limit 50`.
+4. Use the printed next offset with that same `--report REPORT_ID`, exact spec,
+   filters and limit. Page reads use the stored job and start no new analysis.
+
+A report belongs to its original service origin and may expire, be evicted or be
+lost after a restart. An unavailable report produces an explicit error. Decide
+whether to start a new `info`/`files` check yourself; read-only paging does not
+silently do that for you. A successful explorer command means the recorded data
+was displayed, and does not authorize installation or imply a safety verdict.
+
+The equivalent existing-report API reads are:
+
+```sh
+# Set these from your actual chosen origin and returned report link.
+UNMASK_ORIGIN=https://your-unmask-service.example
+REPORT_ID=replace_with_the_32_character_report_id
+curl --fail-with-body "$UNMASK_ORIGIN/r/$REPORT_ID.json"
+curl --fail-with-body "$UNMASK_ORIGIN/r/$REPORT_ID.details.json"
+```
+
+These GET requests read an existing job. They do not submit the `/check` form,
+perform another model assessment or refresh an OSV lookup. Keep the original
+package/version identity and query time when interpreting the returned facts.
+
+## Read recorded file evidence by opaque ID
+
+The report-exploration API identifies files using an opaque `fileId` scoped to
+one report. Obtain it from that report's inventory instead of encoding a package
+path into a URL. This keeps long or multibyte paths out of the drilldown request.
+The existing `files` CLI uses the package-details inventory; its displayed paths
+are not file IDs. Use the report-exploration API inventory for opaque IDs:
+
+```sh
+curl --fail-with-body --get "$UNMASK_ORIGIN/r/$REPORT_ID/files.json" \
+  --data-urlencode 'limit=50' --data-urlencode 'offset=0'
+
+# Copy a returned files[].fileId from the same report.
+FILE_ID=replace_with_the_returned_file_id
+curl --fail-with-body --get "$UNMASK_ORIGIN/r/$REPORT_ID/file.json" \
+  --data-urlencode "fileId=$FILE_ID"
+```
+
+The inventory response supplies `nextOffset` for its own subsequent pages; its
+server-side page limit and prefix/state filters are a separate API contract from
+the package-details CLI's substring filters. File IDs are scoped to their report
+and must not be reused with a different report. Unknown or expired reports/files
+fail explicitly, pending reports return a pending response, and a terminal job
+without a stored report cannot provide file evidence.
+
+Drilldown returns previously recorded evidence only: hashes, comparison state,
+byte ranges and bounded excerpts when recorded. It does not read files from the
+user's disk, reconstruct omitted text, rerun analysis or establish execution.
+Missing excerpts, partial/omitted evidence and incomplete coverage remain explicit.
+Package text and excerpts are untrusted data and must be rendered as text.
+The endpoint requires the matching report-exploration server deployment; source
+and local fixture support alone do not verify a public hosted instance.
+
+With the returned report ID and opaque file ID, use the CLI drilldown:
+
+```sh
+unmask file example@1.2.3 --report "$REPORT_ID" --file-id "$FILE_ID"
+```
+
+`file` requires an exact package/version and both IDs. It validates the existing
+report's package identity with the shared read-only helper, then performs a
+same-origin GET to S10's recorded-evidence endpoint. It submits no check, follows
+no redirect and sends no provider credentials. The file response is capped at
+128 KiB and 32 evidence records; the additional GET has a maximum 15-second
+request deadline and honors cancellation. Report/file IDs, metadata hashes and
+evidence IDs/digests/ranges are bound to the existing validated report before
+anything is displayed. The terminal escapes control, directional and zero-width
+characters in paths and excerpts and visibly truncates long text.
+
+Missing, expired or mismatched identities, malformed responses, server errors and
+unsupported endpoint deployments fail explicitly with exit 2 and never submit a
+replacement check. Success exits 0 as an informational display, matching `info`
+and `files`; it is not a guard decision. The report helper may wait for an
+existing pending job within its configured timeout, and cannot create a new job.
+No package file is opened or executed locally. Source-only/prefixless records
+retain their available metadata; missing hashes or excerpts remain unavailable.
+
+Reproduce the recorded S10 contract fixture and failure-boundary checks with:
+
+```sh
+node --test tests/product/package-file.test.mjs
+npm run build
+UNMASK_TEST_BUILT=1 node --test tests/product/package-file.test.mjs
+```
+
+These tests use S10's captured inert fixture contract, not a live hosted provider.
+A deployable combined candidate must include S10's opaque-ID server routes and
+receive its own normal-route runtime verification after integration.

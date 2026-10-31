@@ -8,16 +8,26 @@ import { renderReport } from "../viewer/render.mjs";
 import { parsePackageSpec, AcquisitionError } from "../core/acquire.mjs";
 import { addConfiguredModel } from "../core/online.mjs";
 import { modelClientFromEnv } from "../model/config.mjs";
-import { checkHosted } from "./hosted.mjs";
-import { runScan } from "./scan.mjs";
-import { runBatch } from "./batch.mjs";
+import { getHostedDetails } from "./hosted.mjs";
 import { infoCommand } from "./info.mjs";
 import { filesCommand } from "./files.mjs";
+import { fileCommand } from "./file.mjs";
+import {
+  createProgress,
+  renderAdvisoryOnly,
+  renderCheckSummary,
+  renderError,
+  terminalStyle,
+} from "./terminal.mjs";
+import { discoveryCommand, isDiscoveryRequest } from "./discovery.mjs";
+import { runConfig } from "./config.mjs";
+import { runExceptions } from "./exceptions.mjs";
+import { runInit } from "./init.mjs";
+import { runScan } from "./scan.mjs";
+import { runBatch } from "./batch.mjs";
 import { runInstallGuard } from "./install-guard.mjs";
 import { runShellIntegration } from "./shell-integration.mjs";
 import { runAudit } from "./audit.mjs";
-import { runConfig } from "./config.mjs";
-import { runExceptions } from "./exceptions.mjs";
 
 const names = {
   "--tarball": "tarballPath",
@@ -85,8 +95,6 @@ function parse(argv) {
       );
     options[names[key]] = value;
   }
-  if (!options.out)
-    throw new LocalInputError("usage", "Check requires --out DIR");
   if (options.registrySpec) {
     if (
       options.offline ||
@@ -112,7 +120,7 @@ function parse(argv) {
   if (!options.registrySpec && !options.cacheDir)
     throw new LocalInputError(
       "usage",
-      "Offline check requires --cache-dir DIR and --out DIR",
+      "Offline check requires --cache-dir DIR",
     );
   if (options.claim !== undefined) options.claim = exactClaim(options.claim);
   return options;
@@ -170,30 +178,44 @@ async function configuredModel(allowModel, runtime) {
 }
 
 export async function main(argv = process.argv.slice(2), runtime = {}) {
-  if (argv[0] === "install" || argv[0] === "ci")
-    return runInstallGuard(argv[0], argv.slice(1), runtime);
-  if (argv[0] === "enable" || argv[0] === "disable")
-    return runShellIntegration(argv[0], argv.slice(1), runtime);
-  if (argv[0] === "config") return runConfig(argv.slice(1), runtime);
-  if (argv[0] === "exceptions") return runExceptions(argv.slice(1), runtime);
+  const stdout = runtime.stdout ?? process.stdout;
+  const stderr = runtime.stderr ?? process.stderr;
+  const env = runtime.env ?? process.env;
+  const errorStyle = terminalStyle(stderr, env);
+  let progress;
   try {
+    if (isDiscoveryRequest(argv)) return discoveryCommand(argv, runtime);
+    if (argv[0] === "install" || argv[0] === "ci")
+      return await runInstallGuard(argv[0], argv.slice(1), runtime);
+    if (argv[0] === "enable" || argv[0] === "disable")
+      return await runShellIntegration(argv[0], argv.slice(1), runtime);
     if (argv[0] === "scan") return await runScan(argv.slice(1), runtime);
     if (argv[0] === "batch") return await runBatch(argv.slice(1), runtime);
+    if (argv[0] === "config") return await runConfig(argv.slice(1), runtime);
+    if (argv[0] === "exceptions")
+      return await runExceptions(argv.slice(1), runtime);
+    if (argv[0] === "init") return await runInit(argv.slice(1), runtime);
+    if (argv[0] === "file") return await fileCommand(argv.slice(1), runtime);
     if (argv[0] === "files") return await filesCommand(argv.slice(1), runtime);
     if (argv[0] === "info") return await infoCommand(argv.slice(1), runtime);
     if (argv[0] === "audit") return await runAudit(argv.slice(1), runtime);
     const { out, offline, allowModel, registrySpec, ...options } = parse(argv);
-    let report;
+    progress = createProgress(stderr, { env, subject: registrySpec });
+    let report, details;
     if (registrySpec)
-      report = await checkHosted(registrySpec, {
-        serverUrl: (runtime.env ?? process.env).UNMASK_SERVER_URL,
+      ({ report, details } = await getHostedDetails(registrySpec, {
+        serverUrl: env.UNMASK_SERVER_URL,
         fetchImpl: runtime.fetchImpl,
         signal: runtime.signal,
         limits: runtime.hostedLimits,
-      });
+        optionalDetails: true,
+        onStatus: progress.update,
+      }));
     else {
       const model = await configuredModel(allowModel, runtime);
+      progress.update("local");
       report = await analyzeLocal({ ...options, limits: runtime.limits });
+      if (allowModel) progress.update("model");
       if (allowModel) report = await addConfiguredModel(report, model);
       if (!allowModel)
         report = {
@@ -201,16 +223,36 @@ export async function main(argv = process.argv.slice(2), runtime = {}) {
           model: { status: "not-sent", reason: "consent-required" },
         };
     }
-    await writeReports(out, report);
-    process.stdout.write(`Report written to ${path.resolve(out)}\n`);
+    const outDir = out === undefined ? undefined : path.resolve(out);
+    if (outDir) progress.update("writing");
+    if (outDir) await writeReports(outDir, report);
+    progress.stop();
+    stdout.write(
+      renderCheckSummary(report, {
+        details,
+        outDir,
+        style: terminalStyle(stdout, env),
+      }),
+    );
     return report.policy.exitCode;
   } catch (error) {
+    progress?.stop();
+    if (error instanceof LocalInputError && error.advisoryResult)
+      stdout.write(
+        renderAdvisoryOnly(error.advisoryResult, argv[1], {
+          style: terminalStyle(stdout, env),
+        }),
+      );
     if (error instanceof LocalInputError) {
-      process.stderr.write(`${error.code}: ${error.message}\n`);
+      stderr.write(renderError(error.code, error.message, errorStyle));
       return 2;
     }
-    process.stderr.write(
-      "Internal analysis error; no completed result is claimed.\n",
+    stderr.write(
+      renderError(
+        "internal",
+        "Internal analysis error; no completed result is claimed.",
+        errorStyle,
+      ),
     );
     return 1;
   }

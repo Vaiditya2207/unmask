@@ -1,4 +1,4 @@
-import { lstat, open, realpath, rename, unlink } from "node:fs/promises";
+import { link, lstat, open, realpath, rename, unlink } from "node:fs/promises";
 import { constants } from "node:fs";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
@@ -382,6 +382,38 @@ export async function writeGuardConfig(
     await handle.close().catch(() => {});
     await unlink(temporary).catch(() => {});
     throw error;
+  }
+  return { ...location, source: "file", config: valid };
+}
+
+export async function createGuardConfig(
+  projectDir,
+  config,
+  { now = new Date() } = {},
+) {
+  const valid = validateGuardConfig(config, { now });
+  const location = await guardConfigLocation(projectDir);
+  const temporary = path.join(
+    location.root,
+    `${GUARD_CONFIG_FILE}.${randomBytes(8).toString("hex")}.tmp`,
+  );
+  const handle = await open(temporary, "wx", 0o600);
+  try {
+    await handle.writeFile(JSON.stringify(valid, null, 2) + "\n");
+    await handle.sync();
+    await handle.close();
+    // link() refuses any existing entry, including dangling symlinks, so creation is exclusive.
+    await link(temporary, location.file);
+  } catch (error) {
+    await handle.close().catch(() => {});
+    if (error.code === "EEXIST")
+      fail(
+        "config-exists",
+        "A .unmask.json file, link or other entry already exists; it was left unchanged",
+      );
+    throw error;
+  } finally {
+    await unlink(temporary).catch(() => {});
   }
   return { ...location, source: "file", config: valid };
 }
