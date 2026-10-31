@@ -189,7 +189,7 @@ test("web builds exact release, pushes verified digest, smokes tagged candidate 
   assert.equal(f.smokes[0].baseURL, candidate);
   assert.equal(f.smokes[0].full, true);
   assert.equal(f.smokes[1].baseURL, origin);
-  assert.equal(f.smokes[1].full, false);
+  assert.equal(f.smokes[1].full, true);
   const update = f.calls.find((c) => c.args.includes("update"));
   assert.ok(update.args.includes("--no-traffic"));
   assert.ok(update.args.includes(image));
@@ -293,7 +293,7 @@ test("failed public version restores previous route when the promoted state is u
   await assert.rejects(
     run(f, {
       smoke: async (o) => {
-        if (!o.full) throw new Error("public mismatch");
+        if (o.phase === "public") throw new Error("public mismatch");
         return {};
       },
     }),
@@ -313,7 +313,7 @@ test("external traffic change after promotion suppresses rollback", async () => 
   await assert.rejects(
     run(f, {
       smoke: async (o) => {
-        if (!o.full) {
+        if (o.phase === "public") {
           f.changeRoute();
           throw new Error("public mismatch");
         }
@@ -361,10 +361,23 @@ test("web smoke requires version, visible form and normal POST linked to the bac
         status: 303,
         headers: { location: `/r/${id}` },
       });
+    if (
+      p === `/r/${id}` &&
+      new URL(url).origin === "https://unmask-386156642190.asia-south1.run.app"
+    )
+      return new Response("c".repeat(64));
+    if (p === `/r/${id}`)
+      return new Response(
+        `<html><a href="https://unmask-386156642190.asia-south1.run.app/r/${id}">Open report</a></html>`,
+      );
     return Response.json({
-      id,
-      nameAtExactVersion: "is-number@7.0.0",
-      status: "queued",
+      schemaVersion: "1",
+      inputs: {
+        claim: { name: "zod", version: "4.6.7" },
+        artifact: { sha256: "c".repeat(64) },
+      },
+      failures: [],
+      policy: { exitCode: 0 },
     });
   };
   const result = await smokeWeb({
@@ -434,7 +447,7 @@ test("split previous routes are restored with their exact percentage mapping", a
   await assert.rejects(
     run(f, {
       smoke: async (o) => {
-        if (!o.full) throw new Error("public mismatch");
+        if (o.phase === "public") throw new Error("public mismatch");
         return {};
       },
     }),
@@ -497,7 +510,7 @@ test("external generation change with unchanged traffic suppresses rollback", as
   await assert.rejects(
     run(f, {
       smoke: async (o) => {
-        if (!o.full) {
+        if (o.phase === "public") {
           f.current.metadata.generation++;
           throw new Error("public mismatch");
         }
@@ -625,6 +638,7 @@ test("an OCI index pins its root image and verifies the exact Linux AMD64 servin
       if (args.includes("revisions")) {
         const revision = JSON.parse(text);
         revision.status.imageDigest = image.replace(digest, leaf);
+        revision.spec.containers[0].image = image.replace(digest, leaf);
         return JSON.stringify(revision);
       }
       return text;
@@ -682,3 +696,235 @@ for (const kind of ["digest-mismatch", "ambiguous-amd64", "missing-amd64"]) {
     assert.ok(!f.calls.some((c) => c.args.includes("update")));
   });
 }
+
+test("lost promotion response still restores an exactly owned new route", async () => {
+  const f = fixture(),
+    original = f.execute;
+  let lost = false;
+  await assert.rejects(
+    run(f, {
+      execute: (binary, args) => {
+        const text = original(binary, args);
+        if (args.includes("update-traffic") && !lost) {
+          lost = true;
+          throw new Error("response lost after mutation");
+        }
+        return text;
+      },
+    }),
+    /previous route restored/,
+  );
+  assert.deepEqual(f.current.status.traffic, [
+    { revisionName: "unmask-web-old", percent: 100 },
+  ]);
+});
+
+test("rollback has its own bounded budget after the deployment deadline expires", async () => {
+  const f = fixture();
+  let time = 0;
+  await assert.rejects(
+    run(f, {
+      now: () => time,
+      smoke: async (options) => {
+        if (options.phase === "public") {
+          time = 900001;
+          throw new Error("expired public smoke");
+        }
+        return {};
+      },
+    }),
+    /previous route restored/,
+  );
+  assert.deepEqual(f.current.status.traffic, [
+    { revisionName: "unmask-web-old", percent: 100 },
+  ]);
+});
+
+test("public verification repeats the complete normal web path", async () => {
+  const f = fixture();
+  await run(f);
+  assert.equal(f.smokes[1].full, true);
+  assert.equal(f.smokes[1].phase, "public");
+});
+
+test("a queued-only backend response cannot verify a broken report page", async () => {
+  const id = "b".repeat(32);
+  let time = 0;
+  await assert.rejects(
+    smokeWeb({
+      baseURL: candidate,
+      commit: sha,
+      version: "1.2.3",
+      full: true,
+      now: () => time,
+      pause: async () => {
+        time += 240001;
+      },
+      fetchImpl: async (url) => {
+        const p = new URL(url).pathname;
+        if (p === "/version")
+          return Response.json({ commit: sha, version: "1.2.3" });
+        if (p === "/")
+          return new Response(
+            '<form action="/check"><input name="package"></form>',
+          );
+        if (p === "/check")
+          return new Response(null, {
+            status: 303,
+            headers: { location: `/r/${id}` },
+          });
+        if (p.startsWith("/r/"))
+          return new Response("broken viewer", { status: 500 });
+        return Response.json(
+          { id, nameAtExactVersion: "zod@4.6.7", status: "queued" },
+          { status: 202 },
+        );
+      },
+    }),
+  );
+});
+
+function terminalWebFetch({
+  viewerStatus = 200,
+  changedFollowup = false,
+  pending = false,
+  backendStatus = 200,
+} = {}) {
+  const id = "b".repeat(32),
+    calls = [],
+    backendOrigin = "https://unmask-386156642190.asia-south1.run.app";
+  let polls = 0;
+  const report = {
+    schemaVersion: "1",
+    inputs: {
+      claim: { name: "zod", version: "4.6.7" },
+      artifact: { sha256: "c".repeat(64) },
+    },
+    failures: [],
+    policy: { exitCode: 0 },
+  };
+  return {
+    calls,
+    fetchImpl: async (url) => {
+      calls.push(url);
+      const u = new URL(url),
+        p = u.pathname;
+      if (p === "/version")
+        return Response.json({ commit: sha, version: "1.2.3" });
+      if (p === "/")
+        return new Response(
+          '<form action="/check"><input name="package"></form>',
+        );
+      if (p === "/check")
+        return new Response(null, {
+          status: 303,
+          headers: { location: `/r/${id}` },
+        });
+      if (p === `/r/${id}`)
+        return u.origin === backendOrigin
+          ? new Response("c".repeat(64), { status: backendStatus })
+          : new Response(`<a href="${backendOrigin}/r/${id}">Open report</a>`, {
+              status: viewerStatus,
+            });
+      if (p.startsWith("/api/")) {
+        polls++;
+        if (pending && polls === 1)
+          return Response.json(
+            { id, nameAtExactVersion: "zod@4.6.7", status: "running" },
+            { status: 202 },
+          );
+        if (changedFollowup && polls > (pending ? 2 : 1))
+          return Response.json({ ...report, policy: { exitCode: 3 } });
+      }
+      return Response.json(report);
+    },
+  };
+}
+
+test("a terminal report with a broken normal web viewer is rejected", async () => {
+  const f = terminalWebFetch({ viewerStatus: 500 });
+  await assert.rejects(
+    smokeWeb({
+      baseURL: candidate,
+      commit: sha,
+      version: "1.2.3",
+      full: true,
+      fetchImpl: f.fetchImpl,
+    }),
+    /report page/,
+  );
+});
+
+test("terminal smoke polls, opens both viewers and verifies persisted report follow-up", async () => {
+  const f = terminalWebFetch({ pending: true });
+  let time = 0;
+  const result = await smokeWeb({
+    baseURL: candidate,
+    commit: sha,
+    version: "1.2.3",
+    full: true,
+    fetchImpl: f.fetchImpl,
+    now: () => time,
+    pause: async (ms) => {
+      time += ms;
+    },
+  });
+  assert.equal(result.status, "passed");
+  assert.ok(f.calls.some((url) => url === `${candidate}/r/${"b".repeat(32)}`));
+  assert.ok(
+    f.calls.some(
+      (url) =>
+        url ===
+        `https://unmask-386156642190.asia-south1.run.app/r/${"b".repeat(32)}`,
+    ),
+  );
+  assert.equal(time, 1000);
+  const changed = terminalWebFetch({ changedFollowup: true });
+  await assert.rejects(
+    smokeWeb({
+      baseURL: candidate,
+      commit: sha,
+      version: "1.2.3",
+      full: true,
+      fetchImpl: changed.fetchImpl,
+    }),
+    /follow-up/,
+  );
+});
+
+test("a broken linked backend viewer cannot count as a working web report", async () => {
+  const f = terminalWebFetch({ backendStatus: 500 });
+  await assert.rejects(
+    smokeWeb({
+      baseURL: candidate,
+      commit: sha,
+      version: "1.2.3",
+      full: true,
+      fetchImpl: f.fetchImpl,
+    }),
+    /backend viewer/,
+  );
+});
+
+test("lost promotion response does not roll back an external successor", async () => {
+  const f = fixture(),
+    original = f.execute;
+  await assert.rejects(
+    run(f, {
+      execute: (binary, args) => {
+        const text = original(binary, args);
+        if (args.includes("update-traffic")) {
+          f.changeRoute();
+          throw new Error("response lost after external mutation");
+        }
+        return text;
+      },
+    }),
+    /skipped/,
+  );
+  assert.equal(
+    f.calls.filter((c) => c.args.includes("update-traffic")).length,
+    1,
+  );
+  assert.equal(f.current.status.traffic[0].revisionName, "unmask-web-external");
+});

@@ -9,6 +9,7 @@ const region = "asia-south1";
 const serviceName = "unmask-web";
 const repository = `${region}-docker.pkg.dev/${project}/unmask/web`;
 const apiURL = "https://unmask-386156642190.asia-south1.run.app";
+const smokePackage = "zod@4.6.7";
 const runtimeSA = `unmask-web@${project}.iam.gserviceaccount.com`;
 const deploySA = `unmask-github-deploy@${project}.iam.gserviceaccount.com`;
 const provider =
@@ -128,11 +129,13 @@ export async function smokeWeb({
   version,
   full,
   fetchImpl = globalThis.fetch,
+  pause: wait = pause,
+  now = Date.now,
 }) {
   const base = origin(baseURL);
-  const deadline = Date.now() + 60000;
+  const deadline = now() + 240000;
   async function request(route, options = {}) {
-    const remaining = deadline - Date.now();
+    const remaining = deadline - now();
     if (remaining <= 0) throw new Error("Web smoke deadline exceeded");
     const response = await fetchImpl(new URL(route, base).href, {
       ...options,
@@ -177,7 +180,7 @@ export async function smokeWeb({
   const submitted = await request("/check", {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ package: "is-number@7.0.0" }).toString(),
+    body: new URLSearchParams({ package: smokePackage }).toString(),
   });
   const target = new URL(
     submitted.response.headers.get("location") ?? "/",
@@ -192,19 +195,74 @@ export async function smokeWeb({
   )
     throw new Error("Web normal POST did not link a backend job");
   const id = target.pathname.split("/").at(-1);
-  const linked = await request(`/api/reports/${id}`);
-  const body = JSON.parse(linked.text);
-  const spec =
-    body.nameAtExactVersion ??
-    `${body.inputs?.claim?.name}@${body.inputs?.claim?.version}`;
+  function reportDigest(body) {
+    if (
+      typeof body?.schemaVersion !== "string" ||
+      `${body.inputs?.claim?.name}@${body.inputs?.claim?.version}` !==
+        smokePackage ||
+      !/^(?:sha256:)?[a-f0-9]{64}$/.test(body.inputs?.artifact?.sha256 ?? "") ||
+      ![0, 3].includes(body.policy?.exitCode) ||
+      !Array.isArray(body.failures) ||
+      body.failures.length
+    )
+      throw new Error(
+        "Web smoke requires a terminal successful report for the submitted package",
+      );
+    return createHash("sha256").update(JSON.stringify(body)).digest("hex");
+  }
+  let expectedDigest, expectedArtifact;
+  while (now() < deadline) {
+    const linked = await request(`/api/reports/${id}`);
+    const body = JSON.parse(linked.text);
+    if (![200, 202].includes(linked.response.status))
+      throw new Error("Web report proxy request failed");
+    if (typeof body.schemaVersion === "string") {
+      expectedDigest = reportDigest(body);
+      expectedArtifact = body.inputs.artifact.sha256;
+      break;
+    }
+    if (
+      body.id !== id ||
+      body.nameAtExactVersion !== smokePackage ||
+      !["queued", "running"].includes(body.status)
+    )
+      throw new Error(
+        "Web report proxy did not preserve an active backend job",
+      );
+    await wait(1000);
+  }
+  if (!expectedDigest)
+    throw new Error("Web report did not reach a terminal successful state");
+  const viewer = await request(target.pathname);
+  const backendLink = `${apiURL}/r/${id}`;
   if (
-    ![200, 202].includes(linked.response.status) ||
-    spec !== "is-number@7.0.0" ||
-    (body.id !== undefined && body.id !== id) ||
-    (!body.schemaVersion &&
-      !["queued", "running", "completed"].includes(body.status))
+    viewer.response.status !== 200 ||
+    !viewer.text.includes(`href="${backendLink}"`)
   )
-    throw new Error("Web report proxy did not preserve backend job identity");
+    throw new Error(
+      "Web report page does not expose the completed backend report link",
+    );
+  const backendViewer = await request(backendLink);
+  if (
+    backendViewer.response.status !== 200 ||
+    !backendViewer.text.includes(expectedArtifact)
+  )
+    throw new Error("Linked backend viewer did not render the terminal report");
+  const backend = await request(`${backendLink}.json`);
+  if (
+    backend.response.status !== 200 ||
+    reportDigest(JSON.parse(backend.text)) !== expectedDigest
+  )
+    throw new Error("Web backend report link identity differs");
+  const followup = await request(`/api/reports/${id}`);
+  if (
+    followup.response.status !== 200 ||
+    reportDigest(JSON.parse(followup.text)) !== expectedDigest
+  )
+    throw new Error(
+      "Web follow-up lost the persisted terminal report identity",
+    );
+
   return { status: "passed", reportPath: target.pathname };
 }
 export async function deployWeb({
@@ -215,12 +273,12 @@ export async function deployWeb({
   pause: wait = pause,
   source,
   root = process.cwd(),
+  now = Date.now,
 } = {}) {
   const input = webInputs(env);
-  const deadline = Date.now() + 900000;
+  let deadline = now() + 900000;
   function command(binary, args) {
-    if (Date.now() >= deadline)
-      throw new Error("Web deployment deadline exceeded");
+    if (now() >= deadline) throw new Error("Web deployment deadline exceeded");
     try {
       return String(
         execute(binary, args, {
@@ -230,10 +288,7 @@ export async function deployWeb({
           maxBuffer: 4194304,
           timeout: Math.max(
             1,
-            Math.min(
-              binary === "docker" ? 600000 : 120000,
-              deadline - Date.now(),
-            ),
+            Math.min(binary === "docker" ? 600000 : 120000, deadline - now()),
           ),
         }),
       );
@@ -433,7 +488,7 @@ export async function deployWeb({
   async function until(read, verify) {
     let last;
     for (let i = 0; i < 30; i++) {
-      if (Date.now() >= deadline)
+      if (now() >= deadline)
         throw new Error("Web deployment deadline exceeded");
       last = read();
       if (verify(last)) return last;
@@ -447,7 +502,9 @@ export async function deployWeb({
       if (
         !isReady(revision) ||
         revision.metadata?.name !== revisionName ||
-        revision.spec?.containers?.[0]?.image !== image ||
+        ![image, resolvedImageDigest].includes(
+          revision.spec?.containers?.[0]?.image,
+        ) ||
         revision.status.imageDigest?.split("@").at(-1) !== resolvedDigest
       )
         return false;
@@ -481,6 +538,7 @@ export async function deployWeb({
     commit: input.commit,
     version: input.version,
     full: true,
+    phase: "candidate",
     fetchImpl,
   });
   const beforePromotion = describe();
@@ -491,9 +549,15 @@ export async function deployWeb({
     throw new Error(
       "External web configuration or route changed before promotion",
     );
-  let promoted;
+  const expectedGeneration = Number(beforePromotion.metadata?.generation) + 1;
+  if (!Number.isSafeInteger(expectedGeneration) || expectedGeneration < 2)
+    throw new Error("Web promotion generation is unavailable");
+  const owns = (current) =>
+    preservedCandidate(current) &&
+    Number(current.metadata.generation) === expectedGeneration &&
+    canonical(routes(current)) === canonical([{ revisionName, percent: 100 }]);
   try {
-    promoted = json([
+    const promoted = json([
       "run",
       "services",
       "update-traffic",
@@ -505,35 +569,27 @@ export async function deployWeb({
       "--quiet",
       ...suffix,
     ]);
-    const owns = (current) =>
-      preservedCandidate(current) &&
-      current.metadata.generation === promoted.metadata?.generation &&
-      canonical(routes(current)) ===
-        canonical([{ revisionName, percent: 100 }]);
+    if (Number(promoted.metadata?.generation) !== expectedGeneration)
+      throw new Error("Unexpected web promotion generation");
     await until(describe, (current) => isReady(current) && owns(current));
     await smoke({
       baseURL: publicURL,
       commit: input.commit,
       version: input.version,
-      full: false,
+      full: true,
+      phase: "public",
       fetchImpl,
     });
     if (!owns(describe()))
       throw new Error("External web state changed after public verification");
   } catch {
-    if (!promoted)
-      throw new Error(
-        "Web promotion outcome is uncertain; no blind rollback attempted",
-      );
+    deadline = now() + 120000;
     const current = describe();
-    if (
-      !preservedCandidate(current) ||
-      current.metadata.generation !== promoted.metadata?.generation ||
-      canonical(routes(current)) !== canonical([{ revisionName, percent: 100 }])
-    )
+    if (!owns(current))
       throw new Error(
-        "Web verification failed; rollback skipped because external state changed",
+        "Web verification failed; rollback skipped because exact owned state was not observed",
       );
+
     json([
       "run",
       "services",
