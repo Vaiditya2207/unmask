@@ -156,6 +156,14 @@ export function inspectJavaScript(artifact, source, overrides = {}) {
   let sourceLiteralTruncated = false,
     syntaxCount = 0;
   const hookTargets = new Map();
+  const linked = new Map();
+  const link = (path, hooks, from) => {
+    const item = linked.get(path) ?? { hooks: new Set(), from: new Set() };
+    for (const hook of hooks) item.hooks.add(hook);
+    item.from.add(from);
+    if (linked.has(path) || linked.size < BEHAVIOR_LIMITS.linkedScripts)
+      linked.set(path, item);
+  };
   const behaviorUse = { review: 0, HIGH: 0, perFileRule: new Map() };
   const admitBehavior = (priority, path, ruleId) => {
     const key = `${path}\0${ruleId}`;
@@ -209,6 +217,8 @@ export function inspectJavaScript(artifact, source, overrides = {}) {
             hook: item.hook,
             reason: assessed.reason,
           });
+        for (const script of assessed.scripts || [])
+          link(script, [item.hook], `package.json#scripts.${item.hook}`);
         for (const target of assessed.targets || [])
           hookTargets.set(target, [
             ...new Set([...(hookTargets.get(target) || []), item.hook]),
@@ -377,6 +387,91 @@ export function inspectJavaScript(artifact, source, overrides = {}) {
           });
         }
       }
+    }
+  }
+  for (const candidate of candidates)
+    if (
+      candidate.kind === "process-execution" &&
+      candidate.hooks &&
+      candidate.literal !== null
+    )
+      for (const script of scriptSignals(candidate.literal).scripts || [])
+        link(script, candidate.hooks, candidate.evidence.path);
+  for (const [path, { hooks, from }] of linked) {
+    const entry = artifact.entries.find(
+      (item) => item.type === "file" && item.path === path,
+    );
+    const unscanned = (reason) =>
+      result.annotations.push({
+        type: "behavior-not-inspected",
+        side: "artifact",
+        path,
+        reason,
+      });
+    if (!entry) {
+      unscanned("linked-script-missing");
+      continue;
+    }
+    if (!Buffer.isBuffer(entry.content)) {
+      unscanned("not-retained");
+      continue;
+    }
+    if (entry.size > BEHAVIOR_LIMITS.linkedScriptBytes) {
+      unscanned("linked-script-byte-cap");
+      continue;
+    }
+    let text;
+    try {
+      text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(
+        entry.content,
+      );
+    } catch {
+      unscanned("invalid-utf8");
+      continue;
+    }
+    const assessed = scriptSignals(text, {
+      maxBytes: BEHAVIOR_LIMITS.linkedScriptBytes,
+      maxTokens: BEHAVIOR_LIMITS.linkedScriptTokens,
+    });
+    if (assessed.status !== "assessed") {
+      unscanned(assessed.reason);
+      continue;
+    }
+    const positions = offsets(text);
+    const lines = [];
+    for (let start = 0; start < text.length;) {
+      const stop = text.indexOf("\n", start);
+      const end = stop === -1 ? text.length : stop;
+      lines.push({ start, end, lower: text.slice(start, end).toLowerCase() });
+      start = end + 1;
+    }
+    for (const { ruleId, priority, ...signal } of assessed.signals) {
+      const words = [
+        ...(signal.tools || []),
+        ...(signal.file ? [signal.file.toLowerCase()] : []),
+        ...(signal.paths || []),
+        ...(signal.variables || []).map((name) => name.toLowerCase()),
+        ...(signal.commands || []).map((command) => command.split(" ")[0]),
+      ];
+      const cited = lines
+        .filter((line) => words.some((word) => line.lower.includes(word)))
+        .slice(0, 3);
+      if (!cited.length || !admitBehavior(priority, path, ruleId)) continue;
+      const [first, ...rest] = cited.map((line) =>
+        evidenceFor("artifact", artifact, entry, line, positions),
+      );
+      candidates.push({
+        behavior: {
+          ruleId,
+          priority,
+          script: path,
+          linkedFrom: [...from].sort(),
+          ...signal,
+        },
+        hooks: [...hooks].sort(),
+        evidence: first,
+        related: rest,
+      });
     }
   }
   const stem = (value) => value.replace(/\.[cm]?[jt]sx?$/, "");

@@ -5,6 +5,9 @@ export const BEHAVIOR_LIMITS = Object.freeze({
   scriptBytes: 8192,
   scriptTokens: 512,
   literalBytes: 4096,
+  linkedScripts: 16,
+  linkedScriptBytes: 65536,
+  linkedScriptTokens: 8192,
   reviewCues: 128,
   reviewCuesPerFileRule: 8,
   highCues: 128,
@@ -113,12 +116,15 @@ const ENUMERATORS = new Set([
 ]);
 
 export const summaryFor = (ruleId) => SUMMARIES[ruleId];
-const base = (word) => word.slice(word.lastIndexOf("/") + 1);
+const base = (word) =>
+  word
+    .slice(Math.max(word.lastIndexOf("/"), word.lastIndexOf("\\")) + 1)
+    .replace(/\.exe$/, "");
 const credentialIn = (text) => {
   const lower = text.toLowerCase();
   return CREDENTIAL_PATHS.filter((item) => lower.includes(item));
 };
-function tokens(script) {
+function tokens(script, limit = BEHAVIOR_LIMITS.scriptTokens) {
   const result = [];
   let word = "";
   const flush = () => {
@@ -126,15 +132,19 @@ function tokens(script) {
     word = "";
   };
   for (const character of script) {
-    if (result.length > BEHAVIOR_LIMITS.scriptTokens) return null;
-    if (/\s/.test(character) || character === '"' || character === "'") flush();
+    if (result.length > limit) return null;
+    if (character === "\n" || character === "\r") {
+      flush();
+      result.push(";");
+    } else if (/\s/.test(character) || character === '"' || character === "'")
+      flush();
     else if ("|;&<>()`".includes(character)) {
       flush();
       result.push(character);
     } else word += character;
   }
   flush();
-  return result.length > BEHAVIOR_LIMITS.scriptTokens ? null : result;
+  return result.length > limit ? null : result;
 }
 function secretVariables(script) {
   const names = [];
@@ -158,40 +168,75 @@ const OUTPUT_FLAGS = new Set([
   "-outfile",
 ]);
 const COMMAND_BREAKS = new Set([";", "&", "|", "("]);
+const RUNNERS = new Set([
+  "start",
+  "start-process",
+  "regsvr32",
+  "rundll32",
+  "mshta",
+  "cscript",
+  "wscript",
+]);
+const SCRIPT_FILE = /\.(sh|bash|bat|cmd|ps1)$/i;
+function linkedScripts(raw) {
+  const found = new Set();
+  for (const word of raw) {
+    const path = word.replace(/^\.[\\/]/, "").replace(/[\\/]+/g, "/");
+    if (
+      SCRIPT_FILE.test(path) &&
+      /^[\w@.][\w@./-]*$/.test(path) &&
+      !path.split("/").includes("..")
+    )
+      found.add(path);
+  }
+  return [...found].slice(0, 16);
+}
 function downloadedFile(words, firstNetwork) {
   if (firstNetwork < 0) return null;
   const outputs = new Set();
-  for (let i = firstNetwork + 1; i + 1 < words.length; i++)
+  for (let i = firstNetwork; i + 1 < words.length; i++) {
     if (OUTPUT_FLAGS.has(words[i]) || words[i] === ">")
-      outputs.add(words[i + 1].replace(/^\.\//, ""));
+      outputs.add(words[i + 1].replace(/^\.[\\/]/, ""));
+    if (base(words[i]) !== "certutil") continue;
+    for (let at = i + 1; at + 1 < words.length; at++) {
+      if (COMMAND_BREAKS.has(words[at])) break;
+      if (/^https?:\/\//.test(words[at]) && !COMMAND_BREAKS.has(words[at + 1]))
+        outputs.add(words[at + 1].replace(/^\.[\\/]/, ""));
+    }
+  }
   for (let i = firstNetwork + 1; i < words.length; i++) {
-    const word = words[i].replace(/^\.\//, "");
+    const word = words[i].replace(/^\.[\\/]/, "");
     if (!outputs.has(word)) continue;
     const before = words[i - 1];
     const ranAsCommand =
       COMMAND_BREAKS.has(before) &&
       (words[i] !== word || /\.(exe|bat|cmd|ps1)$/.test(word));
     const ranByInterpreter =
-      INTERPRETERS.has(base(before)) || base(before) === "start";
+      INTERPRETERS.has(base(before)) ||
+      RUNNERS.has(base(before)) ||
+      (RUNNERS.has(base(words[i - 2] ?? "")) && before.startsWith("-"));
     if (ranAsCommand || ranByInterpreter) return word;
   }
   return null;
 }
 
-export function scriptSignals(script) {
-  if (
-    typeof script !== "string" ||
-    Buffer.byteLength(script) > BEHAVIOR_LIMITS.scriptBytes
-  )
+export function scriptSignals(
+  script,
+  {
+    maxBytes = BEHAVIOR_LIMITS.scriptBytes,
+    maxTokens = BEHAVIOR_LIMITS.scriptTokens,
+  } = {},
+) {
+  if (typeof script !== "string" || Buffer.byteLength(script) > maxBytes)
     return { status: "not-assessed", reason: "script-byte-cap", signals: [] };
-  let words = tokens(script);
+  let words = tokens(script, maxTokens);
   if (!words)
     return { status: "not-assessed", reason: "script-token-cap", signals: [] };
   const raw = words;
   words = raw.map((word) => word.toLowerCase());
   const signals = [];
   const network = [
-    ...new Set(words.filter((word) => NETWORK_TOOLS.has(base(word)))),
+    ...new Set(words.filter((word) => NETWORK_TOOLS.has(base(word))).map(base)),
   ];
   const urls = raw.filter((word) => /^https?:\/\//i.test(word)).slice(0, 4);
   const firstNetwork = words.findIndex((word) => NETWORK_TOOLS.has(base(word)));
@@ -271,7 +316,12 @@ export function scriptSignals(script) {
           : [target, ...[".js", ".cjs", ".mjs"].map((ext) => target + ext)]),
       );
   }
-  return { status: "assessed", signals, targets: targets.slice(0, 16) };
+  return {
+    status: "assessed",
+    signals,
+    targets: targets.slice(0, 16),
+    scripts: linkedScripts(raw),
+  };
 }
 
 export function manifestScriptSpans(text) {
