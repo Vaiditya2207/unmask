@@ -75,19 +75,32 @@ test("lockfile parser rejects malformed, unsupported and invalid shapes", () => 
     [text({ lockfileVersion: 1, dependencies: {} }), "lockfile-unsupported"],
     [text({ lockfileVersion: 3 }), "lockfile-invalid"],
     [text({ lockfileVersion: 3, packages: { x: {} } }), "lockfile-invalid"],
-    [
-      text({ lockfileVersion: 2, packages: { "": { dependencies: [] } } }),
-      "lockfile-invalid",
-    ],
-    [
-      text({
-        lockfileVersion: 3,
-        packages: { "": {}, "node_modules/a": "1.0.0" },
-      }),
-      "lockfile-invalid",
-    ],
   ])
     assert.throws(() => parseLockfile(input), { code });
+  const partial = parseLockfile(
+    text({
+      lockfileVersion: 2,
+      packages: {
+        "": { dependencies: [] },
+        "node_modules/a": "1.0.0",
+        "node_modules/b": pkg("b", "1.0.0", { dependencies: { c: 1 } }),
+        "node_modules/ok": pkg("ok", "1.0.0"),
+      },
+    }),
+  );
+  assert.deepEqual(
+    [...partial.entries.values()].map((e) => [e.key, e.kind, e.edgesValid]),
+    [
+      ["", "root", false],
+      ["node_modules/a", "invalid", true],
+      ["node_modules/b", "registry", false],
+      ["node_modules/ok", "registry", true],
+    ],
+  );
+  assert.deepEqual(exactTargets(partial).skipped, {
+    "invalid-dependencies": 2,
+    "invalid-entry": 1,
+  });
   assert.throws(
     () => parseLockfile(text(fixtureLock()), { maxBytes: 10, maxEntries: 9 }),
     { code: "lockfile-invalid" },
@@ -387,21 +400,22 @@ test("lockfile compatibility: legacy names, unresolved, bundled, encoded and tra
   const result = await auditLock(lock, { check: async () => bound(0) });
   assert.equal(result.coverage.complete, false);
   assert.equal(result.exitCode, 2);
-  for (const key of [
-    "../node_modules/x",
-    "node_modules//x",
-    "node_modules/./x",
-  ])
-    assert.throws(
-      () =>
-        parseLockfile(
-          text({
-            lockfileVersion: 3,
-            packages: { "": {}, [key]: pkg("x", "1.0.0") },
-          }),
-        ),
-      { code: "lockfile-invalid" },
-    );
+  const traversal = parseLockfile(
+    text({
+      lockfileVersion: 3,
+      packages: {
+        "": {},
+        "../node_modules/x": pkg("x", "1.0.0"),
+        "node_modules//y": pkg("y", "1.0.0"),
+        "node_modules/./z": pkg("z", "1.0.0"),
+      },
+    }),
+  );
+  assert.deepEqual(
+    [...traversal.entries.values()].slice(1).map((e) => e.reason),
+    ["invalid-location", "invalid-location", "invalid-location"],
+  );
+  assert.deepEqual(exactTargets(traversal).targets, []);
   const conflict = parseLockfile(
     text({
       lockfileVersion: 3,
