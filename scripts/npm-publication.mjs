@@ -157,6 +157,7 @@ export async function publishNpm(
     execute = execFileSync,
     fetchImpl = globalThis.fetch,
     pause: wait = pause,
+    now = () => performance.now(),
   },
 ) {
   if (
@@ -204,12 +205,16 @@ export async function publishNpm(
     failed = true;
     failureCode = npmFailureCode(error.stderr);
   }
-  for (let attempt = 0; attempt < 5; attempt++) {
+  const deadline = now() + 120000;
+  for (let attempt = 0; attempt < 25; attempt++) {
+    if (attempt > 0 && now() >= deadline) break;
     if (await published(info, fetchImpl)) {
       candidate(root, prepared, archive);
       return receiptFor(info, prepared);
     }
-    if (attempt < 4) await wait(1000);
+    const remaining = deadline - now();
+    if (remaining <= 0 || attempt === 24) break;
+    await wait(Math.min(5000, remaining));
   }
   throw new Error(
     failed
