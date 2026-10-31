@@ -485,9 +485,12 @@ async function osvLookups(registry, { fetchImpl, signal, limits }) {
 }
 
 async function hostedLookups(
-  registry,
+  identities,
   { fetchImpl, signal, limits, serverUrl, lockBytes },
 ) {
+  const registry = identities.filter(
+    (item) => item.binding === "registry-integrity",
+  );
   const origin = serverOrigin(serverUrl ?? DEFAULT_SERVER_URL);
   const lookups = new Map();
   const failAll = (reason) => {
@@ -529,7 +532,8 @@ async function hostedLookups(
       return failAll("hosted-invalid-response");
     rows.set(row.spec, row);
   }
-  const planned = new Set(registry.map((item) => item.id));
+  // Rows may name any exact plan identity, including ones the guard itself downgraded to unbound.
+  const planned = new Set(identities.map((item) => item.id));
   const extraRows = [...rows.keys()].some((spec) => !planned.has(spec));
   for (const item of registry) {
     const row = rows.get(item.id);
@@ -572,6 +576,21 @@ async function hostedLookups(
       advisories: activeFindings(classified),
     });
   }
+  for (const item of identities) {
+    const row = rows.get(item.id);
+    if (
+      item.binding === "registry-integrity" ||
+      row?.name !== item.name ||
+      row?.version !== item.version ||
+      !Array.isArray(row.advisories)
+    )
+      continue;
+    const classified = row.advisories.map((record) => classify(record, item));
+    lookups.set(
+      item.id,
+      unknownLookup("hosted-unbound-evidence", activeFindings(classified)),
+    );
+  }
   return lookups;
 }
 
@@ -603,17 +622,21 @@ export async function screenPlan(
   const registry = plan.packages.filter(
     (item) => item.binding === "registry-integrity",
   );
-  const lookups = !registry.length
-    ? new Map()
-    : source === "osv"
-      ? await osvLookups(registry, { fetchImpl, signal: lifetime, limits })
-      : await hostedLookups(registry, {
-          fetchImpl,
-          signal: lifetime,
-          limits,
-          serverUrl,
-          lockBytes: plan.lockBytes,
-        });
+  const identities = plan.packages.filter((item) => item.name);
+  const lookups =
+    source === "osv"
+      ? registry.length
+        ? await osvLookups(registry, { fetchImpl, signal: lifetime, limits })
+        : new Map()
+      : !identities.length
+        ? new Map()
+        : await hostedLookups(identities, {
+            fetchImpl,
+            signal: lifetime,
+            limits,
+            serverUrl,
+            lockBytes: plan.lockBytes,
+          });
   const threshold = SEVERITY.indexOf(profile.blockSeverity);
   const decisions = plan.packages.map((item) => {
     const lookup = lookups.get(item.id);
