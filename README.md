@@ -40,6 +40,8 @@ Use Node.js 24.22.2 (pinned in `.nvmrc`) and npm, then run from the repository r
 ```bash
 npm ci --ignore-scripts
 npm run check
+npm test
+npm run check:package
 ```
 
 To format changed documentation and configuration:
@@ -48,17 +50,19 @@ To format changed documentation and configuration:
 npm run format
 ```
 
-The scaffold CI workflow installs the locked tooling dependency and checks
-formatting of supported files. This is not semantic validation, product testing,
-or proof that package analysis works. Product tests and runnable examples must
-be added with the implementation.
+CI checks formatting, release-policy behavior and actual npm archive contents.
+These are tooling tests; the product has no analyzer/server tests yet. Releases
+remain disabled until real CLI, website, server and Docker artifacts exist.
+See [CI, releases and manual deployment](docs/releases.md) for versioned release
+requirements and selecting an immutable image in DigitalOcean App Platform.
 
 ## Contributing
 
 Work on a feature branch and open a pull request against `main`. Follow
 [CONTRIBUTING.md](CONTRIBUTING.md) and complete all four sections of the PR
-template. Wait for passing CI and approval from a teammate other than the author
-before merging. See the contribution guide for the distinction between this
+template. Wait for passing CI and approval from a designated reviewer other than the
+author before merging. The designated group and repository enforcement setup
+are pending; see the contribution guide. See the contribution guide for the distinction between this
 workflow and configured required status checks.
 
 ## License

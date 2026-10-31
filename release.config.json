@@ -1,0 +1,10 @@
+{
+  "enabled": false,
+  "approvedPackageName": null,
+  "sourceFiles": [],
+  "cli": null,
+  "server": null,
+  "web": null,
+  "dockerfile": "Dockerfile",
+  "productTestDirectory": "tests/product"
+}

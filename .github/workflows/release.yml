@@ -1,0 +1,87 @@
+name: Versioned release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+  readiness:
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      ready: ${{ steps.gate.outputs.ready }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+      - name: Keep scaffold releases closed
+        id: gate
+        run: node scripts/release-readiness.mjs --github-output --version-candidate
+  publish:
+    needs: [checks, readiness]
+    if: needs.checks.result == 'success' && needs.readiness.outputs.ready == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - run: npm ci --ignore-scripts
+      - name: Test and build real application
+        run: |
+          npm run test:product
+          npm run build
+          node scripts/release-readiness.mjs --built
+      - name: Bind version, source and npm archive
+        id: plan
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CHECKS_RESULT: ${{ needs.checks.result }}
+        run: node scripts/release.mjs prepare
+      - name: Build candidate image without publishing
+        id: image
+        env:
+          RELEASE_IMAGE: ${{ steps.plan.outputs.image }}
+          RELEASE_DOCKERFILE: ${{ steps.plan.outputs.dockerfile }}
+          CANDIDATE_SHA: ${{ github.sha }}
+        run: |
+          docker buildx build --platform linux/amd64 --load --file "$RELEASE_DOCKERFILE" --label "org.opencontainers.image.revision=$CANDIDATE_SHA" --tag "$RELEASE_IMAGE" .
+          echo "image_id=$(docker image inspect --format '{{.Id}}' "$RELEASE_IMAGE")" >> "$GITHUB_OUTPUT"
+      - name: Exercise exact CLI tarball and website image
+        id: smoke
+        env:
+          RELEASE_IMAGE: ${{ steps.plan.outputs.image }}
+          RELEASE_PACKAGE: ${{ steps.plan.outputs.package }}
+        run: npm run test:release
+      - name: Publish new immutable release after checks
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_SETTINGS_TOKEN: ${{ secrets.RELEASE_SETTINGS_TOKEN }}
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          CANDIDATE_IMAGE_ID: ${{ steps.image.outputs.image_id }}
+          SMOKE_RESULT: ${{ steps.smoke.outcome }}
+        run: node scripts/release.mjs publish
