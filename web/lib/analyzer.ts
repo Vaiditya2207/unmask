@@ -83,6 +83,21 @@ export async function fetchJob(id: string): Promise<Fetched> {
   }
 }
 
+// The model fields the package details show when their projection omits its own model metadata. Only these
+// keys are read from the raw report; hypotheses stay with the details projection.
+export const MODEL_KEYS = [
+  "status",
+  "modelId",
+  "promptHash",
+  "configHash",
+  "reason",
+  "attempts",
+] as const;
+
+export function modelMetadata(report: Report): Record<string, unknown> {
+  return Object.fromEntries(MODEL_KEYS.map((key) => [key, report.model[key]]));
+}
+
 export const checkErrors: Record<string, string> = {
   invalid:
     "That is not an exact npm release. Use a name and version, such as clsx@2.1.1.",

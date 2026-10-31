@@ -29,10 +29,12 @@ export function ViewerBar({
   crumb = "Reports",
   spec,
   download,
+  details,
 }: {
   crumb?: string;
   spec?: string;
   download?: Download;
+  details?: Download;
 }) {
   return (
     <header className="viewer-bar">
@@ -81,6 +83,11 @@ export function ViewerBar({
           {download ? (
             <a href={download.href} download={download.filename}>
               Download JSON
+            </a>
+          ) : null}
+          {details ? (
+            <a href={details.href} download={details.filename}>
+              Download package details
             </a>
           ) : null}
           <a href={DOCS}>Docs</a>

@@ -927,6 +927,21 @@ export function buildView(report: Report): ReportView {
   };
 }
 
+// Evidence ID → the published file it points into, for the artifact-side items whose file is listed in
+// Published files. The package details link these into the file explorer on the same page.
+export function evidencePaths(report: Report): Map<string, string> {
+  const published = new Set(
+    report.files.map((file) => file.path ?? file.originalPath),
+  );
+  const result = new Map<string, string>();
+  for (const item of report.evidence) {
+    const path = item.path ?? item.originalPath;
+    if (item.side === "artifact" && published.has(path) && !result.has(item.id))
+      result.set(item.id, path);
+  }
+  return result;
+}
+
 // ---------- Formatting (also used by the home page's record panel) ----------
 
 export function shortSha(value: string, length = 7) {

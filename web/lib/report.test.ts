@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { exampleReport, exampleReports } from "./sample-report.ts";
 import {
   buildView,
+  evidencePaths,
   FILE_STATES,
   isReport,
   oneLine,
@@ -272,6 +273,22 @@ test("a lifecycle script that is not in the source manifest says so", () => {
     install.note,
     "The postinstall command is not in the source manifest; the file it runs is not in the source.",
   );
+});
+
+test("evidencePaths links artifact evidence to published files only", () => {
+  const paths = evidencePaths(esbuild);
+  const artifact = esbuild.evidence.filter((e) => e.side === "artifact");
+  assert.equal(paths.size, artifact.length);
+  assert.equal(
+    paths.get(
+      "ev-808cf887ac9ffe366622b87da90b28113c6085c10dfc80b1366b55c2753ad92a",
+    ),
+    "install.js",
+  );
+  for (const item of esbuild.evidence.filter((e) => e.side === "source"))
+    assert.equal(paths.has(item.id), false);
+  const published = new Set(esbuild.files.map((file) => file.path));
+  for (const path of paths.values()) assert.ok(published.has(path), path);
 });
 
 test("oneLine folds whitespace and keeps code on one line", () => {

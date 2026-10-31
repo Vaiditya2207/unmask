@@ -1092,7 +1092,7 @@ body:has(.report-app) {
 
 .not-compared__body {
   min-width: 0;
-  padding: 0 var(--pad) 0 27px;
+  padding: 12px var(--pad) 12px 27px;
   display: flex;
   align-items: center;
   gap: 24px;
@@ -1633,7 +1633,11 @@ body:has(.report-app) {
     background: var(--sheet);
   }
 
+  /* Zero width with a full minimum: the cell fills the row, but a long rule name or note in it can no
+     longer widen the table past the card. */
   .file-detail {
+    width: 0;
+    min-width: 100%;
     padding: 0 var(--pad) 14px;
   }
 
@@ -1691,97 +1695,737 @@ body:has(.report-app) {
   }
 }
 
-.package-details .detail-nav,
-.package-details .detail-downloads {
+/* ---------- Package details: the analyzer's details projection, under the comparison ----------
+   Same sheet, same cards and type steps (12/14/16/24). Signal only for advisories OSV returned and for
+   files the comparison above already marks; everything else is neutral. */
+
+.report-app .report-finding__link,
+.report-app .pkg-link {
+  text-decoration: underline;
+  text-decoration-color: var(--control);
+  text-underline-offset: 3px;
+}
+
+.report-app .report-finding__link:hover,
+.report-app .pkg-link:hover {
+  text-decoration-color: currentColor;
+}
+
+/* The global reset stops at h3; the details use h4 for their sub-sections. */
+.pkg h4 {
+  margin: 0;
+}
+
+.pkg-unavailable {
+  margin-top: 24px;
+  max-width: 760px;
+  font-size: var(--fs-small);
+  line-height: 16px;
+  color: var(--text-muted);
+}
+
+.pkg {
+  margin-top: 48px;
+}
+
+.pkg-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.pkg-head__text {
+  min-width: 0;
+  max-width: 760px;
+}
+
+.pkg-head__actions {
+  flex: none;
+  padding-top: 1px;
+}
+
+.pkg-title {
+  font-size: var(--fs-section);
+  line-height: 24px;
+  font-weight: 600;
+}
+
+.pkg-lede {
+  margin-top: 4px;
+  font-size: var(--fs-body);
+  line-height: 20px;
+}
+
+.pkg-meta {
+  margin-top: 6px;
+  font-size: var(--fs-small);
+  line-height: 16px;
+  color: var(--text-muted);
+}
+
+.pkg-strip {
+  margin-top: 16px;
+}
+
+.pkg-nav {
+  margin-top: 6px;
+}
+
+.pkg-nav__list {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 20px;
-  font-size: 13px;
+  column-gap: 20px;
 }
-.package-details .detail-downloads span {
-  flex-basis: 100%;
-  color: var(--faint);
+
+.report-app .pkg-nav__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  font-size: var(--fs-small);
+  color: var(--text-muted);
 }
-.package-details .detail-body {
-  display: grid;
+
+.report-app .pkg-nav__link:hover {
+  color: var(--text);
+}
+
+/* ---------- Details cards ---------- */
+
+.pkg-card {
+  margin-top: var(--gap);
+  min-width: 0;
+  scroll-margin-top: 16px;
+}
+
+.pkg-nav + .pkg-card {
+  margin-top: 6px;
+}
+
+.pkg-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 16px;
-  padding: 16px;
+}
+
+.pkg-card__heading {
+  min-width: 0;
+}
+
+.pkg-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding-bottom: 16px;
   overflow-wrap: anywhere;
 }
-.package-details .detail-note {
-  color: var(--soft);
-  font-size: 12.5px;
-  max-width: 80ch;
+
+.pkg-card__body:has(> .pkg-more:last-child),
+.pkg-card__body:has(> .pkg-row:last-child) {
+  padding-bottom: 0;
 }
-.package-details h3 {
-  font-size: 14px;
-  line-height: 22px;
-  letter-spacing: 0;
+
+.pkg-pad {
+  padding-left: var(--pad);
+  padding-right: var(--pad);
 }
-.package-details .detail-kv > div {
+
+.pkg-lead {
+  max-width: calc(760px + 2 * var(--pad));
+  font-size: var(--fs-body);
+  line-height: 20px;
+}
+
+.pkg-note,
+.pkg-limit {
+  font-size: var(--fs-small);
+  line-height: 16px;
+  color: var(--text-muted);
+}
+
+.pkg-note {
+  max-width: calc(760px + 2 * var(--pad));
+}
+
+.pkg-limit {
+  padding: 0 var(--pad);
+  font-variant-numeric: tabular-nums;
+}
+
+.pkg-empty,
+.pkg-faint {
+  color: var(--text-muted);
+}
+
+.pkg-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--fs-small);
+  line-height: 16px;
+  color: var(--text-muted);
+}
+
+.pkg-sub:first-child {
+  margin-top: 0;
+}
+
+.pkg-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.pkg-subtitle {
+  font-size: var(--fs-body);
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.pkg-card__body > .pkg-subtitle {
+  margin-top: 12px;
+}
+
+/* Facts: a label over its value, three across (five for a row of short ones). */
+.pkg-facts {
   display: grid;
-  grid-template-columns: minmax(100px, 150px) minmax(0, 1fr);
-  gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--rule);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px 24px;
 }
-.package-details dt {
-  color: var(--faint);
+
+.pkg-facts--five {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
-.package-details .detail-refs {
+
+.pkg-facts--stack {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.pkg-fact {
+  min-width: 0;
+}
+
+.pkg-fact--wide {
+  grid-column: 1 / -1;
+}
+
+.pkg-fact__label {
+  font-size: var(--fs-small);
+  line-height: 16px;
+  color: var(--text-muted);
+}
+
+.pkg-fact__value {
+  margin-top: 2px;
+  font-size: var(--fs-body);
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.pkg-codes {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 12px;
-  margin-top: 6px;
-  font-size: 12px;
+  gap: 2px 12px;
 }
-.package-details .details-scroll {
-  max-width: 100%;
-  overflow-x: auto;
+
+.report-app .pkg-codes code {
+  color: var(--text-muted);
 }
-.package-details .details-table {
+
+.pkg-digest {
+  word-break: break-all;
+}
+
+.pkg-code {
+  display: block;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius-well);
+  background: var(--well);
+  line-height: 18px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.report-app .pkg-code {
+  font-size: var(--fs-small);
+}
+
+/* Evidence references: quiet links into Published files, or into the analyzer's evidence viewer. */
+.pkg-refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin-top: 2px;
+  font-size: var(--fs-small);
+  line-height: 16px;
+}
+
+.pkg-note .pkg-refs {
+  display: inline-flex;
+  margin-top: 0;
+}
+
+.report-app .pkg-ref {
+  color: var(--text-muted);
+  white-space: nowrap;
+  text-decoration: underline;
+  text-decoration-color: var(--control);
+  text-underline-offset: 3px;
+}
+
+.report-app .pkg-ref:hover {
+  color: var(--text);
+}
+
+.report-app .pkg-refs code {
+  font-size: var(--fs-small);
+}
+
+/* Tables: the files table's header band and rules, rows that grow with their content. */
+.pkg-table {
   width: 100%;
-  min-width: 480px;
-  border-collapse: collapse;
-  font-size: 13px;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
 }
-.package-details .details-table th,
-.package-details .details-table td {
-  max-width: 40ch;
+
+.pkg-table th,
+.pkg-table td {
   padding: 10px 12px;
   text-align: left;
   vertical-align: top;
-  border-bottom: 1px solid var(--rule);
+  font-size: var(--fs-body);
+  line-height: 20px;
   font-weight: 400;
+  overflow-wrap: anywhere;
 }
-.package-details .details-table thead th {
-  color: var(--faint);
+
+.pkg-table th:first-child,
+.pkg-table td:first-child {
+  padding-left: var(--pad);
 }
-.package-details summary {
-  padding: 10px 0;
-  cursor: pointer;
-  font-weight: 600;
+
+.pkg-table th:last-child,
+.pkg-table td:last-child {
+  padding-right: var(--pad);
 }
-.package-details .detail-list {
+
+.pkg-table thead th {
+  height: 36px;
+  padding-top: 0;
+  padding-bottom: 0;
+  vertical-align: middle;
+  font-size: var(--fs-small);
+  line-height: 16px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  border-top: 1px solid var(--card-edge);
+  border-bottom: 1px solid var(--card-edge);
+}
+
+.pkg-table tbody > tr > * {
+  border-bottom: 1px solid var(--rule);
+}
+
+.pkg-table .pkg-num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.pkg-rule {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.pkg-range {
+  font-size: var(--fs-small);
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Two short tables side by side, split like the status cells. */
+.pkg-pair {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pkg-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pkg-group + .pkg-group {
+  border-left: 1px solid var(--card-edge);
+}
+
+/* Disclosures and the rows they sit among. */
+.pkg-more,
+.pkg-row {
+  border-top: 1px solid var(--rule);
+}
+
+.pkg-more + .pkg-more,
+.pkg-more + .pkg-row {
+  margin-top: -12px;
+}
+
+.pkg-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.pkg-rows > .pkg-more + .pkg-more,
+.pkg-rows > .pkg-more + .pkg-row {
+  margin-top: 0;
+}
+
+.pkg-more__summary,
+.pkg-row,
+.pkg-row__line {
+  display: flex;
+  align-items: center;
   gap: 12px;
 }
-.package-details .detail-list > li {
-  display: grid;
-  gap: 8px;
+
+.pkg-more__summary,
+.pkg-row {
+  min-height: 44px;
+  padding: 0 var(--pad);
+}
+
+.pkg-more__summary {
+  list-style: none;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.pkg-more__summary::-webkit-details-marker {
+  display: none;
+}
+
+.pkg-more__summary:focus-visible {
+  outline-offset: -2px;
+}
+
+.pkg-more__label {
+  min-width: 0;
+}
+
+.pkg-more__aside {
+  margin-left: auto;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: var(--fs-small);
+  line-height: 16px;
+  font-weight: 400;
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.pkg-more__status {
+  min-width: 168px;
+  text-align: right;
+}
+
+/* Points right while closed and down while open. */
+.pkg-more__chevron {
+  flex: none;
+  stroke: var(--text-muted);
+  stroke-width: 1.5;
+  fill: none;
+  transform: rotate(-90deg);
+  transition: transform 160ms var(--ease);
+}
+
+.pkg-more__summary:hover .pkg-more__chevron {
+  stroke: var(--text);
+}
+
+.pkg-more[open] > .pkg-more__summary .pkg-more__chevron {
+  transform: none;
+}
+
+.pkg-more__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 16px;
+}
+
+/* A row that cannot open keeps the chevron's place, so its name lines up with the rows that can. */
+.pkg-row {
+  padding-left: calc(var(--pad) + 24px);
+}
+
+.pkg-row--stack {
+  display: block;
+  padding-top: 12px;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--rule);
 }
-.package-details blockquote {
+
+.pkg-row__note {
+  margin-top: 2px;
+  font-size: var(--fs-small);
+  line-height: 16px;
+  color: var(--text-muted);
+}
+
+/* OSV advisories and model hypotheses */
+.pkg-advisories,
+.pkg-hypotheses {
+  display: flex;
+  flex-direction: column;
+}
+
+.pkg-advisory,
+.pkg-hypothesis {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px var(--pad);
+  border-top: 1px solid var(--rule);
+}
+
+.pkg-advisory__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+
+.pkg-advisory__id {
+  font-size: var(--fs-body);
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.pkg-advisory__summary,
+.pkg-hypothesis > p {
+  max-width: 760px;
+  font-size: var(--fs-body);
+  line-height: 20px;
+}
+
+.pkg-advisory__meta {
+  font-size: var(--fs-small);
+  line-height: 16px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.report-app .pkg-advisory__meta code {
+  font-size: var(--fs-small);
+  word-break: break-all;
+}
+
+.pkg-advisory__refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  font-size: var(--fs-small);
+  line-height: 16px;
+  color: var(--text-muted);
+}
+
+.pkg-hypothesis strong {
+  font-weight: 500;
+}
+
+.pkg-quote {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   padding: 8px 12px;
-  border-left: 2px solid var(--control);
+  border-radius: var(--radius-well);
+  background: var(--well);
 }
-.package-details section {
-  scroll-margin-top: 16px;
+
+.report-app .pkg-quote code {
+  font-size: var(--fs-small);
+  white-space: pre-wrap;
 }
-@media (max-width: 480px) {
-  .package-details .detail-kv > div {
-    grid-template-columns: 1fr;
-    gap: 4px;
+
+.pkg-advisories + .pkg-foot {
+  margin-top: -12px;
+}
+
+.pkg-foot {
+  padding: 12px var(--pad) 0;
+  border-top: 1px solid var(--rule);
+  font-size: var(--fs-small);
+  line-height: 16px;
+  color: var(--text-muted);
+}
+
+.pkg-limits {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pkg-limits li {
+  position: relative;
+  max-width: calc(760px + 2 * var(--pad));
+  padding-left: calc(var(--pad) + 14px);
+}
+
+.pkg-limits li::before {
+  content: "";
+  position: absolute;
+  left: var(--pad);
+  top: 8px;
+  width: 4px;
+  height: 4px;
+  border-radius: 1px;
+  background: var(--control);
+}
+
+.pkg-paths {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+}
+
+.report-app .pkg-paths code {
+  font-size: var(--fs-small);
+  color: var(--text-muted);
+}
+
+@media (max-width: 999px) {
+  .pkg-facts--five {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .pkg-pair {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 16px;
+  }
+
+  .pkg-group + .pkg-group {
+    border-left: 0;
+  }
+}
+
+/* Phone: the header stacks, facts go two across, and the wider tables become one block per row. */
+@media (max-width: 639px) {
+  .pkg {
+    margin-top: 40px;
+  }
+
+  .pkg-head {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .pkg-strip .status-cell__value {
+    white-space: normal;
+  }
+
+  .pkg-card__header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .pkg-facts,
+  .pkg-facts--five {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 16px;
+  }
+
+  .pkg-facts--stack {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pkg-table:not(.pkg-table--compact) thead th {
+    position: absolute;
+    width: 1px;
+    height: 1px; /* taste-skill-ignore: column headers stay for screen readers */
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    border: 0;
+  }
+
+  .pkg-table:not(.pkg-table--compact),
+  .pkg-table:not(.pkg-table--compact) thead,
+  .pkg-table:not(.pkg-table--compact) tbody,
+  .pkg-table:not(.pkg-table--compact) tr,
+  .pkg-table:not(.pkg-table--compact) tbody th,
+  .pkg-table:not(.pkg-table--compact) td {
+    display: block;
+  }
+
+  .pkg-table:not(.pkg-table--compact) thead {
+    border-top: 1px solid var(--card-edge);
+  }
+
+  .pkg-table:not(.pkg-table--compact) colgroup {
+    display: none;
+  }
+
+  .pkg-table:not(.pkg-table--compact) tbody > tr {
+    padding: 10px var(--pad);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .pkg-table:not(.pkg-table--compact) tbody > tr > * {
+    padding: 0;
+    border: 0;
+  }
+
+  /* The column's name sits in a gutter to the left of each value. */
+  .pkg-table:not(.pkg-table--compact) tbody td {
+    position: relative;
+    margin-top: 4px;
+    padding-left: 100px;
+    text-align: left;
+    white-space: normal;
+  }
+
+  .pkg-table:not(.pkg-table--compact) tbody td::before {
+    content: attr(data-label);
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 88px;
+    font-size: var(--fs-small);
+    color: var(--text-muted);
+  }
+
+  /* Name on the first line, figures under it, both on the name's left edge. */
+  .pkg-more__summary,
+  .pkg-row,
+  .pkg-row__line {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+
+  .pkg-more__summary,
+  .pkg-row {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .pkg-more__aside {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+
+  .pkg-more__summary .pkg-more__aside {
+    margin-left: 24px;
+    flex-basis: calc(100% - 24px);
+  }
+
+  .pkg-more__status {
+    min-width: 0;
+    text-align: left;
   }
 }

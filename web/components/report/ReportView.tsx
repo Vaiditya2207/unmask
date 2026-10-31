@@ -117,12 +117,36 @@ function Header({ view, download }: { view: View; download: Download }) {
   );
 }
 
-function Finding({ view }: { view: View }) {
+// Advisory records from the package details' OSV lookup for this exact release, when it returned any.
+export interface Advisories {
+  count: number;
+  complete: boolean;
+}
+
+function Finding({
+  view,
+  advisories,
+}: {
+  view: View;
+  advisories?: Advisories | null;
+}) {
   return (
     <p className="report-finding">
       {view.finding.map((segment, i) =>
         segment.code ? <code key={i}>{segment.text}</code> : segment.text,
       )}
+      {advisories && advisories.count > 0 ? (
+        <>
+          {" "}
+          {advisories.complete
+            ? "OSV lists "
+            : "An incomplete OSV lookup returned "}
+          <a className="report-finding__link" href="#vulnerabilities">
+            {plural(advisories.count, "known advisory", "known advisories")}
+          </a>{" "}
+          for this exact version.
+        </>
+      ) : null}
     </p>
   );
 }
@@ -429,16 +453,32 @@ function Foot({ view }: { view: View }) {
   );
 }
 
+// Whether Published files is on the page. A report with no source lists its few files in the status
+// card instead, unless it has syntax cues or more files than that card shows.
+export function showsExplorer(view: View) {
+  return (
+    view.mode === "compared" ||
+    view.syntaxCueCount > 0 ||
+    view.notCompared.length > 8
+  );
+}
+
+// `children` follow the comparison on the same sheet, above the foot: a live report's package details,
+// or the one note that says they are unavailable.
 export function ReportView({
   view,
   download,
   initialKey,
   initialTab,
+  advisories,
+  children,
 }: {
   view: View;
   download: Download;
   initialKey?: string;
   initialTab?: string;
+  advisories?: Advisories | null;
+  children?: React.ReactNode;
 }) {
   const explorer = (
     <FileExplorer
@@ -453,21 +493,20 @@ export function ReportView({
     return (
       <>
         <Header view={view} download={download} />
-        <Finding view={view} />
+        <Finding view={view} advisories={advisories} />
         <section className="report-card state-card" aria-label="Check status">
           <StatusCells view={view} />
           <NotCompared view={view} />
         </section>
-        {view.syntaxCueCount > 0 || view.notCompared.length > 8
-          ? explorer
-          : null}
+        {showsExplorer(view) ? explorer : null}
+        {children}
         <Foot view={view} />
       </>
     );
   return (
     <>
       <Header view={view} download={download} />
-      <Finding view={view} />
+      <Finding view={view} advisories={advisories} />
       <section className="report-card status-strip" aria-label="Check status">
         <StatusCells view={view} />
       </section>
@@ -476,6 +515,7 @@ export function ReportView({
       <InstallPaths paths={view.installPaths} />
       {explorer}
       <NotInspected view={view} />
+      {children}
       <Foot view={view} />
     </>
   );
