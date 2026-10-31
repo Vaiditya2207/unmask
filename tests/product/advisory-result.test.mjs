@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { test } from "node:test";
 import { createApp } from "../../src/server/app.mjs";
+import { createAdvisoryService } from "../../src/server/advisory-result.mjs";
 import { lookupNpmAdvisories } from "../../src/core/advisories.mjs";
 import { AcquisitionError } from "../../src/core/acquire.mjs";
 
@@ -250,4 +251,142 @@ test("execution timeout keeps a finished advisory lookup and marks a pending one
     .advisoryResult;
   assert.equal(aborted.assessment, "advisory-lookup-unavailable");
   assert.deepEqual(aborted.vulnerabilityCheck.reasons, ["aborted"]);
+});
+
+test("exact-package advisory endpoint answers without artifact acquisition", async (t) => {
+  const calls = [];
+  let analyses = 0;
+  const s = await start(t, {
+    runAnalysis: async () => {
+      analyses++;
+      throw new Error("must not acquire");
+    },
+    enrichJob: (spec, { signal }) =>
+      lookupNpmAdvisories(spec, { fetchImpl: osvFixtureFetch(calls), signal }),
+  });
+  for (const [spec, fixture] of Object.entries(OSV_FIXTURES)) {
+    const response = await s.get(
+      `/api/advisory?package=${encodeURIComponent(spec)}`,
+    );
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type"), /application\/json/);
+    assert.equal(response.headers.get("x-unmask-reused"), "false");
+    const result = await response.json();
+    assert.equal(result.kind, "advisory-only");
+    assert.equal(result.assessment, "advisories-reported");
+    assert.deepEqual(result.artifactVerification, {
+      status: "not-performed",
+      reason: "not-requested",
+    });
+    assert.equal(result.safetyVerdict, "not-provided");
+    assert.equal(result.vulnerabilityCheck.advisories[0].id, fixture.id);
+  }
+  const scoped = await (
+    await s.get("/api/advisory?package=%40scope%2Fquiet%401.0.0")
+  ).json();
+  assert.equal(scoped.assessment, "no-advisory-reported");
+  assert.equal(scoped.package.name, "@scope/quiet");
+  for (const query of [
+    "package=node-ipc%40%5E10.0.0",
+    "package=node-ipc%40latest",
+    "package=node-ipc",
+    "package=a%401.0.0&package=b%401.0.0",
+    "package=a%401.0.0&extra=1",
+    "name=a%401.0.0",
+  ]) {
+    const response = await s.get(`/api/advisory?${query}`);
+    assert.equal(response.status, 400, query);
+    assert.deepEqual(await response.json(), { error: "invalid-package-spec" });
+  }
+  assert.equal(analyses, 0);
+  assert.deepEqual(calls, [...Object.keys(OSV_FIXTURES), "@scope/quiet@1.0.0"]);
+  const disabled = await start(t, {});
+  const off = await disabled.get("/api/advisory?package=node-ipc%4010.1.1");
+  assert.equal(off.status, 503);
+  assert.deepEqual(await off.json(), { error: "advisory-lookup-disabled" });
+});
+
+test("advisory endpoint coalesces in-flight lookups and bounds concurrency", async (t) => {
+  const gates = [];
+  let lookups = 0;
+  const s = await start(t, {
+    enrichJob: async (spec, { signal }) => {
+      lookups++;
+      await new Promise((resolve) => gates.push(resolve));
+      return lookupNpmAdvisories(spec, {
+        fetchImpl: osvFixtureFetch(),
+        signal,
+      });
+    },
+  });
+  const first = s.get("/api/advisory?package=node-ipc%4010.1.1");
+  const second = s.get("/api/advisory?package=node-ipc%4010.1.1");
+  const third = s.get("/api/advisory?package=event-stream%403.3.6");
+  for (let i = 0; gates.length < 2; i++) {
+    assert.ok(i < 200, "lookups did not start");
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  const limited = await s.get("/api/advisory?package=ua-parser-js%400.7.29");
+  assert.equal(limited.status, 429);
+  assert.equal(limited.headers.get("retry-after"), "15");
+  assert.equal((await limited.json()).error, "rate-limited");
+  gates.forEach((resolve) => resolve());
+  const responses = await Promise.all([first, second, third]);
+  assert.deepEqual(
+    responses.map((r) => r.headers.get("x-unmask-reused")).sort(),
+    ["false", "false", "true"],
+  );
+  const bodies = await Promise.all(responses.map((r) => r.json()));
+  assert.equal(
+    bodies[0].vulnerabilityCheck.advisories[0].id,
+    "GHSA-97m3-w2cp-4xx6",
+  );
+  assert.deepEqual(bodies[0], bodies[1]);
+  assert.equal(lookups, 2);
+});
+
+test("advisory service window, timeout and failures stay honest", async () => {
+  let now = 0;
+  const timers = new Map();
+  const clock = {
+    now: () => now,
+    setTimeout(fn, ms) {
+      const key = Symbol();
+      timers.set(key, { at: now + ms, fn });
+      return key;
+    },
+    clearTimeout: (key) => timers.delete(key),
+    advance(ms) {
+      now += ms;
+      for (const [key, timer] of [...timers])
+        if (timer.at <= now) {
+          timers.delete(key);
+          timer.fn();
+        }
+    },
+  };
+  let signal;
+  const service = createAdvisoryService({
+    clock,
+    limits: { maxLookups: 2, windowMs: 1000, maxActive: 2, timeoutMs: 500 },
+    lookup: async (spec, options) => {
+      signal = options.signal;
+      if (spec.startsWith("hang@")) return new Promise(() => {});
+      throw new Error("SECRET upstream");
+    },
+  });
+  const hung = service.request("hang@1.0.0");
+  clock.advance(500);
+  const timedOut = await hung.promise;
+  assert.equal(signal.aborted, true);
+  assert.equal(timedOut.assessment, "advisory-lookup-unavailable");
+  assert.deepEqual(timedOut.vulnerabilityCheck.reasons, ["timeout"]);
+  const failed = await service.request("fail@1.0.0").promise;
+  assert.deepEqual(failed.vulnerabilityCheck.reasons, ["lookup-failed"]);
+  assert.doesNotMatch(JSON.stringify(failed), /SECRET/);
+  assert.deepEqual(service.request("third@1.0.0"), { retryAfter: 1 });
+  clock.advance(500);
+  assert.ok(service.request("fail@2.0.0").promise);
+  service.close();
+  assert.ok(service.request("fail@3.0.0").retryAfter >= 1);
 });

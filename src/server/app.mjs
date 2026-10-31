@@ -1,7 +1,10 @@
 import { createServer } from "node:http";
 import { buildPackageDetails } from "../core/package-details.mjs";
 import { attachVulnerabilityCheck } from "./enrichment.mjs";
-import { withAdvisoryResult } from "./advisory-result.mjs";
+import {
+  createAdvisoryService,
+  withAdvisoryResult,
+} from "./advisory-result.mjs";
 import { createQueue, resolveLimits, systemClock } from "./queue.mjs";
 import { createReportStore } from "./store.mjs";
 import { renderReport } from "../viewer/render.mjs";
@@ -142,6 +145,8 @@ export function createApp({
     clock,
     keyPrefix,
   });
+  const advisories =
+    enrichJob && createAdvisoryService({ lookup: enrichJob, clock });
   const server = createServer(
     { maxHeaderSize: 8192, headersTimeout: 10000, requestTimeout: 15000 },
     (req, res) => {
@@ -172,6 +177,23 @@ export function createApp({
       }
       function error(status, title, message, headers) {
         send(status, renderError({ title, message }), undefined, headers);
+      }
+      async function advisoryEndpoint(params) {
+        const spec =
+          params.size === 1 && parseNameAtExactVersion(params.get("package"));
+        if (!spec) return json(400, { error: "invalid-package-spec" });
+        if (!advisories)
+          return json(503, { error: "advisory-lookup-disabled" });
+        const result = advisories.request(spec);
+        if (!result.promise)
+          return json(
+            429,
+            { error: "rate-limited", retryAfter: result.retryAfter },
+            { "retry-after": String(result.retryAfter) },
+          );
+        return json(200, await result.promise, {
+          "x-unmask-reused": String(result.reused),
+        });
       }
       async function handle() {
         const path = req.url;
@@ -261,6 +283,8 @@ export function createApp({
         if (path === "/") return send(200, renderHome());
         if (path === "/healthz") return json(200, { status: "ok" });
         if (path === "/version") return json(200, version);
+        if (path.startsWith("/api/advisory?"))
+          return advisoryEndpoint(new URLSearchParams(path.slice(14)));
         const match = /^\/r\/([a-f0-9]{32})(\.details\.json|\.json)?$/.exec(
           path,
         );
@@ -320,6 +344,9 @@ export function createApp({
       );
     },
   );
-  server.on("close", () => queue.close());
+  server.on("close", () => {
+    queue.close();
+    advisories?.close();
+  });
   return server;
 }
