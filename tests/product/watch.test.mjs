@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -18,7 +19,9 @@ function lock(versions) {
     packages[`node_modules/${name}`] = {
       version,
       resolved: `https://registry.npmjs.org/${name}/-/${name}-${version}.tgz`,
-      integrity: `sha512-${Buffer.from(name + version).toString("base64")}`,
+      integrity: `sha512-${createHash("sha512")
+        .update(name + version)
+        .digest("base64")}`,
     };
   return JSON.stringify({ lockfileVersion: 3, packages });
 }

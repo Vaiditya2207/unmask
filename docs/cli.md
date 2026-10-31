@@ -76,11 +76,18 @@ identity is a new `name@version`, or an existing one whose recorded `resolved`
 or `integrity` changed in any location, including removal of either field.
 Lockfile parsing is shared with `unmask audit`: changed non-registry or
 non-exact entries are listed under `coverage.unsupported`, and local workspaces
-and links are not checked. A changed identity that is not bound (a
+and links are not checked. A changed workspace entry that claims a `resolved` or
+`integrity` artifact is listed as `workspace-artifact-claim`, as dependency
+screening rejects it. A changed identity that is not bound (a
 `registry.npmjs.org` tarball URL plus a sha512 integrity in every location) is
 still checked by name and version, but counts under `coverage.unbound` and keeps
 coverage incomplete, because the checked artifact is not tied to what npm will
-install. The baseline itself is not audited; use `unmask audit` for that.
+install. A version recorded with different integrity values in different
+locations is also unbound. A newly unresolved required dependency (one npm would
+fetch without a locked entry; optional dependencies excluded) is listed as
+`unresolved-dependency`, and a changed entry whose dependency map is malformed as
+`invalid-dependencies`; both keep coverage incomplete. The baseline itself is
+not audited; use `unmask audit` for that.
 
 The `unmask-preflight-1` JSON document has `status`, `exitCode`, `changes`
 (`added`, `removed`), per-identity `checks` (`completed` with policy exit and
