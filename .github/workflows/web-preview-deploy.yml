@@ -28,9 +28,11 @@ jobs:
       id-token: write
     env:
       PREVIEW_ENVIRONMENT: preview
-      PREVIEW_PLAN: ${{ runner.temp }}/preview-plan.json
-      PREVIEW_ARTIFACT: ${{ runner.temp }}/preview-image
     steps:
+      - name: Initialize preview paths on the runner
+        run: |
+          echo "PREVIEW_PLAN=$RUNNER_TEMP/preview-plan.json" >> "$GITHUB_ENV"
+          echo "PREVIEW_ARTIFACT=$RUNNER_TEMP/preview-image" >> "$GITHUB_ENV"
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: main
