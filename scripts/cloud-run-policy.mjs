@@ -42,6 +42,36 @@ function ready(value) {
       String(value.metadata.generation)
   );
 }
+function revisionImageMatches(release, revision) {
+  const image = release.image;
+  const resolved = release.resolvedImageDigest ?? image;
+  if (
+    ![image, resolved].every(
+      (value) =>
+        typeof value === "string" &&
+        /^ghcr\.io\/[a-z0-9_.-]+\/[a-z0-9_.-]+@sha256:[a-f0-9]{64}$/.test(
+          value,
+        ),
+    )
+  )
+    return false;
+  const repository = image.split("@")[0];
+  function matches(observed, expected) {
+    return (
+      observed === expected ||
+      observed === `cache.asia-docker.pkg.dev/${expected}`
+    );
+  }
+  return (
+    resolved.startsWith(`${repository}@`) &&
+    [image, resolved].some((expected) =>
+      matches(revision.spec?.containers?.[0]?.image, expected),
+    ) &&
+    (matches(revision.status?.imageDigest, resolved) ||
+      (digest(revision.status?.imageDigest) &&
+        revision.status.imageDigest === resolved.split("@")[1]))
+  );
+}
 function configurationValid(configuration) {
   return (
     configuration &&
@@ -184,11 +214,7 @@ export function verifyCloudRunDeployment({
     !ready(revision) ||
     revision.spec?.serviceAccountName !== configuration.runtimeServiceAccount ||
     after.status.latestReadyRevisionName !== revision.metadata.name ||
-    revision.status.imageDigest?.split("@").at(-1) !==
-      plan.resolvedImageDigest.split("@").at(-1) ||
-    ![plan.image, plan.resolvedImageDigest].includes(
-      revision.spec?.containers?.[0]?.image,
-    ) ||
+    !revisionImageMatches(plan, revision) ||
     after.spec?.template?.spec?.containers?.[0]?.image !== plan.image
   )
     throw new Error(
@@ -370,11 +396,7 @@ export function verifyCloudRunRevision(release, revision, configuration) {
     !ready(revision) ||
     !configuration?.runtimeServiceAccount ||
     revision.spec?.serviceAccountName !== configuration.runtimeServiceAccount ||
-    ![release.image, release.resolvedImageDigest ?? release.image].includes(
-      revision.spec?.containers?.[0]?.image,
-    ) ||
-    revision.status.imageDigest?.split("@").at(-1) !==
-      (release.resolvedImageDigest ?? release.image).split("@").at(-1)
+    !revisionImageMatches(release, revision)
   )
     throw new Error("Candidate revision readiness/image digest differs");
   return revision.metadata.name;

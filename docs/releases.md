@@ -212,6 +212,8 @@ real-model output. Model-disabled smoke cannot substitute for the deployed AI
 path. A deployment job failure is not production acceptance, even if the GitHub
 release was published successfully.
 
+The selected two-tier hosted override and exact expectation/hash alignment are documented in [the route configuration record](cloud-run-deployment.md#selected-hosted-route-override). Source defaults and deployed environment selection are separate; the image-only runner preserves existing runtime configuration.
+
 See [Cloud Run deployment contract](cloud-run-deployment.md) for variable names,
 WIF constraints, runtime settings, receipts and remaining live verification gaps.
 The `deploy-web` job follows successful API verification and deploys the website

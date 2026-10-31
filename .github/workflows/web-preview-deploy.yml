@@ -24,7 +24,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-      pull-requests: read
+      pull-requests: write
       id-token: write
     env:
       PREVIEW_ENVIRONMENT: preview
@@ -72,3 +72,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/web-preview.mjs deploy
+      - name: Publish verified preview URL on the PR
+        id: comment
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/web-preview.mjs comment

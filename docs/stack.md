@@ -28,25 +28,25 @@ The API image consumes a packed backend artifact and matching lockfile. The depl
 
 These are source-level budgets, not measured production capacity or an OS memory limit. Effective analysis limits are recorded in reports; supported overrides can lower limits.
 
-| Area                           | Default                                                                                                 |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| Each compressed archive        | 50 MiB                                                                                                  |
-| Each expanded archive          | 250 MiB; ratio at most 100                                                                              |
-| Each archive inventory         | 20,000 entries; 64 path components; 4,096 path bytes; 40,000 path nodes                                 |
-| Archive metadata record        | 64 KiB                                                                                                  |
-| Retained regular-file content  | 10 MiB per file; one shared 128 MiB artifact/source budget                                              |
-| Archive parse deadline         | 30 seconds                                                                                              |
-| Registry metadata capture      | 1 MiB                                                                                                   |
-| Acquisition request            | 30 seconds; redirects refused                                                                           |
-| JavaScript inspection          | 2 MiB per file; 8 MiB per side; 200,000 tokens; bounded cues and literals                               |
-| Hosted worker                  | 512 MiB V8 old-space cap; 120-second deterministic deadline                                             |
-| Hosted queue                   | One active and one waiting; 300-second queue TTL; 240-second outer execution deadline                   |
-| Hosted admission               | Six new checks per ten minutes in one API process                                                       |
-| Result/store                   | 64 MiB result cap; 64 MiB total, 200 entries; up to 30 minutes after completion, without read extension |
-| HTTP form body                 | 4,096 bytes; 10-second body deadline                                                                    |
-| Model route                    | At most three generation attempts, 45 seconds each, within 135 seconds total                            |
-| Model tokens                   | At most 4,000 input tokens; default output cap 4,096 for Gemini and 1,000 for Gemma                     |
-| Local model admission defaults | Three generations/minute, 12,000 input tokens/minute, 100 generations/day                               |
+| Area                           | Default                                                                                                                                   |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Each compressed archive        | 50 MiB                                                                                                                                    |
+| Each expanded archive          | 250 MiB; ratio at most 100                                                                                                                |
+| Each archive inventory         | 20,000 entries; 64 path components; 4,096 path bytes; 40,000 path nodes                                                                   |
+| Archive metadata record        | 64 KiB                                                                                                                                    |
+| Retained regular-file content  | 10 MiB per file; one shared 128 MiB artifact/source budget                                                                                |
+| Archive parse deadline         | 30 seconds                                                                                                                                |
+| Registry metadata capture      | 1 MiB                                                                                                                                     |
+| Acquisition request            | 30 seconds; redirects refused                                                                                                             |
+| JavaScript inspection          | 2 MiB per file; 8 MiB per side; 200,000 tokens; bounded cues and literals                                                                 |
+| Hosted worker                  | 512 MiB V8 old-space cap; 120-second deterministic deadline                                                                               |
+| Hosted queue                   | One active and one waiting; 300-second queue TTL; 240-second outer execution deadline                                                     |
+| Hosted admission               | Six new checks per ten minutes in one API process                                                                                         |
+| Result/store                   | 64 MiB result cap; 64 MiB total, 200 entries; up to 30 minutes after completion, without read extension                                   |
+| HTTP form body                 | 4,096 bytes; 10-second body deadline                                                                                                      |
+| Model route                    | Default: at most two generations; explicit three-tier routes: at most three. Each attempt is at most 45 seconds, within 135 seconds total |
+| Model tokens                   | At most 4,000 input tokens; default output cap 4,096 for Gemini and 1,000 for Gemma                                                       |
+| Local model admission defaults | Three generations/minute, 12,000 input tokens/minute, 100 generations/day                                                                 |
 
 The 240-second outer job deadline still applies when the deterministic and model stages share the same job; sub-budgets are not additive guarantees. V8 old-space excludes native allocations, compressed buffers and other process memory. Resident memory and near-limit latency need measurements on the actual host. Explicit offline CLI parsing runs in the CLI process and does not inherit the hosted child settings.
 
@@ -54,11 +54,23 @@ The 240-second outer job deadline still applies when the deterministic and model
 
 The default ordered route on `generativelanguage.googleapis.com` is:
 
-1. `gemini-3.5-flash`, high thinking.
-2. `gemini-3-flash-preview`, minimal thinking.
-3. `gemma-4-26b-a4b-it`, minimal thinking.
+1. `gemini-3-flash-preview`, minimal thinking.
+2. `gemma-4-26b-a4b-it`, minimal thinking.
 
-Three is the total generation-attempt budget, not three attempts per tier. Invalid output can retry the same tier. Eligible model-scoped rate limits, transient server errors and timeouts can advance to the next tier; authentication, input and global/daily/unknown quota failures do not authorize blind model shopping. Generation uses temperature zero and one candidate. Each attempt includes bounded tokenizer preflight; preflight is not another generation attempt.
+The hosted route uses `gemini-3-flash-preview` with minimal thinking first, then `gemma-4-26b-a4b-it` with minimal thinking. Set the non-secret `UNMASK_MODEL_ROUTE` value explicitly:
+
+```json
+[
+  { "modelId": "gemini-3-flash-preview", "thinkingLevel": "minimal" },
+  { "modelId": "gemma-4-26b-a4b-it", "thinkingLevel": "minimal" }
+]
+```
+
+This is also the upcoming source default; an older image requires the explicit override to select it. Do not combine a multi-tier override with `UNMASK_MODEL_ID`; the factory rejects conflicting configuration. The shared factory is used by the hosted parent process and explicitly consented offline model stage. Ordinary hosted CLI requests continue to use server configuration.
+
+The two-tier override has at most two generation attempts in total. Its existing per-attempt deadline, 135-second total budget, input/output caps and shared local admission limits remain unchanged. An invalid primary output can use the remaining attempt on that same primary, so a configured fallback is not a promise it will run. Model-scoped 429 fallthrough requires explicit minute or daily quota bindings for the exact current model. Every supplied quota/ErrorInfo binding must be model-scoped. Global/project, local-daily, hourly, unknown-window, authentication and input failures remain terminal. Daily exhaustion advances only to a later tier and never retries the exhausted tier. Model-scoped daily exhaustion moves immediately to an available next tier without waiting for that model’s daily reset; Retry-After remains in force for other retryable failures, and the total deadline still applies. The selected route still needs exact candidate/configuration and normal-path release verification; a direct model diagnostic is not production acceptance. See [deployment alignment](cloud-run-deployment.md#selected-hosted-route-override).
+
+The default budget is two generation attempts total. Explicit three-tier configurations retain a three-attempt total budget, not three attempts per tier. Invalid output can retry the same tier. Eligible model-scoped rate limits, transient server errors and timeouts can advance to the next tier; authentication, input and global/project/unknown quota failures do not authorize blind model shopping. Generation uses temperature zero and one candidate. Each attempt includes bounded tokenizer preflight; preflight is not another generation attempt.
 
 Model use requires explicit `UNMASK_MODEL=on` and configured provider access. The preferred server/offline-consented key is `GEMINI_API_KEY`; `UNMASK_MODEL_KEY` is a compatible alias, and conflicting values are rejected. No API key is needed in a browser or the default hosted CLI path.
 

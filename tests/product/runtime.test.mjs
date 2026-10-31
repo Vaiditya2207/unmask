@@ -38,7 +38,7 @@ function fixtureReport() {
     },
   });
 }
-async function setup(t, body) {
+async function setup(t, body, options = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), "unmask-runtime-test-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const worker = path.join(root, "fixture.mjs");
@@ -53,7 +53,9 @@ async function setup(t, body) {
     tempRoot: path.join(root, "jobs"),
     versionInfo,
     modelClient: null,
+    enrichJob: null,
     runnerOptions: { workerURL: pathToFileURL(worker) },
+    ...options,
   });
   t.after(() => runtime.close());
   return {
@@ -259,6 +261,7 @@ const {workerMain}=await import(${JSON.stringify(new URL("../../src/server/worke
     tempRoot: path.join(root, "jobs"),
     versionInfo,
     modelClient: null,
+    enrichJob: null,
     runnerOptions: { workerURL: pathToFileURL(worker) },
   });
   t.after(() => runtime.close());
@@ -366,7 +369,7 @@ test("model configuration is disabled until explicitly enabled and quota verifie
   };
   const client = await modelClientFromEnv(env);
   assert.equal(client.configuration.enabled, true);
-  assert.equal(client.modelId, "gemini-3.5-flash");
+  assert.equal(client.modelId, "gemini-3-flash-preview");
   assert.match(client.configHash, /^[a-f0-9]{64}$/);
   assert.ok(
     !JSON.stringify(client.configuration).includes("inert-fixture-key"),
@@ -418,7 +421,7 @@ test("a second process failing the same HTTP bind cannot sweep the first server 
   const script = path.join(f.root, "second-server.mjs");
   await writeFile(
     script,
-    `import {startServer} from ${JSON.stringify(new URL("../../src/server/main.mjs", import.meta.url).href)};try{await startServer(${JSON.stringify({ host: "127.0.0.1", port: f.server.address().port, tempRoot: path.join(f.root, "jobs"), versionInfo, modelClient: null })});process.exitCode=2;}catch(error){console.log(error.code);}`,
+    `import {startServer} from ${JSON.stringify(new URL("../../src/server/main.mjs", import.meta.url).href)};try{await startServer(${JSON.stringify({ host: "127.0.0.1", port: f.server.address().port, tempRoot: path.join(f.root, "jobs"), versionInfo, modelClient: null, enrichJob: null })});process.exitCode=2;}catch(error){console.log(error.code);}`,
   );
   const child = spawn(process.execPath, [script], {
     env: {},
@@ -461,7 +464,7 @@ test("shared model configuration imports without server modules and retains the 
   const script = path.join(root, "probe.mjs");
   await writeFile(
     script,
-    `import assert from 'node:assert/strict';import {modelClientFromEnv} from './config.mjs';assert.equal(await modelClientFromEnv({}),undefined);const client=await modelClientFromEnv({UNMASK_MODEL:'on',GEMINI_API_KEY:'inert-fixture-key',UNMASK_MODEL_QUOTA_VERIFIED:'true',UNMASK_MODEL_REQUESTS_PER_MINUTE:'2',UNMASK_MODEL_INPUT_TOKENS_PER_MINUTE:'8000',UNMASK_MODEL_DAILY_REQUESTS:'10'});assert.equal(client.configuration.enabled,true);assert.equal(client.modelId,'gemini-3.5-flash');console.log('standalone-config-ok');`,
+    `import assert from 'node:assert/strict';import {modelClientFromEnv} from './config.mjs';assert.equal(await modelClientFromEnv({}),undefined);const client=await modelClientFromEnv({UNMASK_MODEL:'on',GEMINI_API_KEY:'inert-fixture-key',UNMASK_MODEL_QUOTA_VERIFIED:'true',UNMASK_MODEL_REQUESTS_PER_MINUTE:'2',UNMASK_MODEL_INPUT_TOKENS_PER_MINUTE:'8000',UNMASK_MODEL_DAILY_REQUESTS:'10'});assert.equal(client.configuration.enabled,true);assert.equal(client.modelId,'gemini-3-flash-preview');console.log('standalone-config-ok');`,
   );
   const child = spawn(process.execPath, [script], {
     env: {},
@@ -481,4 +484,60 @@ test("shared model configuration imports without server modules and retains the 
   });
   assert.equal(await exited, 0, output);
   assert.equal(output.trim(), "standalone-config-ok");
+});
+
+test("hosted main defaults to real OSV adapter once per job through synthetic transport", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, options) => {
+    const value = String(url);
+    if (value.startsWith("http://127.0.0.1:"))
+      return originalFetch(url, options);
+    assert.equal(value, "https://api.osv.dev/v1/query");
+    requests.push({ url: value, options });
+    assert.deepEqual(JSON.parse(options.body), {
+      package: { name: "fixture", ecosystem: "npm" },
+      version: "1.0.0",
+    });
+    assert.equal(options.method, "POST");
+    assert.equal(options.credentials, "omit");
+    assert.equal(options.redirect, "manual");
+    assert.ok(options.signal instanceof AbortSignal);
+    return Response.json({
+      vulns: [{ id: "GHSA-synthetic-0001", summary: "Synthetic advisory" }],
+    });
+  };
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  const report = fixtureReport();
+  const runtime = await setup(
+    t,
+    `await writeFile(r.workDir+'/report.json',${JSON.stringify(JSON.stringify(report))});`,
+    { enrichJob: undefined },
+  );
+  const first = await submit(runtime.base);
+  const location = first.headers.get("location");
+  const second = await submit(runtime.base);
+  assert.equal(second.headers.get("location"), location);
+  assert.deepEqual(await completed(runtime.base, location), report);
+  const details = await (
+    await fetch(runtime.base + location + ".details.json")
+  ).json();
+  assert.equal(details.vulnerabilityCheck.source, "OSV");
+  assert.equal(details.vulnerabilityCheck.status, "found");
+  assert.equal(details.vulnerabilityCheck.complete, true);
+  assert.equal(
+    details.vulnerabilityCheck.advisories[0].id,
+    "GHSA-synthetic-0001",
+  );
+  assert.equal(
+    details.scope.knownVulnerabilities,
+    "queried-exact-package-only",
+  );
+  assert.equal(requests.length, 1);
+  await fetch(runtime.base + location + ".details.json");
+  await fetch(runtime.base + location + ".json");
+  assert.equal((await submit(runtime.base)).headers.get("location"), location);
+  assert.equal(requests.length, 1);
 });
