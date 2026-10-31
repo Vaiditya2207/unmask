@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import {
   cp,
   mkdtemp,
@@ -11,11 +11,14 @@ import {
   symlink,
 } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import os from "node:os";
 import path from "node:path";
 import { main } from "../../src/cli/main.mjs";
-import { commandCatalog } from "../../src/cli/discovery.mjs";
+import {
+  commandCatalog,
+  dispatchedCommands,
+} from "../../src/cli/discovery.mjs";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const CHECK_FALLBACK =
@@ -33,6 +36,16 @@ async function quiet(run) {
   } finally {
     process.stderr.write = original;
   }
+}
+function expectedAvailable(cliDirectory, item) {
+  const dispatched = dispatchedCommands(
+    readFileSync(path.join(cliDirectory, "main.mjs"), "utf8"),
+  );
+  return (
+    item.name === "check" ||
+    (dispatched.has(item.name) &&
+      existsSync(path.join(cliDirectory, item.module)))
+  );
 }
 function command(program, args, cwd) {
   const result = spawnSync(program, args, {
@@ -54,13 +67,7 @@ test("help lists commands by actual module availability", async () => {
   for (const item of commandCatalog()) {
     assert.equal(
       item.available,
-      existsSync(
-        path.join(
-          root,
-          "src/cli",
-          item.name === "check" ? "main.mjs" : `${item.name}.mjs`,
-        ),
-      ),
+      expectedAvailable(path.join(root, "src/cli"), item),
       item.name,
     );
     const block = item.available ? availableBlock : plannedBlock;
@@ -75,18 +82,81 @@ test("help lists commands by actual module availability", async () => {
   }
 });
 
-test("every command marked available is actually dispatched by main", async () => {
+test("every command marked available is actually dispatched by main", async (t) => {
+  const original = globalThis.fetch;
+  globalThis.fetch = () => assert.fail("a dispatch probe made a request");
+  t.after(() => (globalThis.fetch = original));
   for (const item of commandCatalog().filter(
     (entry) => entry.available && entry.name !== "check",
   )) {
+    const stderr = capture();
     const { code, errors } = await quiet(() =>
       main([item.name, "--unmask-probe-invalid-option"], {
         fetchImpl: () => assert.fail(`${item.name} probe made a request`),
+        npmCommand: "/nonexistent/unmask-probe-npm",
+        stderr,
+        env: {},
       }),
     );
-    assert.equal(code, 2, item.name);
-    assert.notEqual(errors.join(""), CHECK_FALLBACK, item.name);
+    assert.notEqual(code, 0, item.name);
+    assert.notEqual(errors.join("") + stderr.text(), CHECK_FALLBACK, item.name);
   }
+});
+
+test("help covers every command main dispatches", async () => {
+  const names = new Set(commandCatalog().map((item) => item.name));
+  const dispatched = dispatchedCommands(
+    await readFile(path.join(root, "src/cli/main.mjs"), "utf8"),
+  );
+  for (const name of dispatched) assert.ok(names.has(name), name);
+  assert.deepEqual(
+    [
+      ...dispatchedCommands(
+        'if (argv[0] === "install" || argv[0] === "ci") x;\nif (argv[0] === "why") y;',
+      ),
+    ],
+    ["install", "ci", "why"],
+  );
+});
+
+test("a shipped module without a main dispatch is not reported available", async (t) => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "unmask-dispatch-"));
+  t.after(() => rm(temporary, { recursive: true, force: true }));
+  await cp(path.join(root, "src"), path.join(temporary, "src"), {
+    recursive: true,
+  });
+  await symlink(
+    path.join(root, "node_modules"),
+    path.join(temporary, "node_modules"),
+  );
+  const cli = path.join(temporary, "src/cli");
+  for (const module of ["sarif.mjs", "annotations.mjs"])
+    if (!existsSync(path.join(cli, module)))
+      await writeFile(path.join(cli, module), "export {};\n");
+  const mainFile = path.join(cli, "main.mjs");
+  const source = (await readFile(mainFile, "utf8")).replace(
+    /argv\[0\] === "(sarif|annotations)"/g,
+    'argv[0] === "removed-$1"',
+  );
+  await writeFile(mainFile, source);
+  const load = async () =>
+    (
+      await import(
+        `${pathToFileURL(path.join(cli, "discovery.mjs")).href}?${Math.random()}`
+      )
+    ).commandCatalog();
+  const before = await load();
+  assert.equal(before.find((item) => item.name === "sarif").available, false);
+  await writeFile(
+    mainFile,
+    source + '\nif (argv[0] === "sarif") sarifDispatchForTest();\n',
+  );
+  const after = await load();
+  assert.equal(after.find((item) => item.name === "sarif").available, true);
+  assert.equal(
+    after.find((item) => item.name === "annotations").available,
+    false,
+  );
 });
 
 test("per-command help shows usage or unavailability and rejects unknown names", async () => {
@@ -207,9 +277,7 @@ test("installed npm bin reports build metadata identity and help", async (t) => 
   const help = command(bin, ["--help"], install);
   const installed = path.join(install, "node_modules", "@xagents_in/unmask");
   for (const item of commandCatalog()) {
-    const present =
-      item.name === "check" ||
-      existsSync(path.join(installed, "dist/cli", `${item.name}.mjs`));
+    const present = expectedAvailable(path.join(installed, "dist/cli"), item);
     const [availableBlock] = help.split("Planned, not included");
     assert.equal(
       new RegExp(`\\n  ${item.name} +\\S`).test(availableBlock),
