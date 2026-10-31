@@ -67,7 +67,8 @@ export async function startServer({
     enrichJob === null
       ? undefined
       : enrichJob === undefined
-        ? (await import("../core/advisories.mjs")).lookupNpmAdvisories
+        ? (await import("../core/advisory-cache.mjs")).createAdvisoryCache()
+            .lookup
         : enrichJob;
   if (enrichment !== undefined && typeof enrichment !== "function")
     throw new TypeError("enrichJob must be a function or null");
