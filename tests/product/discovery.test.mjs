@@ -163,7 +163,7 @@ test("per-command help shows usage or unavailability and rejects unknown names",
   const check = capture();
   assert.equal(await main(["check", "--help"], { stdout: check }), 0);
   assert.match(check.text(), /^unmask check: /);
-  assert.match(check.text(), /unmask check NAME@VERSION --out DIR/);
+  assert.match(check.text(), /unmask check NAME@VERSION \[--out DIR\]/);
   const viaHelp = capture();
   assert.equal(await main(["help", "check"], { stdout: viaHelp }), 0);
   assert.equal(viaHelp.text(), check.text());
@@ -189,7 +189,7 @@ test("per-command help shows usage or unavailability and rejects unknown names",
   ]) {
     const { code, errors } = await quiet(() => main(args));
     assert.equal(code, 2, args.join(" "));
-    assert.match(errors[0], /^usage: /);
+    assert.match(errors[0], /^(unmask error )?usage: /);
   }
 });
 
