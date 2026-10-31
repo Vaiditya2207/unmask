@@ -188,15 +188,18 @@ export function validateException(value, now = new Date()) {
 
 export function newException(spec, reason, expires, now = new Date()) {
   const { name, version } = exactPackage(spec);
-  const day = /^\d{4}-\d{2}-\d{2}$/u.test(expires ?? "")
-    ? `${expires}T00:00:00.000Z`
-    : expires;
-  if (typeof day !== "string" || Number.isNaN(Date.parse(day)))
+  const match =
+    typeof expires === "string" &&
+    /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}:\d{2}:\d{2})(\.\d{3})?Z)?$/u.exec(expires);
+  const day = match
+    ? `${match[1]}T${match[2] ?? "00:00:00"}${match[3] ?? ".000"}Z`
+    : "";
+  const expiry = Date.parse(day);
+  if (!match || Number.isNaN(expiry) || new Date(expiry).toISOString() !== day)
     fail(
       "invalid-expiry",
-      "Exception requires --expires YYYY-MM-DD or an ISO timestamp",
+      "Exception requires --expires as a real calendar date YYYY-MM-DD or a UTC timestamp YYYY-MM-DDTHH:MM:SSZ",
     );
-  const expiry = Date.parse(day);
   if (expiry <= now.getTime())
     fail("expired-exception", "Exception expiry must be in the future");
   if (expiry - now.getTime() > MAX_EXCEPTION_DAYS * DAY_MS)

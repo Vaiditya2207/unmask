@@ -129,6 +129,16 @@ test("exceptions refuse wildcards, ranges, tags, past or long expiry, bad reason
     [["add", "a@1.0.0", "--expires", "2026-11-20"], "usage"],
     [["remove", "a@1.0.0"], "missing-exception"],
     [["list", "--reason", "x"], "usage"],
+    ...[
+      "2026-11-31",
+      "2026-02-30",
+      "Nov 20 2026",
+      "2026-11-20T25:00:00Z",
+      "2026-11-20T10:00:00+05:30",
+    ].map((expires) => [
+      ["add", "a@1.0.0", "--reason", "Reviewed fix", "--expires", expires],
+      "invalid-expiry",
+    ]),
     [
       ["add", "a@1.0.0", "--reason", "--expires", "2026-11-20"],
       "missing-value",
