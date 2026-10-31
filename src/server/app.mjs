@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { createRegistryFactsHandler } from "./registry-facts.mjs";
 import { buildPackageDetails } from "../core/package-details.mjs";
 import { attachVulnerabilityCheck } from "./enrichment.mjs";
 import { createQueue, resolveLimits, systemClock } from "./queue.mjs";
@@ -106,6 +107,7 @@ export function createApp({
   versionInfo,
   limits: overrides,
   clock = systemClock,
+  registryFacts = {},
 } = {}) {
   if (typeof runAnalysis !== "function")
     throw new TypeError("runAnalysis is required");
@@ -120,6 +122,7 @@ export function createApp({
     );
   if (enrichJob !== undefined && typeof enrichJob !== "function")
     throw new TypeError("enrichJob must be a function");
+  const registryFactsHandler = createRegistryFactsHandler(registryFacts);
   const limits = resolveLimits(overrides);
   const version = Object.fromEntries(
     ["version", "commit", "tarballSha256"].map((key) => [
@@ -175,6 +178,7 @@ export function createApp({
       }
       async function handle() {
         const path = req.url;
+        if (await registryFactsHandler(req, json)) return;
         if (path === "/check") {
           if (req.method !== "POST")
             return error(
