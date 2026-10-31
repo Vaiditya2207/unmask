@@ -526,12 +526,13 @@ function qualified(node, aliases, depth = 0) {
   }
   return "";
 }
-function moduleAliases(all) {
+export const NETWORK_MODULES = new Set(["http", "https", "net"]);
+export function moduleAliases(all, modules = MODULES) {
   const aliases = new Map();
   for (const node of all) {
     if (node.type !== "VariableDeclarator" || !node.init) continue;
     const module = requiredModule(node.init);
-    if (!MODULES.has(module)) continue;
+    if (!modules.has(module)) continue;
     if (node.id.type === "Identifier") aliases.set(node.id.name, module);
     else if (node.id.type === "ObjectPattern")
       for (const property of node.id.properties)
@@ -546,7 +547,7 @@ function moduleAliases(all) {
   for (const node of all)
     if (node.type === "ImportDeclaration") {
       const module = stringLiteral(node.source)?.replace(/^node:/, "");
-      if (!MODULES.has(module)) continue;
+      if (!modules.has(module)) continue;
       for (const item of node.specifiers)
         aliases.set(
           item.local.name,

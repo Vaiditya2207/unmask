@@ -540,3 +540,27 @@ test("linked script limits and missing targets are annotated, and traversal path
   ]);
   assert.deepEqual(behavior(result), []);
 });
+
+test("network calls through import and require aliases of http/https/net are syntax network cues", () => {
+  const artifact = inventory({
+    "esm.mjs": [
+      'import o from "https";',
+      'import * as h from "node:http";',
+      'import { connect } from "net";',
+      'o.get(Buffer.from("aHR0cHM6Ly94LmludmFsaWQ=", "base64").toString());',
+      "h.request({ host: 'x.invalid' });",
+      "connect(443, 'x.invalid');",
+    ].join("\n"),
+    "cjs.js": [
+      "const { get } = require('https');",
+      "get('https://x.invalid');",
+      "const cache = new Map(); cache.get('k');",
+      "const fs = require('fs'); fs.get?.('k');",
+    ].join("\n"),
+  });
+  const result = inspectJavaScript(artifact, null);
+  const network = result.cues
+    .filter((c) => c.ruleId === "syntax-network-call")
+    .map((c) => spanOf(artifact, result, c).split("(")[0]);
+  assert.deepEqual(network.sort(), ["connect", "get", "h.request", "o.get"]);
+});

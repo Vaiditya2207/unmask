@@ -5,6 +5,8 @@ import {
   BEHAVIOR_LIMITS,
   javascriptSignal,
   manifestScriptSpans,
+  moduleAliases,
+  NETWORK_MODULES,
   obfuscationSignals,
   OBFUSCATION_LIMITS,
   scriptSignals,
@@ -88,8 +90,26 @@ function nameOf(node) {
   }
   return "";
 }
-function capability(node) {
+function aliasedName(callee, aliases) {
+  if (callee?.type === "Identifier") return aliases.get(callee.name) ?? "";
+  if (
+    callee?.type === "MemberExpression" &&
+    !callee.computed &&
+    callee.object.type === "Identifier" &&
+    aliases.has(callee.object.name)
+  )
+    return `${aliases.get(callee.object.name)}.${callee.property.name}`;
+  return "";
+}
+function capability(node, aliases) {
   const name = nameOf(node.callee);
+  const aliased = aliases?.size ? aliasedName(node.callee, aliases) : "";
+  if (
+    node.type === "CallExpression" &&
+    aliased &&
+    /^(https?\.(request|get)|net\.connect)$/.test(aliased)
+  )
+    return "network-call";
   if (
     node.type === "CallExpression" &&
     /^(fetch|globalThis.fetch|https?\.(request|get)|net\.connect)$/.test(name)
@@ -314,6 +334,8 @@ export function inspectJavaScript(artifact, source, overrides = {}) {
       coverage.bytes += entry.size;
       const positions = offsets(text);
       const all = nodes(ast);
+      const networkAliases =
+        side === "artifact" ? moduleAliases(all, NETWORK_MODULES) : null;
       if (side === "artifact") {
         const hooks = hookTargets.get(entry.path);
         const found = obfuscationSignals(all);
@@ -352,7 +374,7 @@ export function inspectJavaScript(artifact, source, overrides = {}) {
           }
           continue;
         }
-        const kind = capability(node);
+        const kind = capability(node, networkAliases);
         const signal = javascriptSignal(node);
         if (!kind && !signal) continue;
         if (kind && syntaxCount >= limits.cues) {
