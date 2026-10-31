@@ -205,7 +205,8 @@ export async function publishNpm(
     failed = true;
     failureCode = npmFailureCode(error.stderr);
   }
-  const deadline = now() + 120000;
+  const deadline = now() + 300000;
+  let retryDelayMs = 5000;
   for (let attempt = 0; attempt < 25; attempt++) {
     if (attempt > 0 && now() >= deadline) break;
     if (await published(info, fetchImpl)) {
@@ -214,7 +215,8 @@ export async function publishNpm(
     }
     const remaining = deadline - now();
     if (remaining <= 0 || attempt === 24) break;
-    await wait(Math.min(5000, remaining));
+    await wait(Math.min(retryDelayMs, remaining));
+    retryDelayMs = Math.min(retryDelayMs * 2, 20000);
   }
   throw new Error(
     failed

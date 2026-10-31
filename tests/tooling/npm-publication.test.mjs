@@ -209,10 +209,38 @@ test("successful publish tolerates delayed public registry visibility without pu
   assert.equal(receipt.digest, f.prepared.artifact.digest);
   assert.equal(f.calls.length, 1);
   assert.equal(elapsed, 15000);
-  assert.deepEqual(waits, [5000, 5000, 5000]);
+  assert.deepEqual(waits, [5000, 10000]);
 });
 
-test("missing public version stops after a bounded two-minute observation window", async (t) => {
+for (const uncertain of [false, true]) {
+  test(`registry visibility at 157 seconds recovers ${uncertain ? "an uncertain" : "a successful"} publish without republishing`, async (t) => {
+    const f = fixture(t, { scoped: true });
+    let elapsed = 0;
+    const waits = [];
+    const receipt = await run(f, {
+      now: () => elapsed,
+      pause: async (ms) => {
+        waits.push(ms);
+        elapsed += ms;
+      },
+      execute: (...args) => {
+        f.execute(...args);
+        if (uncertain) throw new Error("Synthetic lost publish response");
+      },
+      fetchImpl: async (...args) =>
+        f.calls.length === 0 || elapsed < 157000
+          ? new Response(null, { status: 404 })
+          : f.fetchImpl(...args),
+    });
+    assert.equal(receipt.registryPublished, true);
+    assert.equal(receipt.digest, f.prepared.artifact.digest);
+    assert.equal(f.calls.length, 1);
+    assert.equal(elapsed, 175000);
+    assert.deepEqual(waits, [5000, 10000, ...Array(8).fill(20000)]);
+  });
+}
+
+test("missing public version stops after a bounded five-minute observation window", async (t) => {
   const f = fixture(t);
   let elapsed = 0;
   let reads = 0;
@@ -229,8 +257,39 @@ test("missing public version stops after a bounded two-minute observation window
     }),
     /without a verified public registry version/u,
   );
-  assert.equal(elapsed, 120000);
+  assert.equal(elapsed, 300000);
   assert.ok(reads <= 26);
+  assert.equal(f.calls.length, 1);
+});
+
+test("late registry integrity mismatch stops observation immediately instead of retrying to a clean result", async (t) => {
+  const f = fixture(t);
+  let elapsed = 0;
+  let mismatchedReads = 0;
+  let waits = 0;
+  await assert.rejects(
+    run(f, {
+      now: () => elapsed,
+      pause: async (ms) => {
+        elapsed += ms;
+        waits++;
+      },
+      fetchImpl: async (...args) => {
+        if (f.calls.length === 0 || elapsed < 157000)
+          return new Response(null, { status: 404 });
+        if (mismatchedReads++ === 0)
+          return Response.json({
+            ...f.metadata,
+            dist: { ...f.metadata.dist, integrity: "sha512-mismatch" },
+          });
+        return f.fetchImpl(...args);
+      },
+    }),
+    /registry identity\/integrity verification failed/u,
+  );
+  assert.equal(elapsed, 175000);
+  assert.equal(mismatchedReads, 1);
+  assert.equal(waits, 10);
   assert.equal(f.calls.length, 1);
 });
 
