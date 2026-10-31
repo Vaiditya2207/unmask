@@ -1,0 +1,19 @@
+node_modules/
+dist/
+build/
+coverage/
+.venv/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+models/
+artifacts/
+
+# Internal planning/research notes: never commit (keep them in ../unmask-research)
+internal/
+research/
+*.internal.md
