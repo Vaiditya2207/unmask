@@ -1,0 +1,50 @@
+{
+  "name": "example",
+  "time": {
+    "1.0.0": "2026-01-01T00:00:00.000Z",
+    "1.1.0": "2026-02-01T00:00:00.000Z",
+    "2.0.0": "2026-03-01T00:00:00.000Z",
+    "2.1.0": "2026-04-01T00:00:00.000Z"
+  },
+  "versions": {
+    "1.0.0": {
+      "name": "example",
+      "version": "1.0.0",
+      "_npmUser": {
+        "name": "fixture-publisher"
+      },
+      "license": "MIT",
+      "engines": {
+        "node": ">=20"
+      },
+      "repository": "https://example.test/repository",
+      "deprecated": ""
+    },
+    "2.0.0": {
+      "name": "example",
+      "version": "2.0.0",
+      "_npmUser": {
+        "name": "fixture-next-publisher"
+      },
+      "license": "Apache-2.0",
+      "engines": {
+        "node": ">=22"
+      },
+      "repository": "https://example.test/repository",
+      "deprecated": ""
+    },
+    "2.1.0": {
+      "name": "example",
+      "version": "2.1.0",
+      "_npmUser": {
+        "name": "fixture-third-publisher"
+      },
+      "license": "MIT",
+      "engines": {
+        "node": ">=24"
+      },
+      "repository": "https://example.test/repository",
+      "deprecated": ""
+    }
+  }
+}
