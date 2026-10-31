@@ -6,5 +6,52 @@
   "workloadIdentityProvider": "projects/386156642190/locations/global/workloadIdentityPools/unmask-github/providers/github",
   "runtimeServiceAccount": "unmask-runtime@unmask-513319.iam.gserviceaccount.com",
   "smokePackage": "zod@4.6.7",
-  "modelExpectation": null
+  "modelExpectation": {
+    "routes": [
+      {
+        "provider": "google",
+        "endpointHost": "generativelanguage.googleapis.com",
+        "modelId": "gemini-3.5-flash",
+        "configHash": "169f8b2bccaf95fd8f9ae71ba42f93495299e96fa7f907841e14ea6e1bdae4cb",
+        "generationConfig": {
+          "temperature": 0,
+          "maxOutputTokens": 4096,
+          "responseMimeType": "application/json",
+          "candidateCount": 1,
+          "thinkingConfig": {
+            "thinkingLevel": "high"
+          }
+        }
+      },
+      {
+        "provider": "google",
+        "endpointHost": "generativelanguage.googleapis.com",
+        "modelId": "gemini-3-flash-preview",
+        "configHash": "169f8b2bccaf95fd8f9ae71ba42f93495299e96fa7f907841e14ea6e1bdae4cb",
+        "generationConfig": {
+          "temperature": 0,
+          "maxOutputTokens": 4096,
+          "responseMimeType": "application/json",
+          "candidateCount": 1,
+          "thinkingConfig": {
+            "thinkingLevel": "minimal"
+          }
+        }
+      },
+      {
+        "provider": "google",
+        "endpointHost": "generativelanguage.googleapis.com",
+        "modelId": "gemma-4-26b-a4b-it",
+        "configHash": "169f8b2bccaf95fd8f9ae71ba42f93495299e96fa7f907841e14ea6e1bdae4cb",
+        "generationConfig": {
+          "temperature": 0,
+          "maxOutputTokens": 1000,
+          "candidateCount": 1,
+          "thinkingConfig": {
+            "thinkingLevel": "minimal"
+          }
+        }
+      }
+    ]
+  }
 }
