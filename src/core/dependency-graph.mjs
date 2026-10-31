@@ -48,8 +48,13 @@ function exact(name, version) {
 function classify(key, entry) {
   if (!object(entry)) return { reason: "invalid-entry" };
   const name = nameFromKey(key);
+  // Only a key outside node_modules with no artifact claim can be local workspace code.
   if (name === null)
-    return entry.link === true || typeof entry.version === "string"
+    return !key.split("/").includes("node_modules") &&
+      typeof entry.version === "string" &&
+      entry.resolved === undefined &&
+      entry.integrity === undefined &&
+      entry.inBundle !== true
       ? { local: true, reason: "workspace-package" }
       : { reason: "invalid-location" };
   if (entry.link === true) return { name, local: true, reason: "linked-local" };

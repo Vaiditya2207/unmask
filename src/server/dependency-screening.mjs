@@ -8,6 +8,8 @@ export const SCREENING_LIMITS = Object.freeze({
   deadlineMs: 60000,
   advisoriesPerDependency: 20,
   admissions: 6,
+  attempts: 30,
+  readers: 2,
   admissionWindowMs: 600000,
 });
 const STATUSES = new Set([
@@ -153,9 +155,13 @@ export async function screenDependencyGraph(
   }
   const count = (status) =>
     results.filter((item) => item.status === status).length;
+  const advisoryBearing = results
+    .filter((item) => item.advisories.length)
+    .map((item) => item.spec);
   const summary = {
     entries: graph.entries,
     identities: results.length,
+    advisoryBearing: advisoryBearing.length,
     found: count("found"),
     noneReported: count("none-reported"),
     incomplete: count("incomplete"),
@@ -172,7 +178,7 @@ export async function screenDependencyGraph(
     lockfileVersion: graph.lockfileVersion,
     root: { ...graph.root, location: "", status: "not-screened" },
     screenedAt: new Date(started).toISOString(),
-    status: results.some((item) => item.advisories.length)
+    status: advisoryBearing.length
       ? "advisories-found"
       : registryComplete
         ? "none-reported"
@@ -183,6 +189,7 @@ export async function screenDependencyGraph(
       projectScreened: false,
     },
     summary,
+    advisoryBearing,
     statement: STATEMENT,
     dependencies: results,
     rejected: graph.rejected.map((item) => ({ ...item, status: "rejected" })),
@@ -234,8 +241,22 @@ export function createDependencyScreening({
   if (lookup !== undefined && typeof lookup !== "function")
     throw new TypeError("advisoryLookup must be a function");
   const limits = { ...SCREENING_LIMITS, ...overrides };
-  let active = false;
-  let admissions = [];
+  let active = false,
+    reading = 0,
+    admissions = [],
+    attempts = [];
+  const limited = (retryAfter) => [
+    429,
+    { error: "screening-limit", retryAfter },
+    { "retry-after": String(retryAfter) },
+  ];
+  const wait = (list, max, now) =>
+    list.length >= max
+      ? Math.max(
+          1,
+          Math.ceil((list[0] + limits.admissionWindowMs - now) / 1000),
+        )
+      : 0;
   return async function handle(req, res, json) {
     if (req.method !== "POST")
       return json(405, { error: "method-not-allowed" }, { allow: "POST" });
@@ -253,47 +274,48 @@ export function createDependencyScreening({
     )
       return json(415, { error: "expected-json-lockfile" });
     if (!lookup) return json(503, { error: "advisory-lookup-unavailable" });
-    const now = clock.now();
-    admissions = admissions.filter((at) => now - at < limits.admissionWindowMs);
-    if (active || admissions.length >= limits.admissions) {
-      const retryAfter = active
-        ? 5
-        : Math.ceil((admissions[0] + limits.admissionWindowMs - now) / 1000);
-      return json(
-        429,
-        { error: "screening-limit", retryAfter },
-        { "retry-after": String(retryAfter) },
-      );
+    let now = clock.now();
+    attempts = attempts.filter((at) => now - at < limits.admissionWindowMs);
+    // Every body attempt is counted and concurrent reads are capped before any screening slot is held.
+    const attemptWait = wait(attempts, limits.attempts, now);
+    if (attemptWait || reading >= limits.readers)
+      return json(...limited(attemptWait || 5));
+    attempts.push(now);
+    let body;
+    reading++;
+    try {
+      body = await readJsonBody(req, limits);
+    } catch (error) {
+      return json(error.status || 400, {
+        error: error.status === 413 ? "lockfile-too-large" : "body-unavailable",
+      });
+    } finally {
+      reading--;
     }
+    let graph;
+    try {
+      graph = parseNpmLockfile(
+        new TextDecoder("utf-8", { fatal: true }).decode(body),
+      );
+    } catch (error) {
+      return json(400, {
+        error: "invalid-lockfile",
+        reason: error instanceof LockfileError ? error.reason : "invalid-utf8",
+      });
+    }
+    now = clock.now();
+    admissions = admissions.filter((at) => now - at < limits.admissionWindowMs);
+    if (active) return json(...limited(5));
+    const admissionWait = wait(admissions, limits.admissions, now);
+    if (admissionWait) return json(...limited(admissionWait));
     active = true;
+    admissions.push(now);
     const controller = new AbortController();
     const abort = () => {
       if (!res.writableEnded) controller.abort();
     };
     res.on("close", abort);
     try {
-      let body;
-      try {
-        body = await readJsonBody(req, limits);
-      } catch (error) {
-        return json(error.status || 400, {
-          error:
-            error.status === 413 ? "lockfile-too-large" : "body-unavailable",
-        });
-      }
-      let graph;
-      try {
-        graph = parseNpmLockfile(
-          new TextDecoder("utf-8", { fatal: true }).decode(body),
-        );
-      } catch (error) {
-        return json(400, {
-          error: "invalid-lockfile",
-          reason:
-            error instanceof LockfileError ? error.reason : "invalid-utf8",
-        });
-      }
-      admissions.push(now);
       const result = await screenDependencyGraph(graph, {
         lookup,
         limits,

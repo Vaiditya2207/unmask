@@ -6,8 +6,12 @@ import {
   parseNpmLockfile,
 } from "../../src/core/dependency-graph.mjs";
 import { lookupNpmAdvisories } from "../../src/core/advisories.mjs";
-import { screenDependencyGraph } from "../../src/server/dependency-screening.mjs";
+import {
+  createDependencyScreening,
+  screenDependencyGraph,
+} from "../../src/server/dependency-screening.mjs";
 import { createApp } from "../../src/server/app.mjs";
+import { createServer, request } from "node:http";
 
 const tgz = (name, version) =>
   `https://registry.npmjs.org/${name}/-/${name.split("/").at(-1)}-${version}.tgz`;
@@ -370,4 +374,101 @@ test("dependency screening API is unavailable without a lookup and admission-lim
   const limited = await post(body);
   assert.equal(limited.status, 429);
   assert.ok(Number(limited.headers.get("retry-after")) > 0);
+});
+
+test("advisories from partial lookups stay counted and malformed artifact keys are rejected", async () => {
+  let page = 0;
+  const partialOsv = async () =>
+    ++page === 1
+      ? new Response(
+          JSON.stringify({
+            vulns: [{ id: "GHSA-pjwm-rvh2-c87w", summary: "Embedded malware" }],
+            next_page_token: "next",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        )
+      : new Response("{}", { status: 500 });
+  const graph = parseNpmLockfile(
+    lockfile({
+      "node_modules/ua-parser-js": registry("ua-parser-js", "0.7.29"),
+      "node_modules/left-pad/evil": registry("left-pad", "1.3.0"),
+      "vendor/evil": registry("evil", "1.0.0"),
+      "packages/ws": { name: "ws", version: "0.0.1" },
+    }),
+  );
+  assert.deepEqual(
+    graph.rejected.map((item) => [item.location, item.reason]),
+    [
+      ["node_modules/left-pad/evil", "invalid-location"],
+      ["vendor/evil", "invalid-location"],
+    ],
+  );
+  assert.deepEqual(graph.local, [
+    { location: "packages/ws", reason: "workspace-package" },
+  ]);
+  const result = await screenDependencyGraph(graph, {
+    lookup: (spec, options) =>
+      lookupNpmAdvisories(spec, { ...options, fetchImpl: partialOsv }),
+  });
+  assert.equal(result.dependencies[0].status, "incomplete");
+  assert.equal(result.status, "advisories-found");
+  assert.equal(result.summary.found, 0);
+  assert.equal(result.summary.advisoryBearing, 1);
+  assert.deepEqual(result.advisoryBearing, ["ua-parser-js@0.7.29"]);
+  assert.equal(result.coverage.registryComplete, false);
+});
+
+test("slow bodies never hold the screening slot and every attempt is bounded", async (t) => {
+  const handle = createDependencyScreening({
+    lookup: async (spec) => clean(spec),
+    limits: { attempts: 4, readers: 2, bodyTimeoutMs: 5000 },
+  });
+  const server = createServer((req, res) =>
+    handle(req, res, (status, value, headers = {}) => {
+      res.writeHead(status, { "content-type": "application/json", ...headers });
+      res.end(JSON.stringify(value));
+    }),
+  );
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(
+    () =>
+      new Promise((resolve) => {
+        server.closeAllConnections();
+        server.close(resolve);
+      }),
+  );
+  const url = `http://127.0.0.1:${server.address().port}/`;
+  const post = (body) =>
+    fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    });
+  const pause = () => new Promise((resolve) => setTimeout(resolve, 50));
+  const trickle = () => {
+    const slow = request(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", "content-length": "100" },
+    });
+    slow.on("error", () => {});
+    slow.write("{");
+    return slow;
+  };
+  const body = JSON.stringify(
+    lockfile({ "node_modules/c": registry("c", "1.0.0") }),
+  );
+  const first = trickle();
+  await pause();
+  assert.equal((await post(body)).status, 200);
+  const second = trickle();
+  await pause();
+  assert.equal((await post(body)).status, 429);
+  first.destroy();
+  second.destroy();
+  await pause();
+  assert.equal((await post(body)).status, 200);
+  const exhausted = await post(body);
+  assert.equal(exhausted.status, 429);
+  assert.ok(Number(exhausted.headers.get("retry-after")) > 0);
 });
