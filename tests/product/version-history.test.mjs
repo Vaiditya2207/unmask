@@ -74,7 +74,7 @@ test("history shows a bounded timeline with deprecations, removals and guidance"
   assert.match(timeline[0], /\[next\] \[recent\]/);
   assert.match(timeline[2], /1\.0\.2 \[removed\]/);
   assert.match(timeline[3], /\[install scripts: postinstall\]/);
-  assert.ok(lines.includes("      deprecated: use 2.x ?[31minstead"));
+  assert.ok(lines.includes("      deprecated: use 2.x \\u001b[31minstead"));
   assert.match(stdout.text(), /unmask check @scope\/fixture@2\.0\.0 --out DIR/);
   assert.match(stdout.text(), /not proof of safety/);
 });
@@ -125,4 +125,47 @@ test("history rejects bad input and reports registry failures without guessing",
     main(["history", "fixture"], { fetchImpl: registry("{").fetchImpl }),
   );
   assert.match(broken.errors[0], /^registry-invalid: /);
+});
+
+test("history keeps full exact version identity for guidance and JSON", async () => {
+  const long = "1.0.0+" + "a".repeat(80);
+  const document = {
+    name: "fixture",
+    "dist-tags": { latest: long, odd: "constructor" },
+    time: { [long]: "2026-01-01T00:00:00Z", "0.9.0": "2025-01-01T00:00:00Z" },
+    versions: {
+      [long]: { version: long },
+      "0.9.0": { version: "0.9.0" },
+    },
+  };
+  const text = capture();
+  await main(["history", "fixture"], {
+    fetchImpl: registry(document).fetchImpl,
+    stdout: text,
+    now,
+  });
+  assert.ok(text.text().includes(`unmask check fixture@${long} --out DIR`));
+  assert.match(text.text(), /1\.0\.0\+a{58}\.\.\. \[latest\]/);
+  const json = capture();
+  await main(["history", "fixture", "--json"], {
+    fetchImpl: registry(document).fetchImpl,
+    stdout: json,
+    now,
+  });
+  const summary = JSON.parse(json.text());
+  assert.equal(summary.candidate, long);
+  assert.equal(summary.distTags.latest, long);
+  assert.equal(summary.shown[0].version, long);
+  assert.equal(summary.totalVersions, 2);
+  const invalidLatest = structuredClone(document);
+  invalidLatest["dist-tags"].latest = "not-semver";
+  invalidLatest.versions["not-semver"] = { version: "not-semver" };
+  invalidLatest.time["not-semver"] = "2026-06-01T00:00:00Z";
+  const fallback = capture();
+  await main(["history", "fixture", "--json"], {
+    fetchImpl: registry(invalidLatest).fetchImpl,
+    stdout: fallback,
+    now,
+  });
+  assert.equal(JSON.parse(fallback.text()).candidate, long);
 });

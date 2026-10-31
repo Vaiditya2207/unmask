@@ -46,12 +46,26 @@ export function parseHistoryArgs(argv) {
   }
   return { ...options, name };
 }
-const clean = (value, max = 160) =>
-  typeof value === "string"
-    ? value.replace(/[\u0000-\u001f\u007f-\u009f‪-‮⁦-⁩]/gu, "?").slice(0, max)
-    : undefined;
+const UNSAFE =
+  /[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/gu;
+const JSON_UNSAFE = /[\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/gu;
+const escapeUnsafe = (text, pattern = UNSAFE) =>
+  text.replace(
+    pattern,
+    (char) => "\\u" + char.charCodeAt(0).toString(16).padStart(4, "0"),
+  );
+const abbreviate = (value, max) =>
+  value.length > max ? value.slice(0, max) + "..." : value;
 const validDate = (value) =>
   typeof value === "string" && Number.isFinite(Date.parse(value));
+function exactPin(name, version) {
+  try {
+    parsePackageSpec(`${name}@${version}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
 export function summarizeHistory(packument, { limit, now = Date.now() }) {
   if (!packument || typeof packument !== "object" || Array.isArray(packument))
     throw new LocalInputError(
@@ -67,7 +81,7 @@ export function summarizeHistory(packument, { limit, now = Date.now() }) {
   const tags = new Map();
   for (const [tag, version] of Object.entries(packument["dist-tags"] ?? {}))
     if (typeof version === "string")
-      tags.set(version, [...(tags.get(version) ?? []), clean(tag, 40)]);
+      tags.set(version, [...(tags.get(version) ?? []), tag]);
   const known = new Set([
     ...Object.keys(versions),
     ...Object.keys(time).filter(
@@ -76,14 +90,20 @@ export function summarizeHistory(packument, { limit, now = Date.now() }) {
   ]);
   const releases = [];
   for (const version of known) {
-    const manifest = versions[version];
+    const manifest = Object.hasOwn(versions, version)
+      ? versions[version]
+      : undefined;
     const available = Boolean(manifest && typeof manifest === "object");
     releases.push({
-      version: clean(version, 64),
+      version,
+      exactPin: exactPin(packument.name, version),
       published: validDate(time[version]) ? time[version] : null,
       available,
       tags: tags.get(version) ?? [],
-      deprecated: available ? (clean(manifest.deprecated) ?? null) : null,
+      deprecated:
+        available && typeof manifest.deprecated === "string"
+          ? manifest.deprecated
+          : null,
       installScripts: available
         ? INSTALL_SCRIPTS.filter(
             (name) => typeof manifest.scripts?.[name] === "string",
@@ -99,7 +119,8 @@ export function summarizeHistory(packument, { limit, now = Date.now() }) {
   releases.sort(
     (a, b) => stamp(b) - stamp(a) || (a.version < b.version ? 1 : -1),
   );
-  const selectable = (release) => release.available && !release.deprecated;
+  const selectable = (release) =>
+    release.available && !release.deprecated && release.exactPin;
   const latest = releases.find(
     (release) => release.version === packument["dist-tags"]?.latest,
   );
@@ -110,13 +131,13 @@ export function summarizeHistory(packument, { limit, now = Date.now() }) {
           (release) => selectable(release) && !release.version.includes("-"),
         );
   return {
-    name: clean(packument.name, 214),
+    name: packument.name,
     totalVersions: releases.length,
     removedVersions: releases.filter((release) => !release.available).length,
     deprecatedVersions: releases.filter((release) => release.deprecated).length,
     distTags: Object.fromEntries(
       [...tags].flatMap(([version, names]) =>
-        names.map((tag) => [tag, clean(version, 64)]),
+        names.map((tag) => [tag, version]),
       ),
     ),
     unpublished: Boolean(time.unpublished),
@@ -129,7 +150,10 @@ export function renderHistory(summary) {
     `History ${summary.name}: ${summary.totalVersions} versions, ${summary.deprecatedVersions} deprecated, ${summary.removedVersions} removed from registry`,
     `Dist-tags: ${
       Object.entries(summary.distTags)
-        .map(([tag, version]) => `${tag}=${version}`)
+        .map(
+          ([tag, version]) =>
+            `${abbreviate(tag, 40)}=${abbreviate(version, 64)}`,
+        )
         .join(", ") || "none"
     }`,
   ];
@@ -138,7 +162,7 @@ export function renderHistory(summary) {
   lines.push(`Newest ${summary.shown.length} releases:`);
   for (const release of summary.shown) {
     const marks = [
-      ...release.tags.map((tag) => `[${tag}]`),
+      ...release.tags.map((tag) => `[${abbreviate(tag, 40)}]`),
       ...(release.available ? [] : ["[removed]"]),
       ...(release.recent ? ["[recent]"] : []),
       ...(release.installScripts.length
@@ -146,10 +170,10 @@ export function renderHistory(summary) {
         : []),
     ];
     lines.push(
-      `  ${(release.published ?? "unknown date").slice(0, 10)}  ${release.version}${marks.length ? " " + marks.join(" ") : ""}`,
+      `  ${(release.published ?? "unknown date").slice(0, 10)}  ${abbreviate(release.version, 64)}${marks.length ? " " + marks.join(" ") : ""}`,
     );
     if (release.deprecated)
-      lines.push(`      deprecated: ${release.deprecated}`);
+      lines.push(`      deprecated: ${abbreviate(release.deprecated, 160)}`);
   }
   lines.push("Selection guidance:");
   if (summary.candidate)
@@ -164,7 +188,7 @@ export function renderHistory(summary) {
     "  Avoid ranges and dist-tags in installs; removed versions cannot be verified from the registry.",
     "  Release age, popularity or a lack of findings is not proof of safety.",
   );
-  return lines.join("\n") + "\n";
+  return lines.map((line) => escapeUnsafe(line)).join("\n") + "\n";
 }
 export async function runHistory(argv, runtime = {}) {
   const { name, limit, json } = parseHistoryArgs(argv);
@@ -200,7 +224,9 @@ export async function runHistory(argv, runtime = {}) {
     );
   const summary = summarizeHistory(packument, { limit, now: runtime.now });
   (runtime.stdout ?? process.stdout).write(
-    json ? JSON.stringify(summary, null, 2) + "\n" : renderHistory(summary),
+    json
+      ? escapeUnsafe(JSON.stringify(summary, null, 2), JSON_UNSAFE) + "\n"
+      : renderHistory(summary),
   );
   return 0;
 }
