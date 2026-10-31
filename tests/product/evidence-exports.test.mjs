@@ -3,9 +3,10 @@ import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { test } from "node:test";
 import { compareInventories } from "../../src/core/compare.mjs";
-import { createReport } from "../../src/core/report.mjs";
+import { canonicalReport, createReport } from "../../src/core/report.mjs";
 import {
   buildCycloneDxSbom,
+  buildEvidenceManifest,
   npmPurl,
 } from "../../src/core/evidence-exports.mjs";
 import { createApp } from "../../src/server/app.mjs";
@@ -20,6 +21,7 @@ function fixture({
   manifest: overrides = {},
   claim,
   manifestStatus,
+  source = { status: "unresolved", method: "unresolved", alternatives: [] },
   expectedIntegrity = { status: "unavailable" },
   files: extraFiles = {},
 } = {}) {
@@ -72,7 +74,7 @@ function fixture({
           }),
       limits: { maxEntries: 20000 },
     },
-    source: { status: "unresolved", method: "unresolved", alternatives: [] },
+    source,
     comparison,
     manifests: {
       artifact:
@@ -327,5 +329,144 @@ test("CycloneDX SBOM keeps nested bundled packages off the root edge list and re
       "expected-integrity",
     ),
     "unavailable",
+  );
+});
+
+test("evidence manifest links identity, digests, source commit and limitations without signing claims", () => {
+  const commit = "c".repeat(40);
+  const report = fixture({
+    source: {
+      status: "selected",
+      method: "publisher-gitHead",
+      commit,
+      alternatives: [],
+    },
+    expectedIntegrity: { algorithm: "sha512", digest: "b".repeat(128) },
+  });
+  const manifest = buildEvidenceManifest(report, {
+    reportId: "f".repeat(32),
+    completedAt: 0,
+    versionInfo,
+  });
+  assert.equal(manifest.manifestVersion, "1");
+  assert.equal(manifest.kind, "unmask-evidence-manifest");
+  assert.equal(manifest.signature.status, "unsigned");
+  assert.doesNotMatch(JSON.stringify(manifest), /"signed"|verified-signature/u);
+  assert.equal(manifest.report.completedAt, "1970-01-01T00:00:00.000Z");
+  assert.equal(manifest.report.servedJsonSha256, sha(JSON.stringify(report)));
+  assert.equal(manifest.report.canonicalSha256, sha(canonicalReport(report)));
+  assert.deepEqual(manifest.analyzer.service, versionInfo);
+  assert.deepEqual(manifest.package, {
+    status: "claim-matches-manifest",
+    name: "@acme/widget",
+    version: "1.2.3+build.1",
+    purl: "pkg:npm/%40acme/widget@1.2.3%2Bbuild.1",
+    requested: { name: "@acme/widget", version: "1.2.3+build.1" },
+    declared: { name: "@acme/widget", version: "1.2.3+build.1" },
+    manifestStatus: "usable",
+  });
+  assert.deepEqual(manifest.artifacts, [
+    {
+      role: "npm-tarball",
+      sha256: "a".repeat(64),
+      sha512: "b".repeat(128),
+      expectedIntegrity: {
+        algorithm: "sha512",
+        digest: "b".repeat(128),
+        status: "matches",
+      },
+      provenance: { status: "not-recorded" },
+    },
+  ]);
+  assert.equal(manifest.inventory.files, 5);
+  assert.equal(
+    manifest.inventory.digestSha256,
+    sha(
+      JSON.stringify(
+        report.files
+          .map((f) => [f.originalPath, f.artifactSha256, f.size])
+          .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)),
+      ),
+    ),
+  );
+  assert.deepEqual(manifest.source, {
+    status: "selected",
+    method: "publisher-gitHead",
+    commit,
+    complete: false,
+    alternatives: 0,
+    label: "Recorded source selection; method states how it was chosen.",
+  });
+  assert.equal(manifest.assessment.safetyVerdict, "not-provided");
+  assert.equal(manifest.assessment.aiStatus, "disabled");
+  const limits = manifest.assessment.limitations.join("\n");
+  for (const pattern of [
+    /^Unsigned manifest/mu,
+    /not executed/u,
+    /transitive dependencies were not resolved/u,
+    /Vulnerability advisories are not included/u,
+    /does not establish that the package is safe/u,
+    /No source archive was compared/u,
+    /publisher-gitHead; the recorded commit is not cryptographically verified/u,
+    /AI review status is disabled/u,
+  ])
+    assert.match(limits, pattern);
+  assert.deepEqual(manifest.exports, {
+    report: `/r/${"f".repeat(32)}.json`,
+    details: `/r/${"f".repeat(32)}.details.json`,
+    sbom: `/r/${"f".repeat(32)}.cdx.json`,
+    sbomServedSha256: sha(
+      JSON.stringify(buildCycloneDxSbom(report, { toolVersion: "9.9.9" })),
+    ),
+  });
+});
+
+test("evidence manifest surfaces integrity mismatch and identity conflict", () => {
+  const manifest = buildEvidenceManifest(
+    fixture({
+      claim: { name: "other", version: "2.0.0" },
+      expectedIntegrity: { algorithm: "sha256", digest: "0".repeat(64) },
+    }),
+  );
+  assert.equal(manifest.artifacts[0].expectedIntegrity.status, "mismatch");
+  assert.equal(manifest.package.status, "claim-conflicts-with-manifest");
+  assert.deepEqual(manifest.assessment.findings, [
+    { ruleId: "identity-claim-conflict", count: 1 },
+    { ruleId: "integrity-mismatch", count: 1 },
+  ]);
+  assert.equal(manifest.assessment.policyExitCode, 3);
+  assert.ok(
+    manifest.assessment.limitations.includes(
+      "Requested identity conflicts with the artifact manifest.",
+    ),
+  );
+  assert.equal(manifest.report.id, null);
+  assert.equal(manifest.analyzer.service, null);
+  assert.equal(manifest.exports.sbom, null);
+});
+
+test("evidence manifest route serves the job identity and links the served SBOM bytes", async (t) => {
+  const s = await start(t, async () => fixture());
+  assert.equal((await s.get(`/r/${"f".repeat(32)}.evidence.json`)).status, 404);
+  const location = await s.submit();
+  const response = await s.get(location + ".evidence.json");
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type"), /^application\/json/u);
+  assert.equal(
+    response.headers.get("content-disposition"),
+    'attachment; filename="unmask-evidence-manifest.json"',
+  );
+  const manifest = await response.json();
+  assert.equal(`/r/${manifest.report.id}`, location);
+  assert.match(manifest.report.completedAt, /^\d{4}-\d\d-\d\dT/u);
+  assert.deepEqual(manifest.analyzer.service, versionInfo);
+  const rawBytes = await (await s.get(location + ".json")).text();
+  assert.equal(manifest.report.servedJsonSha256, sha(rawBytes));
+  const sbomBytes = await (await s.get(manifest.exports.sbom)).text();
+  assert.equal(manifest.exports.sbomServedSha256, sha(sbomBytes));
+  const page = await (await s.get(location)).text();
+  assert.match(
+    page,
+    /\.evidence\.json" download="unmask-evidence-manifest\.json"/u,
   );
 });

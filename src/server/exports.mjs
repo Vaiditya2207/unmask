@@ -1,5 +1,6 @@
 import {
   buildCycloneDxSbom,
+  buildEvidenceManifest,
   CYCLONEDX_MEDIA_TYPE,
 } from "../core/evidence-exports.mjs";
 
@@ -9,6 +10,16 @@ const EXPORTS = {
     filename: "unmask-sbom.cdx.json",
     build: (report, versionInfo) =>
       buildCycloneDxSbom(report, { toolVersion: versionInfo.version }),
+  },
+  "evidence.json": {
+    type: "application/json; charset=utf-8",
+    filename: "unmask-evidence-manifest.json",
+    build: (report, versionInfo, job) =>
+      buildEvidenceManifest(report, {
+        reportId: job.id,
+        completedAt: job.finishedAt,
+        versionInfo,
+      }),
   },
 };
 
@@ -40,7 +51,7 @@ export function serveExport({ path, queue, versionInfo, send }) {
   const spec = EXPORTS[route.kind];
   let body;
   try {
-    body = spec.build(job.report, versionInfo);
+    body = spec.build(job.report, versionInfo, job);
   } catch {
     json(422, { error: "report-not-exportable" });
     return true;

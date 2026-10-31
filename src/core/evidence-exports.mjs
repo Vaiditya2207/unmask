@@ -1,4 +1,5 @@
-import { validateReport } from "./report.mjs";
+import { createHash } from "node:crypto";
+import { canonicalReport, validateReport } from "./report.mjs";
 
 export const SBOM_LIMITS = Object.freeze({
   maxComponents: 2000,
@@ -305,5 +306,170 @@ export function buildCycloneDxSbom(report, { toolVersion = null } = {}) {
           ]
         : []),
     ],
+  };
+}
+
+const sha256 = (text) => createHash("sha256").update(text).digest("hex");
+
+function limitations(report, identity) {
+  const coverage = report.coverage;
+  return [
+    "Unsigned manifest: digests support integrity comparison only and do not prove authorship or origin.",
+    "Static bounded analysis; package code, install scripts and builds were not executed.",
+    "Dependency versions and transitive dependencies were not resolved.",
+    "Vulnerability advisories are not included; consult the report and details exports.",
+    "Absence of a current finding does not establish that the package is safe.",
+    ...(coverage.inventory.complete
+      ? []
+      : ["Artifact inventory is incomplete; counts are lower bounds."]),
+    ...(coverage.sourceAvailable
+      ? coverage.sourceComplete
+        ? []
+        : ["Source archive was incomplete; comparison is partial."]
+      : ["No source archive was compared with the published artifact."]),
+    ...(["provenance-verified"].includes(report.source.method)
+      ? []
+      : [
+          `Source selection method is ${report.source.method}; the recorded commit is not cryptographically verified by this manifest.`,
+        ]),
+    ...(report.failures.length
+      ? [
+          `Analysis recorded ${report.failures.length} deterministic failure(s).`,
+        ]
+      : []),
+    ...(report.model.status === "complete"
+      ? []
+      : [
+          `AI review status is ${report.model.status}; no AI conclusion is included.`,
+        ]),
+    ...(identity.status === "claim-conflicts-with-manifest"
+      ? ["Requested identity conflicts with the artifact manifest."]
+      : []),
+  ];
+}
+
+export function buildEvidenceManifest(
+  report,
+  { reportId = null, completedAt = null, versionInfo = null } = {},
+) {
+  validateReport(report);
+  const identity = reportIdentity(report);
+  const { declaredManifest, ...packageIdentity } = identity;
+  const artifact = report.inputs.artifact;
+  const expected = artifact.expectedIntegrity;
+  const inventoryLines = report.files
+    .map((file) => [file.originalPath, file.artifactSha256, file.size])
+    .sort((a, b) => order(a[0], b[0]));
+  const ruleCounts = new Map();
+  for (const finding of report.policy.findings)
+    ruleCounts.set(finding.ruleId, (ruleCounts.get(finding.ruleId) ?? 0) + 1);
+  const sbom = buildCycloneDxSbom(report, {
+    toolVersion: versionInfo?.version ?? null,
+  });
+  const path = reportId ? `/r/${reportId}` : null;
+  return {
+    manifestVersion: "1",
+    kind: "unmask-evidence-manifest",
+    signature: {
+      status: "unsigned",
+      note: "No cryptographic signature or attestation is attached to this manifest.",
+    },
+    report: {
+      id: reportId,
+      completedAt:
+        typeof completedAt === "number"
+          ? new Date(completedAt).toISOString()
+          : null,
+      schemaVersion: report.schemaVersion,
+      servedJsonSha256: sha256(JSON.stringify(report)),
+      canonicalSha256: sha256(canonicalReport(report)),
+      canonicalization:
+        "Sorted-key JSON of the report excluding run and model, newline terminated.",
+    },
+    analyzer: {
+      version: report.analyzerVersion,
+      policyVersion: report.policyVersion,
+      limitsVersion: report.limitsVersion,
+      limitsDigest: report.inputs.limitsDigest ?? null,
+      service: versionInfo
+        ? {
+            version: versionInfo.version,
+            commit: versionInfo.commit,
+            tarballSha256: versionInfo.tarballSha256,
+          }
+        : null,
+    },
+    package: packageIdentity,
+    artifacts: [
+      {
+        role: "npm-tarball",
+        sha256: artifact.sha256,
+        sha512: artifact.sha512,
+        expectedIntegrity: expected
+          ? expected.status === "unavailable"
+            ? { status: "unavailable" }
+            : {
+                algorithm: expected.algorithm,
+                digest: expected.digest,
+                status:
+                  expected.digest === artifact[expected.algorithm]
+                    ? "matches"
+                    : "mismatch",
+              }
+          : { status: "not-recorded" },
+        provenance: artifact.provenance ?? { status: "not-recorded" },
+      },
+      ...["sourceArchive", "registryDocument"]
+        .filter((name) => report.inputs[name] !== undefined)
+        .map((name) => ({
+          role:
+            name === "sourceArchive" ? "source-archive" : "registry-document",
+          sha256: report.inputs[name].sha256,
+          kind: report.inputs[name].kind ?? null,
+        })),
+    ],
+    inventory: {
+      files: report.coverage.inventory.files,
+      bytes: report.coverage.inventory.bytes,
+      complete: report.coverage.inventory.complete,
+      digestSha256: sha256(JSON.stringify(inventoryLines)),
+      digestInput:
+        "JSON array of [originalPath, artifactSha256, size] sorted by originalPath.",
+    },
+    source: {
+      status: report.source.status,
+      method: report.source.method,
+      commit: report.source.commit ?? null,
+      complete: report.source.complete,
+      alternatives: report.source.alternatives.length,
+      label: "Recorded source selection; method states how it was chosen.",
+    },
+    assessment: {
+      policyExitCode: report.policy.exitCode,
+      findings: [...ruleCounts]
+        .sort((a, b) => order(a[0], b[0]))
+        .map(([ruleId, count]) => ({ ruleId, count })),
+      failures: report.failures.map((failure) => failure.code),
+      coverage: {
+        complete: report.coverage.complete,
+        sourceAvailable: report.coverage.sourceAvailable,
+        sourceComplete: report.coverage.sourceComplete,
+        states: Object.fromEntries(
+          Object.entries(report.coverage.states).map(([key, value]) => [
+            key,
+            { files: value.files, bytes: value.bytes },
+          ]),
+        ),
+      },
+      aiStatus: report.model.status,
+      safetyVerdict: "not-provided",
+      limitations: limitations(report, identity),
+    },
+    exports: {
+      report: path && `${path}.json`,
+      details: path && `${path}.details.json`,
+      sbom: path && `${path}.cdx.json`,
+      sbomServedSha256: sha256(JSON.stringify(sbom)),
+    },
   };
 }
