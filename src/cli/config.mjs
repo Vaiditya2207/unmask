@@ -19,7 +19,12 @@ export function parseCommandOptions(args, flags = ["--json"]) {
     const arg = args[index];
     if (arg === "--project") {
       const value = args[++index];
-      if (options.project !== undefined || value === undefined || !value)
+      if (
+        options.project !== undefined ||
+        value === undefined ||
+        !value ||
+        value.startsWith("--")
+      )
         throw new GuardConfigError(
           "missing-value",
           "--project requires one directory",

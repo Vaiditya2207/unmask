@@ -113,6 +113,12 @@ test("config rejects invalid enums, unknown keys and unsafe unknown handling wit
     assert.equal(await runConfig(args, run.runtime), 2, args.join(" "));
     assert.match(run.err(), /^[a-z-]+: /);
   }
+  const swallowed = io(root);
+  assert.equal(
+    await runConfig(["show", "--project", "--json"], swallowed.runtime),
+    2,
+  );
+  assert.match(swallowed.err(), /^missing-value:/);
   assert.deepEqual(await readdir(root), []);
 });
 
