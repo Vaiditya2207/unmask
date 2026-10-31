@@ -19,6 +19,7 @@ import {
   renderError,
   terminalStyle,
 } from "./terminal.mjs";
+import { discoveryCommand, isDiscoveryRequest } from "./discovery.mjs";
 
 const names = {
   "--tarball": "tarballPath",
@@ -175,6 +176,7 @@ export async function main(argv = process.argv.slice(2), runtime = {}) {
   const errorStyle = terminalStyle(stderr, env);
   let progress;
   try {
+    if (isDiscoveryRequest(argv)) return discoveryCommand(argv, runtime);
     if (argv[0] === "file") return await fileCommand(argv.slice(1), runtime);
     if (argv[0] === "files") return await filesCommand(argv.slice(1), runtime);
     if (argv[0] === "info") return await infoCommand(argv.slice(1), runtime);
