@@ -1,5 +1,6 @@
 import {
   buildReportFileInventory,
+  buildReportFileEvidence,
   explorationJson,
 } from "../core/report-exploration.mjs";
 
@@ -20,28 +21,40 @@ function integer(params, name, fallback) {
 }
 
 export function handleReportExploration({ path, getJob, send }) {
-  const match = /^\/r\/([a-f0-9]{32})\/files\.json(?:\?([^#]*))?$/.exec(path);
+  const match = /^\/r\/([a-f0-9]{32})\/(files|file)\.json(?:\?([^#]*))?$/.exec(
+    path,
+  );
   if (!match) return false;
   const json = (status, body, headers = {}) =>
     send(status, explorationJson(body), "application/json; charset=utf-8", {
-      "content-disposition": 'attachment; filename="unmask-files.json"',
+      "content-disposition":
+        match[2] === "file"
+          ? 'attachment; filename="unmask-file-evidence.json"'
+          : 'attachment; filename="unmask-files.json"',
       ...headers,
     });
+  const drilldown = match[2] === "file";
   let options;
   try {
-    const params = queryParameters(match[2] ?? "", [
-      "state",
-      "prefix",
-      "offset",
-      "limit",
-    ]);
-    options = {
-      state: params.get("state") ?? "all",
-      prefix: params.get("prefix") ?? "",
-      offset: integer(params, "offset", 0),
-      limit: integer(params, "limit", 50),
-    };
-    buildReportFileInventory({ files: [] }, options);
+    if (drilldown) {
+      const params = queryParameters(match[3] ?? "", ["path", "originalPath"]);
+      options = Object.fromEntries(params);
+      buildReportFileEvidence({ files: [] }, options);
+    } else {
+      const params = queryParameters(match[3] ?? "", [
+        "state",
+        "prefix",
+        "offset",
+        "limit",
+      ]);
+      options = {
+        state: params.get("state") ?? "all",
+        prefix: params.get("prefix") ?? "",
+        offset: integer(params, "offset", 0),
+        limit: integer(params, "limit", 50),
+      };
+      buildReportFileInventory({ files: [] }, options);
+    }
   } catch {
     json(400, { error: "invalid-query" });
     return true;
@@ -58,10 +71,12 @@ export function handleReportExploration({ path, getJob, send }) {
       },
       pending ? { "retry-after": "3" } : {},
     );
-  } else
-    json(200, {
-      reportId: match[1],
-      ...buildReportFileInventory(job.report, options),
-    });
+  } else {
+    const body = drilldown
+      ? buildReportFileEvidence(job.report, options)
+      : buildReportFileInventory(job.report, options);
+    if (!body) json(404, { error: "file-unavailable" });
+    else json(200, { reportId: match[1], ...body });
+  }
   return true;
 }
