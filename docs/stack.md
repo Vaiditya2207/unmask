@@ -78,7 +78,7 @@ The shared factory is disabled unless `UNMASK_MODEL=on` and
 `UNMASK_MODEL_QUOTA_VERIFIED=true`. Positive integer request-per-minute,
 input-tokens-per-minute and daily request limits are mandatory. The preferred
 configured key is `GEMINI_API_KEY`; `UNMASK_MODEL_KEY` is an optional compatible
-alias, and conflicting values are rejected. Configuration values are private
+alias, and conflicting values are rejected. API-key values are private
 server/CLI inputs, never browser assets or report fields.
 
 The CLI separately requires `--allow-model`. Hosted explanation runs in the main
