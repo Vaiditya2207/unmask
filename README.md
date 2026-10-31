@@ -251,22 +251,35 @@ Excerpts leave the machine only if you add `--allow-model` and configure a provi
 **Commands in this build.** `node dist/cli/main.mjs --help` (or `unmask --help`
 once installed) prints the same list, and `unmask help COMMAND` shows its usage.
 
-| Command     | What it does                                                                   |
-| ----------- | ------------------------------------------------------------------------------ |
-| `check`     | Check one exact version through the hosted service, or a local tarball offline |
-| `compare`   | Compare scripts, dependencies and files between two exact versions             |
-| `history`   | Show a bounded registry release timeline with exact-version guidance           |
-| `scan`      | Resolve a dist-tag such as `latest` to an exact version, then check it         |
-| `batch`     | Check several explicit exact versions, one at a time                           |
-| `audit`     | Check the exact versions locked in a `package-lock.json`, bounded              |
-| `why`       | Explain which dependency paths bring a package into a lockfile                 |
-| `preflight` | For CI: check only lockfile entries that changed against a baseline lockfile   |
-| `watch`     | Opt-in: watch a lockfile and check each change while you work                  |
-| `doctor`    | Diagnose Node, the configured service and project guard configuration          |
-| `cache`     | Import, inspect and explicitly prune local report snapshots                    |
+| Command       | What it does                                                                   |
+| ------------- | ------------------------------------------------------------------------------ |
+| `check`       | Check one exact version through the hosted service, or a local tarball offline |
+| `install`     | Explain the guarded install path and require an exact lockfile plan            |
+| `ci`          | Screen the exact lockfile plan before invoking npm ci                          |
+| `enable`      | Print explicit reversible shell integration                                    |
+| `disable`     | Print how to remove the shell integration                                      |
+| `audit`       | Check exact versions locked in a package-lock.json, with bounded coverage      |
+| `why`         | Explain dependency paths recorded in the lockfile                              |
+| `info`        | Show hosted package metadata, scripts, dependencies and recorded assessment    |
+| `files`       | List a bounded hosted package file inventory                                   |
+| `file`        | Inspect recorded file evidence using a report-bound file selector              |
+| `compare`     | Compare scripts, dependencies and files between two exact versions             |
+| `history`     | Show a bounded registry release timeline with exact-version guidance           |
+| `config`      | Manage project-local guard policy settings                                     |
+| `exceptions`  | Manage explicit expiring exact-version guard exceptions                        |
+| `init`        | Create project guard configuration explicitly                                  |
+| `doctor`      | Diagnose Node, service reachability and project guard configuration            |
+| `cache`       | Import, inspect and explicitly prune local report snapshots                    |
+| `sarif`       | Export recorded findings as SARIF from an existing report                      |
+| `annotations` | Produce escaped CI annotations and a summary from an existing report           |
+| `watch`       | Opt in to watch a lockfile and check changes                                   |
+| `preflight`   | Check changed lockfile entries against a baseline for CI                       |
+| `scan`        | Resolve a dist-tag to an exact version, then check it                          |
+| `batch`       | Check several explicit exact versions serially with duplicate coalescing       |
 
-These commands report evidence and coverage; none of them blocks an install, and
-exit `0` never means a package is safe.
+The explicit install guard can block before npm when policy or incomplete evidence
+requires it. Inspection commands report recorded evidence and coverage; exit `0`
+never means a package is safe.
 
 **Run the website locally:**
 

@@ -189,7 +189,7 @@ test("advisories and incomplete checks raise CI exit codes and the summary file 
     dir,
   ]);
   assert.equal(refused.status, 2);
-  assert.match(refused.stderr, /^output-write-failed:/);
+  assert.match(refused.stderr, /^unmask error output-write-failed:/);
   const target = path.join(root, "target.md");
   await writeFile(target, "keep\n");
   const link = path.join(root, "link.md");
