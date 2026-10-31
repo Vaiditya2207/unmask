@@ -225,6 +225,13 @@ export function validateReport(report) {
       typeof report.run === "object",
     "Invalid model or run section",
   );
+  requireValue(
+    report.model.assessment === undefined ||
+      (report.model.status === "complete" &&
+        report.model.assessment?.source === "model" &&
+        typeof report.model.summary === "string"),
+    "Model assessment requires a completed model result",
+  );
   const coverage = report.coverage;
   requireValue(
     coverage &&

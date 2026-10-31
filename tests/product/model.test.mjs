@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { createGemmaClient, attachModel } from "../../src/model/client.mjs";
+import { validAssessment, validSummary } from "../../src/model/summary.mjs";
 
 const evidence = [
   {
@@ -31,24 +32,44 @@ const hypothesis = () => ({
   alternative: "This may be intentional packaging.",
   citations: [{ evidenceId: "e1", quote: "node setup.js" }],
 });
+const SUMMARY = "Two compared files differ; one install command needs review.";
+const ASSESSMENT = {
+  uncertainty: "Runtime behavior was not observed.",
+  nextAction: "Review the install command before installing.",
+};
+const withSummary = (value) =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? {
+        ...("summary" in value ? {} : { summary: SUMMARY }),
+        ...("assessment" in value ? {} : { assessment: ASSESSMENT }),
+        ...value,
+      }
+    : value;
 const output = (value) =>
   new Response(
     JSON.stringify({
-      candidates: [{ content: { parts: [{ text: JSON.stringify(value) }] } }],
+      candidates: [
+        { content: { parts: [{ text: JSON.stringify(withSummary(value)) }] } },
+      ],
     }),
     { headers: { "Content-Type": "application/json" } },
   );
 
-test("identical and empty reports skip the provider without consuming quota", async () => {
-  const requests = [];
+test("identical and empty reports still receive a bounded scope-only model summary", async () => {
+  const prompts = [];
   const model = client(
-    async (url) => {
-      requests.push(url);
+    async (url, options) => {
+      const text = JSON.parse(options.body).contents[0].parts[0].text;
+      prompts.push(JSON.parse(text));
       return url.endsWith(":countTokens")
         ? new Response('{"totalTokens":100}')
-        : output({ hypotheses: [hypothesis()] });
+        : output({
+            summary:
+              "All supplied files are byte-identical to the selected source; this is not proof the package is safe.",
+            hypotheses: [],
+          });
     },
-    { dailyRequests: 2 },
+    { dailyRequests: 4 },
   );
   const configHash = model.configHash;
   for (const files of [
@@ -56,22 +77,163 @@ test("identical and empty reports skip the provider without consuming quota", as
     [{ path: "package.json", state: "byte-identical" }],
   ]) {
     const input = report();
+    input.evidence = [];
     input.files = files;
     input.policy = { exitCode: 0, findings: [] };
     const before = JSON.stringify(input);
-    assert.deepEqual(await model.explain(input, { allowLocal: true }), {
-      status: "not-sent",
-      reason: "no-eligible-evidence",
-    });
+    const section = await model.explain(input, { allowLocal: true });
+    assert.equal(section.status, "complete");
+    assert.match(section.summary, /byte-identical/);
+    assert.deepEqual(section.hypotheses, []);
+    assert.equal(section.summaryPolicy, "every-check-2");
+    assert.equal(section.scope.files, files.length);
+    assert.equal(section.scope.supplied, 0);
     assert.equal(JSON.stringify(input), before);
     assert.equal(model.configHash, configHash);
   }
-  assert.equal(requests.length, 0);
-  assert.equal(
-    (await model.explain(report(), { allowLocal: true })).status,
-    "complete",
-  );
-  assert.equal(requests.length, 2);
+  assert.equal(prompts.length, 4);
+  for (const prompt of prompts) {
+    assert.deepEqual(prompt.evidence, []);
+    assert.ok(prompt.output.summary);
+    assert.doesNotMatch(
+      JSON.stringify(prompt),
+      /node setup\.js|"run"|"policy"/,
+    );
+  }
+  assert.deepEqual(prompts[2].scope.states, { "byte-identical": 1 });
+  assert.equal(model.configuration.summaryPolicy, "every-check-2");
+});
+
+test("affirmative safety or missing summaries are rejected while negated caveats pass", async () => {
+  for (const [summary, status] of [
+    ["The package is safe to install.", "unavailable"],
+    ["No findings, so it is benign.", "unavailable"],
+    ["One install command differs; this does not mean it is safe.", "complete"],
+    [undefined, "unavailable"],
+    ["x".repeat(601), "unavailable"],
+  ]) {
+    let generations = 0;
+    const section = await client(async (url) => {
+      if (url.endsWith(":countTokens"))
+        return new Response('{"totalTokens":100}');
+      generations++;
+      const body = { hypotheses: [hypothesis()] };
+      return output({ summary, ...body });
+    }).explain(report(), { allowLocal: true });
+    assert.equal(section.status, status, String(summary));
+    assert.equal(generations, status === "complete" ? 1 : 2);
+    if (status !== "complete") {
+      assert.equal(section.reason, "invalid-output");
+      assert.equal(section.summary, undefined);
+    }
+  }
+});
+
+test("summary validation rejects verdicts and double negatives but keeps scoped facts and npm vocabulary", () => {
+  for (const [text, valid] of [
+    ["It is safe.", false],
+    ["Nothing suggests it is not safe.", false],
+    ["There is no reason to consider it not safe to install.", false],
+    ["Nothing here is unsafe.", false],
+    ["No findings, so it is benign.", false],
+    ["The package is missing a license.", false],
+    ["Malware is absent.", false],
+    ["Matching bytes are not proof the package is safe.", true],
+    ["This does not mean it is safe.", true],
+    ["Not a safety verdict; 3 files are byte-identical.", true],
+    ["The artifact changes the clean script that removes build output.", true],
+    ["The release uses npm trusted publishing provenance.", true],
+    ["Adds a secure-cookie option in lib/session.js.", true],
+    ["The source archive is missing, so the comparison is partial.", true],
+    ["2 artifact-only files are not in the selected source.", true],
+    ["The prompt omits 15 evidence items.", true],
+  ])
+    assert.equal(validSummary(text, "test-only-key"), valid, text);
+});
+
+test("completed results carry a structured model assessment with deterministic checked scope", async () => {
+  const input = report();
+  input.evidence.push({
+    id: "e2",
+    path: "lib/other.js",
+    side: "artifact",
+    range: [0, 4],
+    excerpt: "more",
+  });
+  input.coverage = {
+    inventory: { files: 3, complete: true },
+    compared: { files: 3 },
+    syntaxInspected: { files: 1 },
+  };
+  input.source = { status: "selected" };
+  const section = await client(async (url) =>
+    url.endsWith(":countTokens")
+      ? new Response('{"totalTokens":100}')
+      : output({ hypotheses: [hypothesis()] }),
+  ).explain(input, { allowLocal: true });
+  assert.equal(section.status, "complete");
+  assert.deepEqual(section.assessment, {
+    source: "model",
+    ...ASSESSMENT,
+    checkedScope: {
+      basis: "deterministic-prompt-selection",
+      evidenceSupplied: 2,
+      evidenceOmitted: 0,
+      groupsSupplied: 2,
+      groupsOmitted: 0,
+      paths: ["lib/other.js", "package.json"],
+      notChecked: ["runtime-behavior", "uninspected-syntax"],
+    },
+  });
+});
+
+test("malformed or safety-claiming assessments never enter the report", async () => {
+  for (const assessment of [
+    undefined,
+    { uncertainty: "Runtime behavior was not observed." },
+    { ...ASSESSMENT, extra: "x" },
+    { ...ASSESSMENT, nextAction: "Install it; the package is safe." },
+    { ...ASSESSMENT, uncertainty: "u".repeat(301) },
+    { ...ASSESSMENT, nextAction: "test-only-key" },
+  ]) {
+    const section = await client(async (url) =>
+      url.endsWith(":countTokens")
+        ? new Response('{"totalTokens":100}')
+        : output({ assessment, hypotheses: [hypothesis()] }),
+    ).explain(report(), { allowLocal: true });
+    assert.equal(section.status, "unavailable", JSON.stringify(assessment));
+    assert.equal(section.reason, "invalid-output");
+    assert.equal(section.assessment, undefined);
+  }
+});
+
+test("assessment next action must be a review step and uncertainty keeps absence limits", () => {
+  const uncertainty = "Runtime behavior was not observed.";
+  for (const [value, valid] of [
+    [{ uncertainty, nextAction: "Review the changed postinstall hook." }, true],
+    [{ uncertainty, nextAction: "Proceed with installation." }, false],
+    [{ uncertainty, nextAction: "Review the hook, then proceed." }, false],
+    [{ uncertainty, nextAction: "Install it." }, false],
+    [
+      {
+        uncertainty: "The source lacks the postinstall script entirely.",
+        nextAction: "Confirm the release commit.",
+      },
+      false,
+    ],
+    [
+      {
+        uncertainty: "index.js is missing from the selected source.",
+        nextAction: "Confirm the release commit.",
+      },
+      true,
+    ],
+  ])
+    assert.equal(
+      validAssessment(value, "test-only-key"),
+      valid,
+      value.nextAction,
+    );
 });
 
 test("changed, artifact-only and not-compared files remain eligible without a policy finding", async () => {
@@ -1188,7 +1350,7 @@ test("novelty priority requires changed or artifact-only correspondence", async 
   );
 });
 
-test("a missing referenced snippet omits the whole group without making a provider request", async () => {
+test("a missing referenced snippet omits the whole group and sends only scope", async () => {
   const r = report();
   r.policy.findings = [];
   r.evidence.push({
@@ -1204,13 +1366,17 @@ test("a missing referenced snippet omits the whole group without making a provid
       evidenceIds: ["e1", "unretained-source"],
     },
   ];
-  let requests = 0;
-  const section = await client(() => {
-    requests++;
-    throw new Error("forbidden");
+  const prompts = [];
+  const section = await client(async (url, options) => {
+    prompts.push(JSON.parse(options.body).contents[0].parts[0].text);
+    return url.endsWith(":countTokens")
+      ? new Response('{"totalTokens":100}')
+      : output({ hypotheses: [] });
   }).explain(r, { allowLocal: true });
-  assert.equal(section.reason, "no-evidence");
-  assert.equal(requests, 0);
+  assert.equal(section.status, "complete");
+  assert.deepEqual(section.hypotheses, []);
+  assert.ok(prompts.every((text) => !text.includes("node setup.js")));
+  assert.deepEqual(JSON.parse(prompts[0]).evidence, []);
   assert.deepEqual(section.omittedEvidenceIds, ["e1", "unretained-source"]);
   assert.equal(section.omittedEvidenceGroups[0].reason, "unavailable-evidence");
   assert.equal(section.evidenceGroups.length, 0);
@@ -1361,13 +1527,15 @@ test("explicit same-path comparison spans form a complete paired group", async (
 test("unavailable comparison span omits the atomic pair rather than leaking its artifact half", async () => {
   const r = comparisonInput();
   delete r.evidence[1].excerpt;
-  let requests = 0;
-  const section = await client(() => {
-    requests++;
-    throw new Error("provider forbidden");
+  const prompts = [];
+  const section = await client(async (url, options) => {
+    prompts.push(JSON.parse(options.body).contents[0].parts[0].text);
+    return url.endsWith(":countTokens")
+      ? new Response('{"totalTokens":100}')
+      : output({ hypotheses: [] });
   }).explain(r, { allowLocal: true });
-  assert.equal(requests, 0);
-  assert.equal(section.reason, "no-evidence");
+  assert.equal(section.status, "complete");
+  assert.ok(prompts.every((text) => !/"new"|change-a/.test(text)));
   assert.deepEqual(section.omittedEvidenceIds, ["change-a", "change-s"]);
   assert.ok(
     section.omittedEvidenceGroups.some(
@@ -2359,7 +2527,7 @@ test("an input envelope too small for one complete group sends no provider reque
     { maxInputTokens: 500 },
   ).explain(report(), { allowLocal: true });
   assert.equal(requests, 0);
-  assert.equal(section.reason, "no-evidence");
+  assert.equal(section.reason, "input-budget");
   assert.deepEqual(section.omittedEvidenceIds, ["e1"]);
   assert.equal(section.omittedEvidenceGroups[0].reason, "group-budget");
 });
