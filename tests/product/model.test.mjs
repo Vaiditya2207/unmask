@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { createGemmaClient, attachModel } from "../../src/model/client.mjs";
 import {
+  consistentWithScope,
   unfence,
   validAssessment,
   validSummary,
@@ -307,6 +308,69 @@ test("one whole-body code fence is unwrapped but prose-wrapped or control-bearin
   ])
     assert.equal(unfence(raw), raw);
   assert.ok(performance.now() - started < 250);
+});
+
+test("summaries cannot contradict deterministic finding, cue or correspondence counts", async () => {
+  const mixed = {
+    findings: 1,
+    cues: 2,
+    states: { changed: 1, "byte-identical": 3 },
+  };
+  const identical = { findings: 0, cues: 0, states: { "byte-identical": 4 } };
+  for (const [text, scope, valid] of [
+    ["No policy findings were recorded.", mixed, false],
+    ["There are zero findings and no review cues.", mixed, false],
+    ["All files are byte-identical to the selected source.", mixed, false],
+    ["No files changed.", mixed, false],
+    ["Every file matches the selected source.", mixed, false],
+    ["All files are byte-identical to the selected source.", identical, true],
+    ["No policy findings were recorded.", identical, true],
+    ["One lifecycle finding needs review.", mixed, true],
+    [
+      "No findings in index.js; one lifecycle finding in package.json.",
+      mixed,
+      true,
+    ],
+    ["3 of 4 files are byte-identical; package.json changed.", mixed, true],
+  ])
+    assert.equal(consistentWithScope(text, scope), valid, text);
+  let generations = 0;
+  const section = await client(async (url) => {
+    if (url.endsWith(":countTokens"))
+      return new Response('{"totalTokens":100}');
+    generations++;
+    return output({
+      summary: "No policy findings were recorded.",
+      hypotheses: [hypothesis()],
+    });
+  }).explain(report(), { allowLocal: true });
+  assert.equal(section.status, "unavailable");
+  assert.equal(section.reason, "invalid-output");
+  assert.equal(section.summary, undefined);
+  assert.equal(generations, 2);
+});
+
+test("invisible format characters cannot hide verdicts while visible unicode stays admissible", () => {
+  for (const [text, valid] of [
+    ["The package is s\u200bafe.", false],
+    ["The package is s\u2060afe.", false],
+    ["The package is s\ufeffafe.", false],
+    ["Soft\u00adhyphen text.", false],
+    ["Tag \u{e0041} character.", false],
+    ["Line\u2028separator.", false],
+    ["Résumé café: 1 file changed in lib/日本.js 🚧.", true],
+    ["Two lines\nwith a\ttab.", true],
+  ]) {
+    assert.equal(validSummary(text, "test-only-key", {}), valid, text);
+    assert.equal(
+      validAssessment(
+        { uncertainty: text, nextAction: "Review the changed hook." },
+        "test-only-key",
+      ),
+      valid,
+      text,
+    );
+  }
 });
 
 test("changed, artifact-only and not-compared files remain eligible without a policy finding", async () => {

