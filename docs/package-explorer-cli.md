@@ -163,3 +163,39 @@ Missing excerpts, partial/omitted evidence and incomplete coverage remain explic
 Package text and excerpts are untrusted data and must be rendered as text.
 The endpoint requires the matching report-exploration server deployment; source
 and local fixture support alone do not verify a public hosted instance.
+
+With the returned report ID and opaque file ID, use the CLI drilldown:
+
+```sh
+unmask file example@1.2.3 --report "$REPORT_ID" --file-id "$FILE_ID"
+```
+
+`file` requires an exact package/version and both IDs. It validates the existing
+report's package identity with the shared read-only helper, then performs a
+same-origin GET to S10's recorded-evidence endpoint. It submits no check, follows
+no redirect and sends no provider credentials. The file response is capped at
+128 KiB and 32 evidence records; the additional GET has a maximum 15-second
+request deadline and honors cancellation. Report/file IDs, metadata hashes and
+evidence IDs/digests/ranges are bound to the existing validated report before
+anything is displayed. The terminal escapes control, directional and zero-width
+characters in paths and excerpts and visibly truncates long text.
+
+Missing, expired or mismatched identities, malformed responses, server errors and
+unsupported endpoint deployments fail explicitly with exit 2 and never submit a
+replacement check. Success exits 0 as an informational display, matching `info`
+and `files`; it is not a guard decision. The report helper may wait for an
+existing pending job within its configured timeout, and cannot create a new job.
+No package file is opened or executed locally. Source-only/prefixless records
+retain their available metadata; missing hashes or excerpts remain unavailable.
+
+Reproduce the recorded S10 contract fixture and failure-boundary checks with:
+
+```sh
+node --test tests/product/package-file.test.mjs
+npm run build
+UNMASK_TEST_BUILT=1 node --test tests/product/package-file.test.mjs
+```
+
+These tests use S10's captured inert fixture contract, not a live hosted provider.
+A deployable combined candidate must include S10's opaque-ID server routes and
+receive its own normal-route runtime verification after integration.

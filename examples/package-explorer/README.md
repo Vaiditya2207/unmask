@@ -36,3 +36,10 @@ report-exploration contract (`9d3a764`) using the same inert synthetic report an
 its real local HTTP handler. It shows the inventory's report-scoped opaque file
 ID and recorded evidence returned through `file.json?fileId=...`, with zero POSTs.
 It is an API fixture example and does not assert public deployment availability.
+
+`file-cli-sample.txt` is actual output from the new read-only `unmask file`
+command against S10's exact local server contract and the inert fixture report.
+It preserves the recorded zero-length artifact span and source excerpt rather
+than reconstructing file contents. Reproduce the captured-contract command path
+with `node --test tests/product/package-file.test.mjs`. The server deployment must
+include S10's opaque-ID inventory/drilldown routes for a real hosted request.
