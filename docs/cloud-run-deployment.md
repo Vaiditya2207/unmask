@@ -5,10 +5,11 @@ User-authorized production deployment follows a completed release in the same
 a second `release: published` event. GitHub suppresses many workflow-triggering
 events produced by `GITHUB_TOKEN`, so that separate trigger is unsuitable here.
 
-The npm route is commit `1ab5215`. This separate change adds verified release
-outputs, the automatic production job, image-only Cloud Run runner and strict
-HTTP/model acceptance checks. All local tests use synthetic providers; this change
-has performed no cloud authentication, IAM mutation or deployment.
+The release workflow publishes the verified npm archive and immutable GitHub
+release, then deploys the API and Next.js website in sequence. Local controller
+tests use synthetic providers. The development API and website have separate
+live smoke evidence; final release acceptance requires a successful deployment
+receipt for the exact published commit.
 
 Root confirmed project `unmask-513319`, service `unmask` and Mumbai region
 `asia-south1`. Root bootstraps the service with its runtime SA, secret-version refs
@@ -31,7 +32,9 @@ format, so do not assume a legacy name-based `sub` string.
 
 ## Production configuration and job
 
-Root supplies the confirmed, non-secret production variables:
+The committed `deployment.config.json` supplies these confirmed, non-secret
+production settings. Equivalent environment variables are supported for explicit
+configuration:
 
 | Variable                         | Purpose                                                       |
 | -------------------------------- | ------------------------------------------------------------- |
@@ -41,15 +44,15 @@ Root supplies the confirmed, non-secret production variables:
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | Full WIF provider resource name                               |
 | `GCP_CLOUD_RUN_SERVICE`          | Fixed workflow value `unmask`, confirmed by root              |
 
-The workflow fixes the service name to `unmask`; the four GCP variables are
-non-secret production configuration. Also set `CLOUD_RUN_SMOKE_PACKAGE` to the
-exact validated public package and `CLOUD_RUN_MODEL_EXPECTATIONS` to a JSON
-`{ "routes": [...] }` record. Root's current candidate is `zod@4.6.7`; live
-eligibility is still unverified. Approved ordered routing is `gemini-3.5-flash` with high thinking, then
+The service name is `unmask`. The committed smoke package is `zod@4.6.7` and
+`modelExpectation` contains the approved `{ "routes": [...] }` record. A normal
+development request completed on the primary route; fallback eligibility and
+general model quality remain unverified. Approved ordered routing is `gemini-3.5-flash` with high thinking, then
 `gemini-3-flash-preview` minimal, then `gemma-4-26b-a4b-it` minimal; no `MODEL_ID`
 is overridden. Model generations are bounded to three attempts/135 seconds by
 the app; deployment HTTP smoke allows 240 seconds including acquisition.
-Root supplies the actual successful model/configuration records after bootstrap.
+The route expectations are checked against the configured profile and the
+actual report returned by each deployment smoke test.
 
 Each route record contains only `provider`, `endpointHost`, `modelId`, `configHash`
 and the full `generationConfig` projected from the successful report and checked
@@ -66,8 +69,8 @@ ports, commands, volumes and other runtime configuration. The policy requires
 instance-based CPU, min/max one instance, one vCPU and 2Gi memory for async jobs.
 
 The active `deploy` job is in `release.yml`, requires completed GitHub and npm
-publication, runs in environment `production`, and alone receives
-`id-token: write`. It checks out the exact release commit, installs locked tooling
+publication, runs in environment `production`, and receives
+`id-token: write` only within the deployment job. It checks out the exact release commit, installs locked tooling
 without lifecycle scripts, validates references, authenticates through WIF and
 runs the cloud runner. Google auth is pinned to
 `7c6bc770dae815cd3e89ee6cdf493a5fab2cc093`; setup-gcloud is pinned to
@@ -79,7 +82,7 @@ and exact `action.yml` files, which use Node 24. The GitHub API attempt was rate
 limited; the successful verification used the public Git ref advertisement.
 There is no JSON service-account key. The eventual auth step can create temporary
 WIF credentials; exclude `gha-creds-*.json` from commits/artifacts and keep them
-out of logs. Only the deploy job receives `id-token: write`.
+out of logs. Only the API and website deployment jobs receive `id-token: write`.
 
 The provider condition must restrict repository ID `1440901935`, owner ID
 `145288107`, `refs/heads/main`, the exact main release workflow, and environment
@@ -91,7 +94,7 @@ creates and verifies those bindings; this code does not provision cloud IAM.
 The runner first verifies anonymous GHCR digest pull, then snapshots the service
 configuration privately. It updates only the exact image with `--no-traffic`,
 waits for that revision's ready digest and verifies preserved configuration before
-routing production with `--to-latest`. A private first image fails before a Cloud
+routing production with `--to-revisions=VERIFIED_REVISION=100`. A private first image fails before a Cloud
 Run mutation; make it public and rerun the deploy job after verifying access.
 
 Snapshot the service configuration privately before updating it. Compare a
@@ -105,8 +108,9 @@ ready status and resolved digest. Confirm all production traffic points to that
 revision and no old tagged/serving route remains. Derive the HTTPS origin from
 Cloud Run's observed service URL. Compare `/version` version, commit and tarball
 hash with the completed release. A Ready flag or image tag alone is insufficient.
-Public GHCR images can be deployed directly by digest; an additional mirror is
-optional. Root must make the first GHCR image publicly pullable before this path.
+Public GHCR images can be deployed directly by digest. The first published
+release image was verified anonymously pullable; every deployment rechecks its
+own exact digest before making a service change.
 
 Run the normal form POST, poll persisted JSON, inspect rendered HTML and repeat
 the JSON request through the actual service route. Root must supply an exact,
@@ -123,8 +127,17 @@ Gemma quality. The runner rechecks serving state after smoke and saves only publ
 `artifacts/deployment-receipt.json`, job outputs and the GitHub step summary:
 release/digest, project/service/revision, serving URL, report URL and model trace
 metadata. Provider bodies, service JSON and secrets are omitted.
-Reports remain in memory and can be lost on restart or deployment. The Next.js
-website is owned separately and is untouched by this work.
+Reports remain in memory and can be lost on restart or deployment. Handled
+post-promotion failures trigger a separately bounded rollback that verifies the
+previous traffic and revision digests; observed concurrent changes prevent an
+unsafe restore. Process termination cannot guarantee rollback.
+
+The `deploy-web` job follows successful API deployment. It builds the exact
+release commit with `web/Dockerfile`, publishes its digest to the dedicated
+Artifact Registry repository, checks a tagged candidate, then promotes the
+verified website revision. The website uses its own runtime identity and calls
+the stable API URL. Both services expose matching release version and commit
+through `/version`; their production service URLs remain constant.
 
 ## Official references
 
@@ -137,10 +150,9 @@ website is owned separately and is untouched by this work.
 - [GitHub token event recursion behavior](https://docs.github.com/en/actions/how-tos/writing-workflows/choosing-when-your-workflow-runs/triggering-a-workflow)
 
 The actual nonsecret GCP identities are committed in `deployment.config.json`.
-No extra GitHub GCP variables are required. `modelExpectation` is deliberately
-null pending root's actual successful three-tier report/configuration; root fills
-that nonsecret record before enabling release. Validation fails clearly while it
-is pending. Cloud Run liveness uses `/version`, since hosted paths ending in `z`
+No extra GitHub GCP variables are required. `modelExpectation` records all three
+approved route configurations; it is not a claim that all three have passed the
+live deployment smoke. Missing or invalid expectations fail before authentication. Cloud Run liveness uses `/version`, since hosted paths ending in `z`
 can be reserved by the Google frontend. An OCI index is hash-verified from public
 GHCR bytes and resolved to exactly one Linux AMD64 child; the service template
 pins the original index while serving verification checks the resolved child.
