@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "1",
+  "source": "OSV",
+  "package": {
+    "name": "@unmask-example/requested",
+    "version": "1.0.0",
+    "ecosystem": "npm"
+  },
+  "queriedAt": "2026-11-01T00:00:00.000Z",
+  "status": "none-reported",
+  "complete": true,
+  "reasons": [],
+  "advisories": [],
+  "pagesFetched": 1,
+  "limits": {}
+}

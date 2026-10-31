@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "1",
+  "source": "OSV",
+  "package": {
+    "name": "@unmask-example/requested",
+    "version": "1.0.0",
+    "ecosystem": "npm"
+  },
+  "queriedAt": "2026-11-01T00:00:00.000Z",
+  "status": "incomplete",
+  "complete": false,
+  "reasons": [
+    "page-cap"
+  ],
+  "advisories": [
+    {
+      "id": "GHSA-0000-0000-0001",
+      "summary": "Synthetic advisory whose only MAL id is an alias",
+      "aliases": [
+        "MAL-0000-0001"
+      ]
+    },
+    {
+      "id": "MAL-0000-0002",
+      "summary": "Synthetic withdrawn malicious-package advisory",
+      "aliases": [],
+      "withdrawn": "2026-10-01T00:00:00Z"
+    }
+  ],
+  "pagesFetched": 1,
+  "limits": {}
+}

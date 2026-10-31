@@ -1,0 +1,426 @@
+{
+  "schemaVersion": "1",
+  "analyzerVersion": "0.0.0",
+  "policyVersion": "default-1",
+  "limitsVersion": "1",
+  "inputs": {
+    "artifact": {
+      "sha256": "911de9f629a6c2ba91c600d644d3d3160892917406a2be8af7d1f5a5ace4349b",
+      "sha512": "0dca974e9b7e557a37df1b0578e16a4c398b10213a1ab42e2b6336d387ccf6924a7d64f332f48f50e83050fabb3340645e1ec8bf1397601755490abf478e1094",
+      "kind": "local",
+      "expectedIntegrity": {
+        "status": "unavailable"
+      }
+    },
+    "limits": {
+      "compressedBytes": 52428800,
+      "expandedBytes": 262144000,
+      "entries": 20000,
+      "ratio": 100,
+      "fileBytes": 10485760,
+      "parseMs": 30000,
+      "metadataBytes": 65536,
+      "pathBytes": 4096,
+      "pathDepth": 64,
+      "pathNodes": 40000,
+      "retentionBudgetBytes": 134217728,
+      "syntax": {
+        "fileBytes": 2097152,
+        "totalBytesPerSide": 8388608,
+        "tokens": 200000,
+        "cues": 1000,
+        "sourceLiterals": 10000
+      },
+      "manifest": {
+        "fieldNodes": 4096,
+        "depth": 12,
+        "valueBytes": 65536,
+        "totalValueBytes": 262144,
+        "fieldComparisons": 8192,
+        "cues": 128,
+        "declarations": 256,
+        "pathComparisons": 20000,
+        "annotations": 512
+      }
+    },
+    "sourceArchive": {
+      "sha256": "5643f130a32a96441188c67851acb973929c312bc7105a61c23fd2c41e8d61bd",
+      "sha512": "7cd4b7735b16daa20cb905ae28fc7817538142a44546bbe0a88fd7dcabbbe0420972d52210bf12efee78fca636225e4d6761b196d7ff1457f4d5535c48bba93a",
+      "kind": "local"
+    },
+    "claim": {
+      "name": "@unmask-example/widget",
+      "version": "1.0.0"
+    },
+    "syntaxParser": "acorn@8.19.0"
+  },
+  "source": {
+    "status": "selected",
+    "method": "user-full-SHA",
+    "commit": "0123456789abcdef0123456789abcdef01234567",
+    "complete": true,
+    "alternatives": [],
+    "reason": "explicit-local-source",
+    "directory": ""
+  },
+  "files": [
+    {
+      "path": "index.js",
+      "originalPath": "package/index.js",
+      "size": 20,
+      "artifactSha256": "6e66e366f0aefb84ad8110afcd9b2245702c643c831edf8316ff048fec739d2e",
+      "state": "byte-identical",
+      "localization": "whole-file",
+      "evidenceIds": [
+        "ev-2ed8626286151ba3c411b009da008bf4dc51409feb201347ddfdd854fb3f7417",
+        "ev-01bb56fb334f3edb2895eb05c89c713f806fa1668d01a56c56d7d8364405b291"
+      ],
+      "sourceSha256": "6e66e366f0aefb84ad8110afcd9b2245702c643c831edf8316ff048fec739d2e"
+    },
+    {
+      "path": "node_modules/inner/index.js",
+      "originalPath": "package/node_modules/inner/index.js",
+      "size": 20,
+      "artifactSha256": "0178ebe33198629bc345d7410d644ab4991518d537db5fd04912d281df792928",
+      "state": "byte-identical",
+      "localization": "whole-file",
+      "evidenceIds": [
+        "ev-c4bca88bf0de27593b373fe3adf626ca595532fb06b60884c136b99258c83961",
+        "ev-687ef28dbb0e74759914548e3116f101312c14b40d2f8aec36abb19c861a63cb"
+      ],
+      "sourceSha256": "0178ebe33198629bc345d7410d644ab4991518d537db5fd04912d281df792928"
+    },
+    {
+      "path": "node_modules/inner/node_modules/deep/index.js",
+      "originalPath": "package/node_modules/inner/node_modules/deep/index.js",
+      "size": 20,
+      "artifactSha256": "3da84e03a46649da87a592588cd70e204eee956ff4c1d1b75ddd108b3fe630e4",
+      "state": "byte-identical",
+      "localization": "whole-file",
+      "evidenceIds": [
+        "ev-4fa427cd31916cc370d6673436d406fcc55c08b66cf61a3046a1b992c233b0f2",
+        "ev-f4b837c401f7c19f18f525fd285ad50589cc6944c690991dfcbf9e1bcf22a0f4"
+      ],
+      "sourceSha256": "3da84e03a46649da87a592588cd70e204eee956ff4c1d1b75ddd108b3fe630e4"
+    },
+    {
+      "path": "package.json",
+      "originalPath": "package/package.json",
+      "size": 134,
+      "artifactSha256": "9d5e0c02ff6315f2b4d7a3a441fa2029d146eacb539244dfa804a032afd61070",
+      "state": "byte-identical",
+      "localization": "whole-file",
+      "evidenceIds": [
+        "ev-be8ecf853345b94630398d6eccfd42de80ca734ef40de4bcfee5e4248f751dfd",
+        "ev-063bc4e40b5911c4e3c2fef056adc51af5b31ea6ca6e1a75a71a458ab9e652ca"
+      ],
+      "sourceSha256": "9d5e0c02ff6315f2b4d7a3a441fa2029d146eacb539244dfa804a032afd61070"
+    }
+  ],
+  "coverage": {
+    "inventory": {
+      "files": 4,
+      "bytes": 194,
+      "complete": true,
+      "lowerBound": false
+    },
+    "states": {
+      "byte-identical": {
+        "files": 4,
+        "bytes": 194
+      },
+      "changed": {
+        "files": 0,
+        "bytes": 0
+      },
+      "artifact-only": {
+        "files": 0,
+        "bytes": 0
+      },
+      "not-compared": {
+        "files": 0,
+        "bytes": 0
+      }
+    },
+    "compared": {
+      "files": 4,
+      "bytes": 194
+    },
+    "unresolved": {
+      "files": 0,
+      "bytes": 0
+    },
+    "syntaxInspected": {
+      "files": 3,
+      "bytes": 60
+    },
+    "modelReviewed": {
+      "files": 0,
+      "bytes": 0
+    },
+    "links": {
+      "artifact": 0,
+      "source": 0
+    },
+    "nonregular": {
+      "artifact": 0,
+      "source": 0
+    },
+    "linkEntries": [],
+    "sourceAvailable": true,
+    "sourceComplete": true,
+    "complete": true,
+    "sourceOnly": []
+  },
+  "evidence": [
+    {
+      "id": "ev-2ed8626286151ba3c411b009da008bf4dc51409feb201347ddfdd854fb3f7417",
+      "side": "artifact",
+      "blobDigest": "911de9f629a6c2ba91c600d644d3d3160892917406a2be8af7d1f5a5ace4349b",
+      "path": "index.js",
+      "originalPath": "package/index.js",
+      "fileSha256": "6e66e366f0aefb84ad8110afcd9b2245702c643c831edf8316ff048fec739d2e",
+      "size": 20,
+      "range": [
+        0,
+        20
+      ],
+      "excerpt": "module.exports = 1;\n",
+      "excerptRange": [
+        0,
+        20
+      ]
+    },
+    {
+      "id": "ev-01bb56fb334f3edb2895eb05c89c713f806fa1668d01a56c56d7d8364405b291",
+      "side": "source",
+      "blobDigest": "5643f130a32a96441188c67851acb973929c312bc7105a61c23fd2c41e8d61bd",
+      "path": "index.js",
+      "originalPath": "source/index.js",
+      "fileSha256": "6e66e366f0aefb84ad8110afcd9b2245702c643c831edf8316ff048fec739d2e",
+      "size": 20,
+      "range": [
+        0,
+        20
+      ],
+      "excerpt": "module.exports = 1;\n",
+      "excerptRange": [
+        0,
+        20
+      ]
+    },
+    {
+      "id": "ev-c4bca88bf0de27593b373fe3adf626ca595532fb06b60884c136b99258c83961",
+      "side": "artifact",
+      "blobDigest": "911de9f629a6c2ba91c600d644d3d3160892917406a2be8af7d1f5a5ace4349b",
+      "path": "node_modules/inner/index.js",
+      "originalPath": "package/node_modules/inner/index.js",
+      "fileSha256": "0178ebe33198629bc345d7410d644ab4991518d537db5fd04912d281df792928",
+      "size": 20,
+      "range": [
+        0,
+        20
+      ],
+      "excerpt": "module.exports = 2;\n",
+      "excerptRange": [
+        0,
+        20
+      ]
+    },
+    {
+      "id": "ev-687ef28dbb0e74759914548e3116f101312c14b40d2f8aec36abb19c861a63cb",
+      "side": "source",
+      "blobDigest": "5643f130a32a96441188c67851acb973929c312bc7105a61c23fd2c41e8d61bd",
+      "path": "node_modules/inner/index.js",
+      "originalPath": "source/node_modules/inner/index.js",
+      "fileSha256": "0178ebe33198629bc345d7410d644ab4991518d537db5fd04912d281df792928",
+      "size": 20,
+      "range": [
+        0,
+        20
+      ],
+      "excerpt": "module.exports = 2;\n",
+      "excerptRange": [
+        0,
+        20
+      ]
+    },
+    {
+      "id": "ev-4fa427cd31916cc370d6673436d406fcc55c08b66cf61a3046a1b992c233b0f2",
+      "side": "artifact",
+      "blobDigest": "911de9f629a6c2ba91c600d644d3d3160892917406a2be8af7d1f5a5ace4349b",
+      "path": "node_modules/inner/node_modules/deep/index.js",
+      "originalPath": "package/node_modules/inner/node_modules/deep/index.js",
+      "fileSha256": "3da84e03a46649da87a592588cd70e204eee956ff4c1d1b75ddd108b3fe630e4",
+      "size": 20,
+      "range": [
+        0,
+        20
+      ],
+      "excerpt": "module.exports = 3;\n",
+      "excerptRange": [
+        0,
+        20
+      ]
+    },
+    {
+      "id": "ev-f4b837c401f7c19f18f525fd285ad50589cc6944c690991dfcbf9e1bcf22a0f4",
+      "side": "source",
+      "blobDigest": "5643f130a32a96441188c67851acb973929c312bc7105a61c23fd2c41e8d61bd",
+      "path": "node_modules/inner/node_modules/deep/index.js",
+      "originalPath": "source/node_modules/inner/node_modules/deep/index.js",
+      "fileSha256": "3da84e03a46649da87a592588cd70e204eee956ff4c1d1b75ddd108b3fe630e4",
+      "size": 20,
+      "range": [
+        0,
+        20
+      ],
+      "excerpt": "module.exports = 3;\n",
+      "excerptRange": [
+        0,
+        20
+      ]
+    },
+    {
+      "id": "ev-be8ecf853345b94630398d6eccfd42de80ca734ef40de4bcfee5e4248f751dfd",
+      "side": "artifact",
+      "blobDigest": "911de9f629a6c2ba91c600d644d3d3160892917406a2be8af7d1f5a5ace4349b",
+      "path": "package.json",
+      "originalPath": "package/package.json",
+      "fileSha256": "9d5e0c02ff6315f2b4d7a3a441fa2029d146eacb539244dfa804a032afd61070",
+      "size": 134,
+      "range": [
+        0,
+        134
+      ],
+      "excerpt": "{\"name\":\"@unmask-example/widget\",\"version\":\"1.0.0\",\"dependencies\":{\"@unmask-example/helper\":\"^1.0.0\"},\"bundledDependencies\":[\"inner\"]}",
+      "excerptRange": [
+        0,
+        134
+      ]
+    },
+    {
+      "id": "ev-063bc4e40b5911c4e3c2fef056adc51af5b31ea6ca6e1a75a71a458ab9e652ca",
+      "side": "source",
+      "blobDigest": "5643f130a32a96441188c67851acb973929c312bc7105a61c23fd2c41e8d61bd",
+      "path": "package.json",
+      "originalPath": "source/package.json",
+      "fileSha256": "9d5e0c02ff6315f2b4d7a3a441fa2029d146eacb539244dfa804a032afd61070",
+      "size": 134,
+      "range": [
+        0,
+        134
+      ],
+      "excerpt": "{\"name\":\"@unmask-example/widget\",\"version\":\"1.0.0\",\"dependencies\":{\"@unmask-example/helper\":\"^1.0.0\"},\"bundledDependencies\":[\"inner\"]}",
+      "excerptRange": [
+        0,
+        134
+      ]
+    }
+  ],
+  "manifests": {
+    "artifact": {
+      "status": "usable",
+      "value": {
+        "name": "@unmask-example/widget",
+        "version": "1.0.0",
+        "dependencies": {
+          "@unmask-example/helper": "^1.0.0"
+        },
+        "bundledDependencies": [
+          "inner"
+        ]
+      },
+      "evidenceIds": [
+        "ev-be8ecf853345b94630398d6eccfd42de80ca734ef40de4bcfee5e4248f751dfd"
+      ]
+    },
+    "source": {
+      "status": "usable",
+      "value": {
+        "name": "@unmask-example/widget",
+        "version": "1.0.0",
+        "dependencies": {
+          "@unmask-example/helper": "^1.0.0"
+        },
+        "bundledDependencies": [
+          "inner"
+        ]
+      },
+      "evidenceIds": [
+        "ev-063bc4e40b5911c4e3c2fef056adc51af5b31ea6ca6e1a75a71a458ab9e652ca"
+      ]
+    },
+    "registry": {
+      "status": "unavailable",
+      "reason": "offline"
+    }
+  },
+  "cues": [],
+  "annotations": [
+    {
+      "type": "syntax-not-inspected",
+      "side": "artifact",
+      "path": "package.json",
+      "originalPath": "package/package.json",
+      "reason": "unsupported-syntax"
+    },
+    {
+      "type": "syntax-not-inspected",
+      "side": "source",
+      "path": "package.json",
+      "originalPath": "source/package.json",
+      "reason": "unsupported-syntax"
+    },
+    {
+      "type": "syntax-scope",
+      "parser": "acorn@8.19.0",
+      "sourceCoverage": {
+        "files": 3,
+        "bytes": 60
+      },
+      "sourceLiteralCount": 0,
+      "sourceLiteralTruncated": false,
+      "limitation": "Literal matches are not semantic equivalence; missing literals refer only to inspected JavaScript. TypeScript, JSX, source maps, computed aliases and dynamic targets are not resolved."
+    },
+    {
+      "module": "manifest",
+      "type": "manifest-scope",
+      "sourceDeclarationStatus": "available",
+      "sourceDeclarationReason": "usable",
+      "status": "complete",
+      "pairs": {
+        "artifactSource": "available",
+        "registryArtifact": "unavailable",
+        "registrySource": "unavailable"
+      },
+      "reasons": [],
+      "unassessed": [],
+      "counts": {
+        "fieldNodes": 12,
+        "valueBytes": 138,
+        "fieldComparisons": 22,
+        "cues": 0,
+        "declarations": 0,
+        "pathComparisons": 0,
+        "annotations": 0
+      },
+      "limitation": "Declarations describe observed fields only; no normalization, glob expansion, publish-set prediction, build reproduction or content equivalence is established."
+    }
+  ],
+  "failures": [],
+  "model": {
+    "status": "not-sent",
+    "reason": "consent-required"
+  },
+  "run": {
+    "timestamps": {},
+    "timings": {},
+    "surface": "cli",
+    "observations": []
+  },
+  "policy": {
+    "exitCode": 0,
+    "findings": []
+  }
+}
