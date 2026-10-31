@@ -843,3 +843,68 @@ test("a file link outside the lockfile is an unknown local entry, not a missing 
     /unknown\s+local:node_modules\/local-pkg unbound-identity:local-link/,
   );
 });
+
+test("hosted rows for downgraded plan identities do not corrupt clean package reasons", async (t) => {
+  const weak = {
+    ...entry("weak-pkg", "1.0.0"),
+    integrity: "sha1-" + "C".repeat(27) + "=",
+  };
+  const fixture = await project(
+    t,
+    lockfile(
+      {
+        ...cleanPackages,
+        "node_modules/weak-pkg": weak,
+        "node_modules/dup": entry("dup", "1.0.0"),
+        "node_modules/left-pad/node_modules/dup": entry("dup", "1.0.0", {
+          integrity: OTHER_INTEGRITY,
+        }),
+      },
+      { "left-pad": "^1.3.0", "weak-pkg": "1.0.0", dup: "1.0.0" },
+    ),
+  );
+  const rows = (weakAdvisories = []) => [
+    ...SPECS.map((spec) => row(spec)),
+    row("weak-pkg@1.0.0", weakAdvisories, {
+      integrity: null,
+      integrityStatus: "missing",
+      status: weakAdvisories.length ? "found" : "none-reported",
+    }),
+    row("dup@1.0.0", [], {
+      integrity: null,
+      integrityStatus: "conflicting",
+      status: "incomplete",
+      complete: false,
+    }),
+  ];
+  const result = await guard(fixture, "ci", [], {
+    fetchImpl: hosted(rows()).fetchImpl,
+  });
+  assert.equal(result.code, 3);
+  assert.equal(result.called, null);
+  assert.doesNotMatch(result.stderr, /hosted-plan-mismatch/);
+  assert.match(result.stderr, /allow 2, warn 0, unknown 2, block 0/);
+  assert.match(
+    result.stderr,
+    /unknown\s+weak-pkg@1\.0\.0 unbound-identity:weak-integrity/,
+  );
+  assert.match(
+    result.stderr,
+    /unknown\s+dup@1\.0\.0 unbound-identity:conflicting-integrity/,
+  );
+  const mal = await guard(fixture, "ci", [], {
+    fetchImpl: hosted(rows([{ id: "MAL-2026-9", aliases: [] }])).fetchImpl,
+  });
+  assert.equal(mal.code, 3);
+  assert.match(
+    mal.stderr,
+    /block\s+weak-pkg@1\.0\.0 known-malware,unbound-identity:weak-integrity \[MAL-2026-9\]/,
+  );
+  const foreign = await guard(fixture, "ci", [], {
+    fetchImpl: hosted([...rows(), row("not-in-plan@1.0.0")]).fetchImpl,
+  });
+  assert.match(
+    foreign.stderr,
+    /unknown\s+left-pad@1\.3\.0 hosted-plan-mismatch/,
+  );
+});
