@@ -1,0 +1,290 @@
+{
+  "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "unmask",
+          "version": "0.0.0",
+          "informationUri": "https://github.com/Vaiditya2207/unmask",
+          "rules": [
+            {
+              "id": "cue/manifest-artifact-runtime-observation",
+              "name": "cueManifestArtifactRuntimeObservation",
+              "shortDescription": {
+                "text": "Analyzer review cue; behavior is not proven."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "supply-chain",
+                  "cue"
+                ]
+              }
+            },
+            {
+              "id": "policy/identity-claim-conflict",
+              "name": "policyIdentityClaimConflict",
+              "shortDescription": {
+                "text": "Artifact manifest identity differs from the claimed package identity."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "supply-chain",
+                  "policy"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "originalUriBaseIds": {
+        "ARTIFACT_ROOT": {
+          "description": {
+            "text": "Root of the analyzed npm artifact after removing its archive prefix."
+          }
+        },
+        "SOURCE_ROOT": {
+          "description": {
+            "text": "Root of the selected source archive after removing its archive prefix."
+          }
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "toolExecutionNotifications": [
+            {
+              "descriptor": {
+                "id": "coverage/source-unavailable"
+              },
+              "level": "warning",
+              "message": {
+                "text": "No source archive was compared; artifact files have no source correspondence."
+              }
+            },
+            {
+              "descriptor": {
+                "id": "coverage/unresolved-files"
+              },
+              "level": "note",
+              "message": {
+                "text": "4 of 4 artifact files are not byte-identical to selected source (4 not compared)."
+              }
+            },
+            {
+              "descriptor": {
+                "id": "advisory/identity-conflict"
+              },
+              "level": "warning",
+              "message": {
+                "text": "Advisories were queried for the requested identity @unmask-example/requested@1.0.0, which conflicts with the artifact manifest @unmask-example/declared@2.0.0; the declared identity was not screened."
+              }
+            },
+            {
+              "descriptor": {
+                "id": "limitation/absence-not-safety"
+              },
+              "level": "note",
+              "message": {
+                "text": "Absence of results does not establish that the package is safe; only recorded evidence, deterministic policy rules and the supplied advisory snapshot are reported."
+              }
+            }
+          ]
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "policy/identity-claim-conflict",
+          "ruleIndex": 1,
+          "level": "error",
+          "message": {
+            "text": "Artifact manifest differs from the claimed identity in: name, version."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "package.json",
+                  "uriBaseId": "ARTIFACT_ROOT"
+                },
+                "region": {
+                  "byteOffset": 0,
+                  "byteLength": 136
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "unmaskFinding/v1": "24f4a302387f26a4e671fc297256beeac11cbfb38f33f1dcc0dab190e34d822c"
+          },
+          "properties": {
+            "evidenceIds": [
+              "ev-03f76b5d30ae75d73f3c9eaf5d312ac2cdd1a55bc860f87931f06419449fb876"
+            ]
+          }
+        },
+        {
+          "ruleId": "cue/manifest-artifact-runtime-observation",
+          "ruleIndex": 0,
+          "level": "note",
+          "message": {
+            "text": "Artifact declaration observed; source comparison is unavailable. (field /dependencies)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "package.json",
+                  "uriBaseId": "ARTIFACT_ROOT"
+                },
+                "region": {
+                  "byteOffset": 0,
+                  "byteLength": 136
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "unmaskFinding/v1": "79ccab3b7361d5d9cae7cbaba777f91001b2280c8327bff83a94ad8e4895362e"
+          },
+          "properties": {
+            "evidenceIds": [
+              "ev-03f76b5d30ae75d73f3c9eaf5d312ac2cdd1a55bc860f87931f06419449fb876"
+            ]
+          }
+        },
+        {
+          "ruleId": "cue/manifest-artifact-runtime-observation",
+          "ruleIndex": 0,
+          "level": "note",
+          "message": {
+            "text": "Artifact declaration observed; source comparison is unavailable. (field /bundledDependencies)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "package.json",
+                  "uriBaseId": "ARTIFACT_ROOT"
+                },
+                "region": {
+                  "byteOffset": 0,
+                  "byteLength": 136
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "unmaskFinding/v1": "a6695ef16acfed8a0301e7ba9961e1a2c584993f65d82bf32c85bffcd1fc1807"
+          },
+          "properties": {
+            "evidenceIds": [
+              "ev-03f76b5d30ae75d73f3c9eaf5d312ac2cdd1a55bc860f87931f06419449fb876"
+            ]
+          }
+        },
+        {
+          "ruleId": "cue/manifest-artifact-runtime-observation",
+          "ruleIndex": 0,
+          "level": "note",
+          "message": {
+            "text": "Artifact declaration observed; source comparison is unavailable. (field /name)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "package.json",
+                  "uriBaseId": "ARTIFACT_ROOT"
+                },
+                "region": {
+                  "byteOffset": 0,
+                  "byteLength": 136
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "unmaskFinding/v1": "dd5f51ebf8e00ef5cf3462291c10d0c9be2f332469598060051b0d6903d2a863"
+          },
+          "properties": {
+            "evidenceIds": [
+              "ev-03f76b5d30ae75d73f3c9eaf5d312ac2cdd1a55bc860f87931f06419449fb876"
+            ]
+          }
+        },
+        {
+          "ruleId": "cue/manifest-artifact-runtime-observation",
+          "ruleIndex": 0,
+          "level": "note",
+          "message": {
+            "text": "Artifact declaration observed; source comparison is unavailable. (field /version)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "package.json",
+                  "uriBaseId": "ARTIFACT_ROOT"
+                },
+                "region": {
+                  "byteOffset": 0,
+                  "byteLength": 136
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "unmaskFinding/v1": "c5e5ed9a0ed67cbb24e7131d82d5a21df45bf55a7575ac24968450703f73a2f4"
+          },
+          "properties": {
+            "evidenceIds": [
+              "ev-03f76b5d30ae75d73f3c9eaf5d312ac2cdd1a55bc860f87931f06419449fb876"
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "unmask": {
+          "reportSchemaVersion": "1",
+          "policyVersion": "default-1",
+          "policyExitCode": 3,
+          "package": {
+            "name": "@unmask-example/requested",
+            "version": "1.0.0",
+            "source": "claim",
+            "identityStatus": "claim-conflicts-with-manifest",
+            "requested": {
+              "name": "@unmask-example/requested",
+              "version": "1.0.0"
+            },
+            "declared": {
+              "name": "@unmask-example/declared",
+              "version": "2.0.0"
+            }
+          },
+          "artifactSha256": "8e3577c4e728d0fae8edc2dd8a02d20845d9f33d0379982a474f129e78183635",
+          "coverageComplete": true,
+          "sourceStatus": "unresolved",
+          "modelStatus": "not-sent",
+          "advisories": {
+            "status": "none-reported",
+            "complete": true,
+            "queriedAt": "2026-11-01T00:00:00.000Z",
+            "count": 0,
+            "boundTo": "claim"
+          }
+        }
+      }
+    }
+  ]
+}

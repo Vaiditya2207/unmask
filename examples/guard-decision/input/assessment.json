@@ -1,0 +1,1 @@
+{"nameAtExactVersion":"synthetic-example@1.2.3","vulnerabilityCheck":{"schemaVersion":"1","source":"OSV","package":{"ecosystem":"npm","name":"synthetic-example","version":"1.2.3"},"status":"incomplete","complete":false,"reasons":["page-limit"],"advisories":[{"id":"MAL-2026-1234","aliases":[]}]}}

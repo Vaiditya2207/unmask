@@ -38,7 +38,10 @@ Report URLs are temporary and may expire after 30 minutes, capacity eviction or 
 | [User stories](user-stories.md)                   | Acceptance criteria and current status for every user-facing capability                |
 | [Architecture](architecture.md)                   | Hosted CLI and website flows, separate services, process boundaries and job states     |
 | [Contracts](contracts.md)                         | Inputs, reports, exit policy, HTTP behavior and distribution boundaries                |
+| [Evidence formats](evidence-formats.md)           | Report, details, SBOM, evidence manifest and SARIF scopes and how to read them         |
 | [Stack and decisions](stack.md)                   | Pinned dependencies, model tiers, budgets and remaining acceptance limits              |
 | [CI, releases and manual deployment](releases.md) | Release tooling and artifact/deployment checks; each candidate needs its own evidence  |
+| [Advisory cache operations](advisory-cache.md)    | OSV cache limits, stale/freshness fields, retries and opt-in aggregate statistics      |
+| [Advisory-only results](advisory-recovery.md)     | Failed or timed-out checks keep exact-version advisories; `/api/advisory` endpoint     |
 
 For setup and contribution rules, see the [project overview](../README.md) and [contribution guide](../CONTRIBUTING.md). These pages document observed behavior and source contracts; documentation checks do not rerun provider evaluation or deployment acceptance.

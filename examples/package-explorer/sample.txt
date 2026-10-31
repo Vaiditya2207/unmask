@@ -1,0 +1,57 @@
+$ unmask info example@1.2.3
+UNMASK info example@1.2.3
+Publisher declarations (runtime behavior unverified):
+  bin: not-declared-in-manifest
+  browser: not-declared-in-manifest
+  cpu: not-declared-in-manifest
+  description: text\u001b[31m\u000aspoof
+  engines: not-declared-in-manifest
+  exports: not-declared-in-manifest
+  homepage: not-declared-in-manifest
+  keywords: not-declared-in-manifest
+  license: MIT
+  licenses: not-declared-in-manifest
+  main: not-declared-in-manifest
+  module: not-declared-in-manifest
+  name: example
+  os: not-declared-in-manifest
+  type: not-declared-in-manifest
+  types: not-declared-in-manifest
+  typings: not-declared-in-manifest
+  version: 1.2.3
+Scripts (never executed):
+  Status: declared
+  install: echo inert\u001b]0;title\u0007 [install hook]
+Dependencies (declared only; transitive dependencies not assessed):
+  dependencies: declared; declared=1
+    alpha: ^1 [declared]
+  optionalDependencies: not-declared-in-manifest; declared=0
+  peerDependencies: not-declared-in-manifest; declared=0
+  devDependencies: not-declared-in-manifest; declared=0
+  bundledDependencies: not-declared-in-manifest; declared=0
+  bundleDependencies: not-declared-in-manifest; declared=0
+Provenance (report-recorded verification status):
+  source: {"status":"selected","method":"user-full-SHA","commit":"dddddddddddddddddddddddddddddddddddddddd","alternatives":[],"complete":true}
+  artifact: {"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","sha512":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
+  sourceArchive: {"sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}
+OSV exact-package query: not-assessed; complete=false
+  Reasons: ["hosted-enrichment-disabled"]
+AI: disabled
+Inventory complete: true; coverage complete: true
+This is not a safety verdict. No findings never means safe; missing or omitted facts remain unassessed.
+Report: http://127.0.0.1:62887/r/ebb32657ce156f47debde7dafb1eb529.json
+
+$ unmask files example@1.2.3 --state changed --limit 2
+UNMASK files example@1.2.3
+Scope: accepted artifact regular files; source-only paths and inert links are outside this list.
+Filters: path contains ""; state=changed
+Rows 1-1 of 1 matching returned records; hosted projected total=4.
+Inventory complete: true; 0 records omitted by hosted projection.
+index.js [changed] 10 bytes
+  artifact-sha256=e8b2086bcd01cd7ae249908d0de7c81d2f5ca9c49d96c75097c790e629434065 source-sha256=fbc020523a89b9dde134af1eedc34980295b71bb736242f9ea8995b39eac5148
+AI: disabled
+This is not a safety verdict; byte-identical means only recorded byte correspondence.
+Report: http://127.0.0.1:62887/r/ebb32657ce156f47debde7dafb1eb529.json
+Report ID: ebb32657ce156f47debde7dafb1eb529
+Reuse this report for paging: --report ebb32657ce156f47debde7dafb1eb529 (with the same exact package spec and filters; no new check).
+

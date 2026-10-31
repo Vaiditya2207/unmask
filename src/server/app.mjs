@@ -1,7 +1,14 @@
 import { createServer } from "node:http";
 import { createRegistryFactsHandler } from "./registry-facts.mjs";
+import { guardDecisionResponse } from "./guard-decision.mjs";
 import { buildPackageDetails } from "../core/package-details.mjs";
 import { attachVulnerabilityCheck } from "./enrichment.mjs";
+import {
+  createAdvisoryService,
+  withAdvisoryResult,
+} from "./advisory-result.mjs";
+import { createDependencyScreening } from "./dependency-screening.mjs";
+import { serveExport } from "./exports.mjs";
 import { createQueue, resolveLimits, systemClock } from "./queue.mjs";
 import { createReportStore } from "./store.mjs";
 import { handleReportExploration } from "./report-exploration.mjs";
@@ -104,6 +111,7 @@ export function createCacheKeyPrefix(versionInfo, limits) {
 export function createApp({
   runAnalysis,
   enrichJob,
+  advisoryLookup,
   versionInfo,
   limits: overrides,
   clock = systemClock,
@@ -137,6 +145,10 @@ export function createApp({
     clock,
   });
   const keyPrefix = createCacheKeyPrefix(versionInfo, limits);
+  const screenDependencies = createDependencyScreening({
+    lookup: advisoryLookup,
+    clock,
+  });
   const queue = createQueue({
     runAnalysis,
     enrichJob,
@@ -145,6 +157,8 @@ export function createApp({
     clock,
     keyPrefix,
   });
+  const advisories =
+    enrichJob && createAdvisoryService({ lookup: enrichJob, clock });
   const server = createServer(
     { maxHeaderSize: 8192, headersTimeout: 10000, requestTimeout: 15000 },
     (req, res) => {
@@ -176,9 +190,28 @@ export function createApp({
       function error(status, title, message, headers) {
         send(status, renderError({ title, message }), undefined, headers);
       }
+      async function advisoryEndpoint(params) {
+        const spec =
+          params.size === 1 && parseNameAtExactVersion(params.get("package"));
+        if (!spec) return json(400, { error: "invalid-package-spec" });
+        if (!advisories)
+          return json(503, { error: "advisory-lookup-disabled" });
+        const result = advisories.request(spec);
+        if (!result.promise)
+          return json(
+            429,
+            { error: "rate-limited", retryAfter: result.retryAfter },
+            { "retry-after": String(result.retryAfter) },
+          );
+        return json(200, await result.promise, {
+          "x-unmask-reused": String(result.reused),
+        });
+      }
       async function handle() {
         const path = req.url;
         if (await registryFactsHandler(req, json)) return;
+        if (path === "/api/dependency-screening")
+          return screenDependencies(req, res, json);
         if (path === "/check") {
           if (req.method !== "POST")
             return error(
@@ -255,6 +288,25 @@ export function createApp({
             "x-unmask-reused": String(result.reused),
           });
         }
+        const decisionMatch =
+          /^\/r\/([a-f0-9]{32})\.decision\.json(\?[^#]*)?$/.exec(path);
+        if (decisionMatch) {
+          if (req.method !== "GET")
+            return json(405, { error: "method-unavailable" }, { allow: "GET" });
+          const decisionJob = queue.get(decisionMatch[1]);
+          // A job without a report keeps its exact-version advisory lookup inside advisoryResult.
+          const result = guardDecisionResponse(
+            decisionJob?.advisoryResult && !decisionJob.vulnerabilityCheck
+              ? {
+                  ...decisionJob,
+                  vulnerabilityCheck:
+                    decisionJob.advisoryResult.vulnerabilityCheck,
+                }
+              : decisionJob,
+            { search: decisionMatch[2] ?? "" },
+          );
+          return json(result.status, result.body, result.headers);
+        }
         if (req.method !== "GET")
           return error(
             405,
@@ -266,6 +318,9 @@ export function createApp({
         if (path === "/") return send(200, renderHome());
         if (path === "/healthz") return json(200, { status: "ok" });
         if (path === "/version") return json(200, version);
+        if (path.startsWith("/api/advisory?"))
+          return advisoryEndpoint(new URLSearchParams(path.slice(14)));
+        if (serveExport({ path, queue, versionInfo: version, send })) return;
         const match = /^\/r\/([a-f0-9]{32})(\.details\.json|\.json)?$/.exec(
           path,
         );
@@ -311,7 +366,7 @@ export function createApp({
           return send(200, renderCompleted(renderReport(job.report), job));
         return send(
           200,
-          renderStatus(job),
+          withAdvisoryResult(renderStatus(job), job),
           undefined,
           pending ? { "retry-after": "3" } : {},
         );
@@ -325,6 +380,9 @@ export function createApp({
       );
     },
   );
-  server.on("close", () => queue.close());
+  server.on("close", () => {
+    queue.close();
+    advisories?.close();
+  });
   return server;
 }
