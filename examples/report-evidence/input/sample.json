@@ -1,0 +1,6 @@
+{
+  "description": "Synthetic public-domain fixture, not an analysis of a real package.",
+  "path": "index.js",
+  "artifact": "export const mode = 'new';\n",
+  "source": "export const mode = 'old';\n"
+}
