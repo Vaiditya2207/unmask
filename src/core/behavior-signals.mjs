@@ -38,6 +38,8 @@ const SUMMARIES = {
     "Decoded data appears to flow into child process execution; this is a static suspicion and nothing was executed.",
   "behavior-encoded-module-load":
     "A module name is statically decoded before being required; loading and use are not proven.",
+  "behavior-recursive-overwrite":
+    "A recursive directory walker that writes or deletes files is called on a root, parent, home or decoded path; destructive overwrite is suspected from static structure, not observed.",
   "behavior-process-remote-shell":
     "A child process command string pipes downloaded content into an interpreter; this is a static suspicion, not observed execution.",
 };
@@ -795,6 +797,192 @@ export function obfuscationSignals(all) {
         (item) => item !== node,
       ),
       detail,
+    });
+  }
+  return { signals, capped };
+}
+
+export const DESTRUCTIVE_LIMITS = Object.freeze({
+  functions: 512,
+  bodyNodes: 4096,
+  callSites: 64,
+  decodedPerName: 16,
+});
+const FS_MODULES = new Set(["fs", "fs/promises", "graceful-fs", "fs-extra"]);
+const LISTING = new Set(["readdirSync", "readdir", "opendirSync", "opendir"]);
+const MUTATING = new Set([
+  "writeFile",
+  "writeFileSync",
+  "appendFile",
+  "appendFileSync",
+  "unlink",
+  "unlinkSync",
+  "rm",
+  "rmSync",
+  "rmdir",
+  "rmdirSync",
+  "truncate",
+  "truncateSync",
+  "createWriteStream",
+]);
+const ROOT_TARGETS = new Set([
+  "/",
+  "\\",
+  "..",
+  "../",
+  "../..",
+  "../../",
+  "~",
+  "~/",
+  "C:\\",
+  "C:/",
+]);
+const DECODED_ROOT_TARGETS = new Set([...ROOT_TARGETS, ".", "./"]);
+const FUNCTIONS = new Set([
+  "FunctionDeclaration",
+  "FunctionExpression",
+  "ArrowFunctionExpression",
+]);
+function fsOperation(node, aliases) {
+  if (node.type !== "CallExpression") return null;
+  const name = qualified(node.callee, aliases);
+  const parts = name.split(".");
+  return FS_MODULES.has(parts[0]) ? parts.at(-1) : null;
+}
+function namedFunctions(all) {
+  const result = [];
+  for (const node of all) {
+    if (node.type === "FunctionDeclaration" && node.id)
+      result.push([node.id.name, node]);
+    else if (
+      node.type === "VariableDeclarator" &&
+      node.id.type === "Identifier" &&
+      FUNCTIONS.has(node.init?.type)
+    )
+      result.push([node.id.name, node.init]);
+  }
+  return result;
+}
+function walkerFacts(name, fn, aliases) {
+  const facts = {};
+  const stack = [fn.body];
+  let visited = 0;
+  while (stack.length) {
+    if (++visited > DESTRUCTIVE_LIMITS.bodyNodes) return { capped: true };
+    const node = stack.pop();
+    if (node.type === "CallExpression") {
+      const operation = fsOperation(node, aliases);
+      if (LISTING.has(operation)) facts.listing ??= node;
+      if (MUTATING.has(operation)) facts.mutation ??= [node, operation];
+      if (node.callee.type === "Identifier" && node.callee.name === name)
+        facts.recursion ??= node;
+    }
+    for (const value of Object.values(node))
+      if (Array.isArray(value)) {
+        for (const item of value) if (item?.type) stack.push(item);
+      } else if (value?.type) stack.push(value);
+  }
+  return facts;
+}
+function decodedValues(all, aliases) {
+  const values = new Map();
+  for (const node of all) {
+    if (node.type !== "VariableDeclarator" || node.id.type !== "Identifier")
+      continue;
+    let init = node.init;
+    if (
+      init?.type === "CallExpression" &&
+      init.callee.type === "MemberExpression" &&
+      !init.callee.computed &&
+      init.callee.property.name === "toString"
+    )
+      init = init.callee.object;
+    const decoder = init && decoderOf(init, aliases);
+    const decoded = decoder && decodeLiteral(decoder, init);
+    if (typeof decoded !== "string") continue;
+    const list = values.get(node.id.name) ?? [];
+    if (list.length < DESTRUCTIVE_LIMITS.decodedPerName) list.push(decoded);
+    values.set(node.id.name, list);
+  }
+  return values;
+}
+function targetOf(arg, aliases, decoded) {
+  const literal = stringLiteral(arg);
+  if (literal !== null)
+    return ROOT_TARGETS.has(literal)
+      ? { via: "literal", targets: [literal] }
+      : null;
+  if (
+    arg?.type === "CallExpression" &&
+    qualified(arg.callee, aliases).endsWith("homedir")
+  )
+    return { via: "home-directory", targets: ["~"] };
+  let base = arg;
+  if (
+    base?.type === "CallExpression" &&
+    base.callee.type === "MemberExpression" &&
+    !base.callee.computed &&
+    base.callee.property.name === "toString"
+  )
+    base = base.callee.object;
+  const decoder = base && decoderOf(base, aliases);
+  const values = decoder
+    ? [decodeLiteral(decoder, base)].filter((v) => typeof v === "string")
+    : base?.type === "Identifier"
+      ? decoded.get(base.name) || []
+      : [];
+  const roots = values.filter((value) => DECODED_ROOT_TARGETS.has(value));
+  return roots.length ? { via: "decoded", targets: [...new Set(roots)] } : null;
+}
+
+export function destructiveSignals(all) {
+  const aliases = new Map([
+    ...moduleAliases(all, FS_MODULES),
+    ...moduleAliases(all, new Set(["os"])),
+  ]);
+  const functions = namedFunctions(all);
+  if (functions.length > DESTRUCTIVE_LIMITS.functions)
+    return { signals: [], capped: true };
+  const walkers = new Map();
+  let capped = false;
+  for (const [name, fn] of functions) {
+    const facts = walkerFacts(name, fn, aliases);
+    if (facts.capped) capped = true;
+    else if (facts.listing && facts.mutation && facts.recursion)
+      walkers.set(name, facts);
+  }
+  const signals = [];
+  if (!walkers.size) return { signals, capped };
+  const decoded = decodedValues(all, moduleAliases(all));
+  const reported = new Set();
+  let sites = 0;
+  for (const node of all) {
+    if (
+      node.type !== "CallExpression" ||
+      node.callee.type !== "Identifier" ||
+      !walkers.has(node.callee.name) ||
+      reported.has(node.callee.name)
+    )
+      continue;
+    if (++sites > DESTRUCTIVE_LIMITS.callSites) {
+      capped = true;
+      break;
+    }
+    const target = targetOf(node.arguments[0], aliases, decoded);
+    if (!target) continue;
+    const facts = walkers.get(node.callee.name);
+    reported.add(node.callee.name);
+    signals.push({
+      ruleId: "behavior-recursive-overwrite",
+      priority: "HIGH",
+      node,
+      related: [facts.mutation[0], facts.listing],
+      detail: {
+        walker: node.callee.name,
+        operation: facts.mutation[1],
+        via: target.via,
+        targets: target.targets,
+      },
     });
   }
   return { signals, capped };

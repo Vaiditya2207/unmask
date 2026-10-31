@@ -564,3 +564,93 @@ test("network calls through import and require aliases of http/https/net are syn
     .map((c) => spanOf(artifact, result, c).split("(")[0]);
   assert.deepEqual(network.sort(), ["connect", "get", "h.request", "o.get"]);
 });
+
+test("recursive overwrite walkers called on decoded, root or home paths are HIGH heuristic cues", () => {
+  const walker = (name) =>
+    [
+      `function ${name}(n = "") {`,
+      "  let r = [];",
+      "  try { r = a.readdirSync(n); } catch (t) {}",
+      "  for (const e of r) {",
+      "    const i = u.join(n, e);",
+      `    if (a.lstatSync(i).isDirectory()) ${name}(i);`,
+      "    else a.writeFile(i, '\\u2764', () => {});",
+      "  }",
+      "}",
+    ].join("\n");
+  const artifact = inventory({
+    "geo.mjs": [
+      'import u from "path";',
+      'import a from "fs";',
+      walker("h"),
+      'const n = Buffer.from("Li8=", "base64");',
+      'const f = Buffer.from("Lw==", "base64");',
+      "h(n.toString('utf8'));",
+      "h(f.toString('utf8'));",
+    ].join("\n"),
+    "wipe.js": [
+      "const a = require('fs'), u = require('path'), os = require('os');",
+      walker("wipe"),
+      "wipe(os.homedir());",
+    ].join("\n"),
+  });
+  const result = inspectJavaScript(artifact, null);
+  const cues = behavior(result).filter(
+    (c) => c.ruleId === "behavior-recursive-overwrite",
+  );
+  assert.deepEqual(
+    cues.map((c) => [
+      c.priority,
+      c.signal.walker,
+      c.signal.via,
+      c.signal.targets,
+    ]),
+    [
+      ["HIGH", "h", "decoded", ["./"]],
+      ["HIGH", "wipe", "home-directory", ["~"]],
+    ],
+  );
+  assert.deepEqual(spans(artifact, result, cues[0]), [
+    "h(n.toString('utf8'))",
+    "a.writeFile(i, '\\u2764', () => {})",
+    "a.readdirSync(n)",
+  ]);
+  assert.equal(cues[0].confidence, "suspicion-not-proof");
+});
+
+test("ordinary recursive deletes, formatters and copies are not overwrite cues", () => {
+  const artifact = inventory({
+    "clean.js": [
+      "const fs = require('fs'), path = require('path');",
+      "function rimraf(dir) {",
+      "  for (const f of fs.readdirSync(dir)) {",
+      "    const p = path.join(dir, f);",
+      "    if (fs.lstatSync(p).isDirectory()) rimraf(p); else fs.unlinkSync(p);",
+      "  }",
+      "  fs.rmdirSync(dir);",
+      "}",
+      "rimraf(path.join(__dirname, 'dist'));",
+      "rimraf('build');",
+      "const d = Buffer.from('ZGlzdA==', 'base64');",
+      "rimraf(d.toString());",
+    ].join("\n"),
+    "format.js": [
+      "const fs = require('fs');",
+      "const walk = (d) => {",
+      "  for (const f of fs.readdirSync(d)) {",
+      "    if (f.endsWith('/')) walk(d + f);",
+      "    else fs.writeFileSync(d + f, fs.readFileSync(d + f, 'utf8').trim());",
+      "  }",
+      "};",
+      "walk('./');",
+      "walk(process.cwd());",
+    ].join("\n"),
+    "list.js":
+      "const fs = require('fs'); function tree(d) { return fs.readdirSync(d).map((f) => tree(d + '/' + f)); } tree('/');",
+  });
+  const result = inspectJavaScript(artifact, null);
+  assert.deepEqual(
+    behavior(result).filter((c) => c.ruleId === "behavior-recursive-overwrite"),
+    [],
+  );
+});

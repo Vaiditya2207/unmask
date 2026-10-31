@@ -5,6 +5,8 @@ import {
   BEHAVIOR_LIMITS,
   javascriptSignal,
   manifestScriptSpans,
+  destructiveSignals,
+  DESTRUCTIVE_LIMITS,
   moduleAliases,
   NETWORK_MODULES,
   obfuscationSignals,
@@ -340,6 +342,9 @@ export function inspectJavaScript(artifact, source, overrides = {}) {
         const hooks = hookTargets.get(entry.path);
         const found = obfuscationSignals(all);
         if (found.capped) skip("behavior-obfuscation-cap");
+        const destructive = destructiveSignals(all);
+        if (destructive.capped) skip("behavior-destructive-cap");
+        found.signals.push(...destructive.signals);
         for (const {
           ruleId,
           priority,
@@ -563,7 +568,11 @@ export function inspectJavaScript(artifact, source, overrides = {}) {
   result.annotations.push({
     type: "behavior-scope",
     manifest: behaviorManifest,
-    limits: { ...BEHAVIOR_LIMITS, obfuscation: { ...OBFUSCATION_LIMITS } },
+    limits: {
+      ...BEHAVIOR_LIMITS,
+      obfuscation: { ...OBFUSCATION_LIMITS },
+      destructive: { ...DESTRUCTIVE_LIMITS },
+    },
     limitation:
       "Behavior cues are static text and syntax suspicions, not proof of execution or intent. Install hooks and package code were not run; aliases, computed names and runtime-constructed paths are not resolved.",
   });
