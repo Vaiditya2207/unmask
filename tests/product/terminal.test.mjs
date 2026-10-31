@@ -645,3 +645,80 @@ test("compare failure labels advisory-only evidence for its failing second versi
   assert.match(runtime.stdout.text, /^UNMASK fixture@0\.7\.29$/m);
   assert.doesNotMatch(runtime.stdout.text, /^UNMASK fixture@1\.0\.0$/m);
 });
+
+test("behavior cues are shown as bounded suspicions without changing the verdict or exit", () => {
+  const review = Array.from({ length: 6 }, (_, index) => ({
+    module: "behavior",
+    ruleId: "behavior-environment-enumeration",
+    priority: "review",
+    evidenceIds: [`ev-${index}`],
+  }));
+  const report = {
+    inputs: { claim: { name: "node-ipc", version: "10.1.1" } },
+    coverage: {
+      complete: true,
+      inventory: { files: 2, bytes: 10 },
+      states: {},
+    },
+    evidence: [
+      { id: "ev-high", path: "dao/ssl-geospec.js" },
+      { id: "ev-hook", path: "preinstall.sh\u001b[2J" },
+    ],
+    cues: [
+      { module: "syntax", ruleId: "syntax-novel-call", evidenceIds: [] },
+      ...review,
+      {
+        module: "behavior",
+        ruleId: "behavior-recursive-overwrite",
+        priority: "HIGH",
+        evidenceIds: ["ev-high"],
+      },
+      {
+        module: "behavior",
+        ruleId: "behavior-install-remote-shell",
+        priority: "HIGH",
+        evidenceIds: ["ev-hook"],
+        installHookTarget: ["preinstall"],
+      },
+    ],
+    policy: { exitCode: 0, findings: [] },
+    model: { status: "unavailable", reason: "quota" },
+  };
+  const before = JSON.stringify(report);
+  const summary = renderCheckSummary(report, {
+    style: { paint: (_name, text) => text },
+  });
+  assert.equal(JSON.stringify(report), before);
+  assert.match(
+    summary,
+    /No deterministic findings in the inspected scope \(exit 0\)/,
+  );
+  assert.match(
+    summary,
+    /^Behavior  2 HIGH and 6 review-level static cues \(suspicion, not proof; exit code unchanged\)$/m,
+  );
+  assert.match(
+    summary,
+    /^  - HIGH behavior-recursive-overwrite dao\/ssl-geospec\.js$/m,
+  );
+  assert.match(
+    summary,
+    /^  - HIGH behavior-install-remote-shell preinstall\.sh\\u001b\[2J \(runs at preinstall\)$/m,
+  );
+  assert.equal(summary.match(/^  - (HIGH )?behavior-/gm).length, 5);
+  assert.match(summary, /^  \.\.\. 3 more in the full report$/m);
+  assert.doesNotMatch(summary, /syntax-novel-call|\u001b/);
+  assert.match(
+    summary,
+    /Review each HIGH behavior cue and its cited file before installing\./,
+  );
+  assert.doesNotMatch(
+    renderCheckSummary(
+      { ...report, cues: review.slice(0, 1) },
+      {
+        style: { paint: (_name, text) => text },
+      },
+    ),
+    /Review each HIGH behavior cue/,
+  );
+});

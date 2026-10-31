@@ -128,6 +128,34 @@ function modelLines(model) {
   ];
 }
 
+const behaviorCues = (report) =>
+  list(report.cues).filter((cue) => cue?.module === "behavior");
+const highCue = (cue) => cue?.priority === "HIGH";
+
+function behaviorLines(report) {
+  const cues = behaviorCues(report);
+  if (!cues.length) return [];
+  const paths = new Map(
+    list(report.evidence).map((item) => [item?.id, item?.path]),
+  );
+  const high = cues.filter(highCue);
+  const lines = [
+    `Behavior  ${high.length} HIGH and ${cues.length - high.length} review-level static cues (suspicion, not proof; exit code unchanged)`,
+  ];
+  for (const cue of [...high, ...cues.filter((c) => !highCue(c))].slice(0, 5)) {
+    const path = paths.get(list(cue.evidenceIds)[0]);
+    const hooks = list(cue.installHookTarget)
+      .slice(0, 3)
+      .map((hook) => safeText(hook, 24));
+    lines.push(
+      `  - ${highCue(cue) ? "HIGH " : ""}${safeText(cue.ruleId, 64)}${typeof path === "string" ? ` ${safeText(path, 80)}` : ""}${hooks.length ? ` (runs at ${hooks.join(", ")})` : ""}`,
+    );
+  }
+  if (cues.length > 5)
+    lines.push(`  ... ${cues.length - 5} more in the full report`);
+  return lines;
+}
+
 function advisoryItems(advisories) {
   const lines = advisories.slice(0, 5).map((item) => {
     const label =
@@ -181,6 +209,10 @@ function nextActions(report, { details, outDir }) {
   if (exitCode === 2)
     actions.push(
       "Coverage is incomplete: treat this as unverified and retry or inspect the failures.",
+    );
+  if (behaviorCues(report).some(highCue))
+    actions.push(
+      "Review each HIGH behavior cue and its cited file before installing.",
     );
   if (exitCode === 0)
     actions.push(
@@ -238,7 +270,7 @@ export function renderAdvisoryOnly(
 
 const codes = { bold: 1, red: 31, yellow: 33, cyan: 36, dim: 2 };
 const label =
-  /^(UNMASK|Result|Coverage|Source|Findings|Failures|Advisory|AI|Next)\b/;
+  /^(UNMASK|Result|Coverage|Source|Findings|Failures|Behavior|Advisory|AI|Next)\b/;
 
 export function terminalStyle(stream, env = process.env) {
   const tty = stream?.isTTY === true && env.TERM !== "dumb";
@@ -255,7 +287,8 @@ function resultColor(report, details) {
   if (report.policy?.exitCode === 2) return "red";
   if (
     report.policy?.exitCode === 3 ||
-    knownAdvisories(details?.vulnerabilityCheck)
+    knownAdvisories(details?.vulnerabilityCheck) ||
+    behaviorCues(report).some(highCue)
   )
     return "yellow";
   return "bold";
@@ -270,6 +303,7 @@ export function renderCheckSummary(
     `Result    ${verdict(report.policy?.exitCode)}`,
     ...coverageLines(report),
     ...findingLines(report),
+    ...behaviorLines(report),
     ...advisoryLines(details),
     ...modelLines(report.model),
     "Next",
