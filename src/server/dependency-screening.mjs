@@ -1,4 +1,8 @@
-import { LockfileError, parseNpmLockfile } from "../core/dependency-graph.mjs";
+import {
+  LockfileError,
+  explainDependencyPaths,
+  parseNpmLockfile,
+} from "../core/dependency-graph.mjs";
 
 export const SCREENING_LIMITS = Object.freeze({
   bodyBytes: 2 * 1024 * 1024,
@@ -7,6 +11,7 @@ export const SCREENING_LIMITS = Object.freeze({
   concurrency: 4,
   deadlineMs: 60000,
   advisoriesPerDependency: 20,
+  explanations: 50,
   admissions: 6,
   attempts: 30,
   readers: 2,
@@ -166,6 +171,21 @@ export async function screenDependencyGraph(
   } finally {
     (clock.clearTimeout ?? clearTimeout)(timer);
     combined.removeEventListener("abort", stop);
+  }
+  let explained = 0;
+  for (const item of results) {
+    if (!item.advisories.length) continue;
+    item.explanation =
+      explained++ < limits.explanations
+        ? explainDependencyPaths(graph, item.spec)
+        : {
+            spec: item.spec,
+            locations: graph.index.bySpec.get(item.spec)?.length ?? 0,
+            direct: null,
+            paths: [],
+            complete: false,
+            reasons: ["explanation-limit"],
+          };
   }
   const count = (status) =>
     results.filter((item) => item.status === status).length;

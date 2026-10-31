@@ -3,6 +3,12 @@ import { parsePackageSpec } from "./acquire.mjs";
 export const GRAPH_LIMITS = Object.freeze({
   entries: 20000,
   locations: 20,
+  edges: 200000,
+});
+export const PATH_LIMITS = Object.freeze({
+  paths: 20,
+  depth: 32,
+  visits: 20000,
 });
 const REGISTRY = "https://registry.npmjs.org/";
 
@@ -94,6 +100,7 @@ export function parseNpmLockfile(input, { limits: overrides = {} } = {}) {
   const root = lock.packages[""];
   const identities = new Map();
   const integrities = new Map();
+  const bySpec = new Map();
   const rejected = [];
   const local = [];
   for (const key of keys) {
@@ -128,6 +135,7 @@ export function parseNpmLockfile(input, { limits: overrides = {} } = {}) {
       optional: true,
     };
     identity.locationCount++;
+    bySpec.set(spec, [...(bySpec.get(spec) ?? []), key]);
     if (identity.locations.length < limits.locations)
       identity.locations.push(key);
     const integrity =
@@ -161,5 +169,126 @@ export function parseNpmLockfile(input, { limits: overrides = {} } = {}) {
       .sort((a, b) => (a.spec < b.spec ? -1 : a.spec > b.spec ? 1 : 0)),
     rejected,
     local,
+    index: indexEdges(lock.packages, keys, bySpec, limits),
+  };
+}
+
+function parentLocation(location) {
+  const at = location.lastIndexOf("/node_modules/");
+  return at >= 0 ? location.slice(0, at) : "";
+}
+
+// Resolves each declared dependency with node_modules lookup from the dependent location upward, following workspace links.
+function indexEdges(packages, keys, bySpec, limits) {
+  const reverse = new Map();
+  let edges = 0,
+    unresolved = 0,
+    truncated = false;
+  for (const from of keys) {
+    const entry = packages[from];
+    if (!object(entry)) continue;
+    const declared = [
+      entry.dependencies,
+      entry.optionalDependencies,
+      entry.peerDependencies,
+      from.startsWith("node_modules/") ? undefined : entry.devDependencies,
+    ];
+    const names = new Set(declared.filter(object).flatMap(Object.keys));
+    for (const name of names) {
+      if (++edges > limits.edges) {
+        truncated = true;
+        break;
+      }
+      let target = null;
+      for (let at = from; target === null; at = parentLocation(at)) {
+        const candidate = `${at ? `${at}/` : ""}node_modules/${name}`;
+        if (Object.hasOwn(packages, candidate)) target = candidate;
+        else if (at === "") break;
+      }
+      if (target === null) {
+        unresolved++;
+        continue;
+      }
+      const linked = packages[target];
+      if (
+        linked?.link === true &&
+        typeof linked.resolved === "string" &&
+        Object.hasOwn(packages, linked.resolved)
+      )
+        target = linked.resolved;
+      if (!reverse.has(target)) reverse.set(target, new Set());
+      reverse.get(target).add(from);
+    }
+    if (truncated) break;
+  }
+  return { reverse, bySpec, unresolved, truncated, packages };
+}
+
+function describe(packages, location) {
+  const entry = packages[location];
+  return {
+    location,
+    name:
+      location === ""
+        ? typeof entry?.name === "string"
+          ? entry.name
+          : null
+        : (nameFromKey(location) ?? entry?.name ?? null),
+    version: typeof entry?.version === "string" ? entry.version : null,
+  };
+}
+
+// Enumerates bounded simple paths from the project root or workspace to every location of an exact identity.
+export function explainDependencyPaths(
+  graph,
+  spec,
+  { limits: overrides = {} } = {},
+) {
+  const limits = { ...PATH_LIMITS, ...overrides };
+  const { reverse, bySpec, packages } = graph.index;
+  const targets = bySpec.get(spec) ?? [];
+  const paths = [];
+  const reasons = new Set();
+  if (graph.index.truncated) reasons.add("edge-limit");
+  let visits = 0;
+  for (const target of targets) {
+    const stack = [[target]];
+    while (stack.length) {
+      if (paths.length >= limits.paths) {
+        reasons.add("path-limit");
+        break;
+      }
+      if (++visits > limits.visits) {
+        reasons.add("visit-limit");
+        break;
+      }
+      const chain = stack.pop();
+      const head = chain.at(-1);
+      const parents = reverse.get(head);
+      if (head === "" || (head !== target && nameFromKey(head) === null)) {
+        paths.push(chain.toReversed().map((at) => describe(packages, at)));
+        continue;
+      }
+      if (!parents?.size) {
+        reasons.add("unreachable-location");
+        continue;
+      }
+      if (chain.length > limits.depth) {
+        reasons.add("depth-limit");
+        continue;
+      }
+      const next = [...parents].filter((parent) => !chain.includes(parent));
+      if (!next.length) reasons.add("cycle-without-root");
+      for (const parent of next.sort().reverse())
+        stack.push([...chain, parent]);
+    }
+  }
+  return {
+    spec,
+    locations: targets.length,
+    direct: paths.some((path) => path.length === 2 && path[0].location === ""),
+    paths,
+    complete: reasons.size === 0,
+    reasons: [...reasons].sort(),
   };
 }

@@ -3,6 +3,7 @@ import { once } from "node:events";
 import { test } from "node:test";
 import {
   LockfileError,
+  explainDependencyPaths,
   parseNpmLockfile,
 } from "../../src/core/dependency-graph.mjs";
 import { lookupNpmAdvisories } from "../../src/core/advisories.mjs";
@@ -49,7 +50,7 @@ const clean = (spec) =>
 const sample = lockfile({
   "node_modules/ua-parser-js": registry("ua-parser-js", "0.7.29"),
   "node_modules/left": registry("left", "1.0.0", {
-    dependencies: { "@scope/mid": "2.0.0" },
+    dependencies: { "@scope/mid": "2.0.0", "ua-parser-js": "0.7.29" },
   }),
   "node_modules/@scope/mid": registry("@scope/mid", "2.0.0", { dev: true }),
   "node_modules/left/node_modules/ua-parser-js": registry(
@@ -80,7 +81,11 @@ const sample = lockfile({
     resolved: tgz("ranged", "1.0.0"),
   },
   "node_modules/ws": { resolved: "packages/ws", link: true },
-  "packages/ws": { name: "ws", version: "0.0.1" },
+  "packages/ws": {
+    name: "ws",
+    version: "0.0.1",
+    devDependencies: { nested: "3.0.0" },
+  },
   "packages/ws/node_modules/nested": registry("nested", "3.0.0"),
 });
 
@@ -352,6 +357,17 @@ test("dependency screening API screens a submitted lockfile over local HTTP with
   ]);
   assert.equal(result.summary.rejected, 7);
   assert.match(result.statement, /not a safety verdict/);
+  assert.deepEqual(
+    flagged.explanation.paths.map((path) => path.map((node) => node.location)),
+    [
+      ["", "node_modules/ua-parser-js"],
+      ["", "node_modules/left", "node_modules/left/node_modules/ua-parser-js"],
+    ],
+  );
+  assert.equal(
+    result.dependencies.find((item) => item.name === "left").explanation,
+    undefined,
+  );
 
   assert.equal(
     (await post("{}", { "content-type": "text/plain" })).status,
@@ -487,4 +503,77 @@ test("slow bodies never hold the screening slot and every attempt is bounded", a
   const exhausted = await post(body);
   assert.equal(exhausted.status, 429);
   assert.ok(Number(exhausted.headers.get("retry-after")) > 0);
+});
+
+const names = (explanation) =>
+  explanation.paths.map((path) => path.map((node) => node.name).join(">"));
+
+test("path explanations preserve every bounded route to a flagged transitive package", () => {
+  const graph = parseNpmLockfile(sample);
+  const flagged = explainDependencyPaths(graph, "ua-parser-js@0.7.29");
+  assert.equal(flagged.direct, true);
+  assert.equal(flagged.locations, 2);
+  assert.deepEqual(names(flagged), [
+    "app>ua-parser-js",
+    "app>left>ua-parser-js",
+  ]);
+  assert.deepEqual(flagged.paths[1][1], {
+    location: "node_modules/left",
+    name: "left",
+    version: "1.0.0",
+  });
+  assert.equal(flagged.complete, true);
+  assert.deepEqual(names(explainDependencyPaths(graph, "nested@3.0.0")), [
+    "ws>nested",
+  ]);
+  assert.deepEqual(explainDependencyPaths(graph, "absent@1.0.0").paths, []);
+
+  const diamondLock = lockfile({
+    "node_modules/x": registry("x", "1.0.0", { dependencies: { z: "1" } }),
+    "node_modules/y": registry("y", "1.0.0", { dependencies: { z: "1" } }),
+    "node_modules/z": registry("z", "1.0.0", { dependencies: { x: "1" } }),
+    "node_modules/orphan": registry("orphan", "1.0.0"),
+  });
+  diamondLock.packages[""].dependencies = { x: "1", y: "1" };
+  const diamond = parseNpmLockfile(diamondLock);
+  const both = explainDependencyPaths(diamond, "z@1.0.0");
+  assert.deepEqual(names(both), ["app>x>z", "app>y>z"]);
+  assert.equal(both.direct, false);
+  assert.ok(both.reasons.every((reason) => reason === "cycle-without-root"));
+  const capped = explainDependencyPaths(diamond, "z@1.0.0", {
+    limits: { paths: 1 },
+  });
+  assert.equal(capped.paths.length, 1);
+  assert.deepEqual(capped.reasons, ["path-limit"]);
+  const shallow = explainDependencyPaths(diamond, "z@1.0.0", {
+    limits: { depth: 1 },
+  });
+  assert.deepEqual(shallow.paths, []);
+  assert.ok(shallow.reasons.includes("depth-limit"));
+  assert.deepEqual(explainDependencyPaths(diamond, "orphan@1.0.0").reasons, [
+    "unreachable-location",
+  ]);
+});
+
+test("explanation-limit placeholders keep the explanation shape", async () => {
+  const result = await screenDependencyGraph(parseNpmLockfile(sample), {
+    limits: { explanations: 0 },
+    lookup: async (spec) =>
+      bound(spec, {
+        status: "found",
+        complete: true,
+        advisories: [{ id: "GHSA-test" }],
+      }),
+  });
+  const flagged = result.dependencies.find(
+    (item) => item.spec === "ua-parser-js@0.7.29",
+  );
+  assert.deepEqual(flagged.explanation, {
+    spec: "ua-parser-js@0.7.29",
+    locations: 2,
+    direct: null,
+    paths: [],
+    complete: false,
+    reasons: ["explanation-limit"],
+  });
 });
