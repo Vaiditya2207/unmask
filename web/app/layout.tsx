@@ -12,7 +12,7 @@ const sans = Bricolage_Grotesque({
 const mono = IBM_Plex_Mono({
   subsets: ["latin"],
   weight: ["400", "500"],
-  variable: "--font-mono",
+  variable: "--font-mono", // taste-skill-ignore: code, paths and digests only
   display: "swap",
 });
 
