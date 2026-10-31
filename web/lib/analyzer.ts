@@ -38,11 +38,17 @@ const STATUSES: JobStatus[] = [
   "completed",
 ];
 
-// The analyzer serves the job while it is pending and the schema 1 report itself
-// once it completes; that report is linked, not rendered, until a mapping exists.
+// Live schema-1 overviews use a separate details projection.
 export type Fetched =
   | { ok: true; kind: "job"; job: Job }
-  | { ok: true; kind: "report"; schemaVersion: string; analyzer: string }
+  | {
+      ok: true;
+      kind: "report";
+      schemaVersion: string;
+      analyzer: string;
+      evidence: unknown;
+      modelMetadata: Record<string, unknown>;
+    }
   | { ok: false; status: number };
 
 export async function fetchJob(id: string): Promise<Fetched> {
@@ -61,6 +67,22 @@ export async function fetchJob(id: string): Promise<Fetched> {
         kind: "report",
         schemaVersion: body.schemaVersion,
         analyzer: base,
+        evidence: body.evidence,
+        modelMetadata: Object.fromEntries(
+          [
+            "status",
+            "modelId",
+            "promptHash",
+            "configHash",
+            "reason",
+            "attempts",
+          ].map((key) => [
+            key,
+            body.model && typeof body.model === "object"
+              ? (body.model as Record<string, unknown>)[key]
+              : undefined,
+          ]),
+        ),
       };
     if (
       typeof body.nameAtExactVersion === "string" &&
