@@ -187,3 +187,15 @@ test("caps global concurrent lookups and lookup admissions", async (t) => {
   assert.equal((await second).status, 200);
   assert.equal((await get(factsPath)).status, 429);
 });
+
+test("valid maintainer lists over the item cap report omission rather than invalid type", async (t) => {
+  const get = await start(t, {
+    fetchImpl: async () =>
+      Response.json({
+        ...release,
+        maintainers: Array.from({ length: 101 }, () => ({ name: "member" })),
+      }),
+  });
+  const body = await (await get(factsPath)).json();
+  assert.equal(body.unverifiedClaims.maintainers.status, "omitted-limit");
+});

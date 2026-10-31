@@ -1,4 +1,8 @@
-import { getRegistryFacts, registryIdentity } from "../core/registry-facts.mjs";
+import {
+  getRegistryFacts,
+  getRegistryHistory,
+  registryIdentity,
+} from "../core/registry-facts.mjs";
 
 export function createRegistryFactsHandler(options = {}) {
   const maxConcurrent = options.maxConcurrent ?? 2;
@@ -17,7 +21,8 @@ export function createRegistryFactsHandler(options = {}) {
     windowStart = Date.now();
   return async function handleRegistryFacts(req, json) {
     const url = new URL(req.url, "http://localhost");
-    if (url.pathname !== "/api/registry/facts") return false;
+    const history = url.pathname === "/api/registry/history";
+    if (url.pathname !== "/api/registry/facts" && !history) return false;
     if (req.method !== "GET") {
       json(
         405,
@@ -27,11 +32,31 @@ export function createRegistryFactsHandler(options = {}) {
       return true;
     }
     const spec = url.searchParams.get("package");
+    let limit = 20;
     try {
-      if (url.searchParams.size !== 1 || !spec) throw new Error();
-      registryIdentity(spec);
+      const allowed = history ? ["package", "limit"] : ["package"];
+      if (
+        !spec ||
+        [...url.searchParams.keys()].some((key) => !allowed.includes(key)) ||
+        allowed.some((key) => url.searchParams.getAll(key).length > 1)
+      )
+        throw new Error();
+      if (history) {
+        registryIdentity(`${spec}@0.0.0`);
+        if (url.searchParams.has("limit")) {
+          const raw = url.searchParams.get("limit");
+          if (!/^[1-9]\d{0,2}$/.test(raw)) throw new Error();
+          limit = Number(raw);
+          if (limit > 100) throw new Error();
+        }
+      } else registryIdentity(spec);
     } catch {
-      json(400, { status: "rejected", reason: "exact-package-required" });
+      json(400, {
+        status: "rejected",
+        reason: history
+          ? "package-name-and-bounded-limit-required"
+          : "exact-package-required",
+      });
       return true;
     }
     const now = Date.now();
@@ -54,7 +79,12 @@ export function createRegistryFactsHandler(options = {}) {
     used++;
     active++;
     try {
-      json(200, await getRegistryFacts(spec, options));
+      json(
+        200,
+        history
+          ? await getRegistryHistory(spec, { ...options, limit })
+          : await getRegistryFacts(spec, options),
+      );
     } catch (error) {
       const reason = [
         "acquisition-timeout",
@@ -65,6 +95,7 @@ export function createRegistryFactsHandler(options = {}) {
         "http-status",
         "network-failure",
         "invalid-response",
+        "registry-history-cap",
       ].includes(error.code)
         ? error.code
         : "registry-unavailable";
