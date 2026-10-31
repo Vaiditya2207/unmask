@@ -1,0 +1,178 @@
+[
+  {
+    "decisionVersion": "1",
+    "policyVersion": "guard-2",
+    "profile": "balanced",
+    "appliedPolicy": {
+      "unknownDecision": "unknown",
+      "blockSeverity": "high",
+      "enforcement": "enforce"
+    },
+    "package": {
+      "ecosystem": "npm",
+      "name": "ua-parser-js",
+      "version": "0.7.29"
+    },
+    "artifact": null,
+    "decision": "block",
+    "permitted": false,
+    "enforcement": "enforce",
+    "reasons": [
+      {
+        "code": "report-unavailable"
+      },
+      {
+        "code": "artifact-assessment-incomplete"
+      },
+      {
+        "code": "source-assessment-incomplete"
+      },
+      {
+        "code": "known-malware",
+        "advisoryId": "GHSA-pjwm-rvh2-c87w",
+        "aliases": [
+          "CVE-2021-4229"
+        ]
+      }
+    ],
+    "knownMalware": [
+      {
+        "id": "GHSA-pjwm-rvh2-c87w",
+        "aliases": [
+          "CVE-2021-4229"
+        ]
+      }
+    ],
+    "policyExitCode": null,
+    "assessment": {
+      "complete": false,
+      "artifactComplete": false,
+      "sourceComplete": false,
+      "advisoriesComplete": true,
+      "advisorySeverityComplete": true,
+      "modelStatus": "unavailable",
+      "modelComplete": false
+    },
+    "limitations": [
+      "Allow means this bounded static assessment found no policy blocker; it is not a safety guarantee.",
+      "Assessment completeness covers the recorded artifact, source comparison and exact-version OSV lookup; model availability is reported separately and AI signals cannot permit or block installation.",
+      "Package execution, transitive dependencies, freshness after this check and future registry changes are not assessed."
+    ]
+  },
+  {
+    "decisionVersion": "1",
+    "policyVersion": "guard-2",
+    "profile": "balanced",
+    "appliedPolicy": {
+      "unknownDecision": "unknown",
+      "blockSeverity": "high",
+      "enforcement": "enforce"
+    },
+    "package": {
+      "ecosystem": "npm",
+      "name": "event-stream",
+      "version": "3.3.6"
+    },
+    "artifact": null,
+    "decision": "block",
+    "permitted": false,
+    "enforcement": "enforce",
+    "reasons": [
+      {
+        "code": "report-unavailable"
+      },
+      {
+        "code": "artifact-assessment-incomplete"
+      },
+      {
+        "code": "source-assessment-incomplete"
+      },
+      {
+        "code": "known-malware",
+        "advisoryId": "GHSA-mh6f-8j2x-4483",
+        "aliases": []
+      }
+    ],
+    "knownMalware": [
+      {
+        "id": "GHSA-mh6f-8j2x-4483",
+        "aliases": []
+      }
+    ],
+    "policyExitCode": null,
+    "assessment": {
+      "complete": false,
+      "artifactComplete": false,
+      "sourceComplete": false,
+      "advisoriesComplete": true,
+      "advisorySeverityComplete": true,
+      "modelStatus": "unavailable",
+      "modelComplete": false
+    },
+    "limitations": [
+      "Allow means this bounded static assessment found no policy blocker; it is not a safety guarantee.",
+      "Assessment completeness covers the recorded artifact, source comparison and exact-version OSV lookup; model availability is reported separately and AI signals cannot permit or block installation.",
+      "Package execution, transitive dependencies, freshness after this check and future registry changes are not assessed."
+    ]
+  },
+  {
+    "decisionVersion": "1",
+    "policyVersion": "guard-2",
+    "profile": "balanced",
+    "appliedPolicy": {
+      "unknownDecision": "unknown",
+      "blockSeverity": "high",
+      "enforcement": "enforce"
+    },
+    "package": {
+      "ecosystem": "npm",
+      "name": "node-ipc",
+      "version": "10.1.1"
+    },
+    "artifact": null,
+    "decision": "block",
+    "permitted": false,
+    "enforcement": "enforce",
+    "reasons": [
+      {
+        "code": "report-unavailable"
+      },
+      {
+        "code": "artifact-assessment-incomplete"
+      },
+      {
+        "code": "source-assessment-incomplete"
+      },
+      {
+        "code": "known-malware",
+        "advisoryId": "GHSA-97m3-w2cp-4xx6",
+        "aliases": [
+          "CVE-2022-23812"
+        ]
+      }
+    ],
+    "knownMalware": [
+      {
+        "id": "GHSA-97m3-w2cp-4xx6",
+        "aliases": [
+          "CVE-2022-23812"
+        ]
+      }
+    ],
+    "policyExitCode": null,
+    "assessment": {
+      "complete": false,
+      "artifactComplete": false,
+      "sourceComplete": false,
+      "advisoriesComplete": true,
+      "advisorySeverityComplete": true,
+      "modelStatus": "unavailable",
+      "modelComplete": false
+    },
+    "limitations": [
+      "Allow means this bounded static assessment found no policy blocker; it is not a safety guarantee.",
+      "Assessment completeness covers the recorded artifact, source comparison and exact-version OSV lookup; model availability is reported separately and AI signals cannot permit or block installation.",
+      "Package execution, transitive dependencies, freshness after this check and future registry changes are not assessed."
+    ]
+  }
+]
