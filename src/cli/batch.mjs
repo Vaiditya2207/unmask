@@ -175,7 +175,10 @@ export async function runBatch(argv, runtime = {}) {
               : "Check failed; no completed result is claimed.",
           },
         });
-        if (error?.code === "hosted-submit-failed") paused = true;
+        if (
+          ["hosted-submit-failed", "hosted-report-failed"].includes(error?.code)
+        )
+          paused = true;
       }
     }
   } finally {

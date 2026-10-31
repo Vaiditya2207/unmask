@@ -13,11 +13,12 @@ occurrence counts and zero-based input indexes. Ranges, tags, URLs and invalid
 names produce visible item errors without a network request for that item.
 
 Checks run serially through the existing hosted client, with a ten-minute total
-batch deadline. A rejected submission (including HTTP 429) pauses all remaining
-submissions without retry, fallback or ignoring the limit. Completed checks,
-errors and unsubmitted items remain distinct. Report retrieval failures do not
-prevent later exact identities from being checked. Cancellation leaves remaining
-items explicitly not checked. No target packages are installed or executed.
+batch deadline. A rejected submission or report-poll response (including HTTP 429) pauses all remaining submissions without retry, fallback or ignoring the
+limit. Completed checks, errors and unsubmitted items remain distinct. A
+malformed or identity-mismatched individual report remains an item error and
+does not prevent later exact identities from being checked. Cancellation leaves
+remaining items explicitly not checked. No target packages are installed or
+executed.
 
 JSON contains bounded per-item summaries: status, exact spec, input indexes,
 policy exit code, finding count and hosted AI status, or an error. It does not

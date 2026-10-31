@@ -63,7 +63,7 @@ test("batch coalesces exact identities and preserves per-item partial failure", 
           });
         }
         if (current === "missing@1.0.0")
-          return new Response(null, { status: 404 });
+          return Response.json(report("unexpected", "1.0.0"));
         const [name, version] = current.split("@");
         return Response.json(report(name, version));
       },
@@ -197,6 +197,41 @@ test("hosted rejection pauses the batch rather than retrying or bypassing backpr
   assert.equal(result.items[0].status, "error");
   assert.equal(result.items[1].status, "not-checked");
   assert.equal(result.notCheckedCount, 1);
+});
+
+test("polling HTTP 429 pauses remaining items after exactly one POST", async () => {
+  let posts = 0,
+    gets = 0;
+  const h = harness({
+    fetchImpl: async (_url, options) => {
+      if (options.method === "POST") {
+        posts++;
+        return new Response(null, {
+          status: 303,
+          headers: { location: "/r/" + "a".repeat(32) },
+        });
+      }
+      gets++;
+      return new Response(null, { status: 429 });
+    },
+  });
+  assert.equal(
+    await main(
+      ["batch", "fixture@1.0.0", "other@2.0.0", "third@1.0.0", "--json"],
+      h.runtime,
+    ),
+    2,
+  );
+  const result = JSON.parse(h.output());
+  assert.equal(posts, 1);
+  assert.equal(gets, 1);
+  assert.equal(result.items[0].status, "error");
+  assert.equal(result.items[0].error.code, "hosted-report-failed");
+  assert.deepEqual(
+    result.items.slice(1).map((item) => item.status),
+    ["not-checked", "not-checked"],
+  );
+  assert.equal(result.notCheckedCount, 2);
 });
 
 test("cancelled batches keep explicit not-checked outcomes and do not submit", async () => {
