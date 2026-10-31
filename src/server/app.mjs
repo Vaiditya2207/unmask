@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { buildPackageDetails } from "../core/package-details.mjs";
 import { attachVulnerabilityCheck } from "./enrichment.mjs";
+import { createDependencyScreening } from "./dependency-screening.mjs";
 import { createQueue, resolveLimits, systemClock } from "./queue.mjs";
 import { createReportStore } from "./store.mjs";
 import { renderReport } from "../viewer/render.mjs";
@@ -102,6 +103,7 @@ export function createCacheKeyPrefix(versionInfo, limits) {
 export function createApp({
   runAnalysis,
   enrichJob,
+  advisoryLookup,
   versionInfo,
   limits: overrides,
   clock = systemClock,
@@ -133,6 +135,10 @@ export function createApp({
     clock,
   });
   const keyPrefix = createCacheKeyPrefix(versionInfo, limits);
+  const screenDependencies = createDependencyScreening({
+    lookup: advisoryLookup,
+    clock,
+  });
   const queue = createQueue({
     runAnalysis,
     enrichJob,
@@ -174,6 +180,8 @@ export function createApp({
       }
       async function handle() {
         const path = req.url;
+        if (path === "/api/dependency-screening")
+          return screenDependencies(req, res, json);
         if (path === "/check") {
           if (req.method !== "POST")
             return error(
