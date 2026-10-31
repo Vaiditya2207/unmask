@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto";
-import { PROMPT_VERSION, evidenceSignal } from "./diff-evidence.mjs";
+import {
+  HUNK_FORMAT,
+  MAX_HUNKS,
+  PROMPT_VERSION,
+  diffHunk,
+  evidenceSignal,
+} from "./diff-evidence.mjs";
 
 const HOST = "generativelanguage.googleapis.com";
 const MODELS = new Set([
@@ -425,7 +431,37 @@ function promptFor(report, inputLimit) {
   const selected = new Map();
   const omittedEvidenceGroups = [];
   let used = Buffer.byteLength(JSON.stringify(payload));
+  const hunks = [],
+    hunked = new Set();
+  const exact = (id) =>
+    selected.has(id) && bounded(id) ? entries.get(id) : null;
+  function addHunks() {
+    for (const path of new Set(payload.evidence.map((e) => e.path))) {
+      if (hunks.length >= MAX_HUNKS) return;
+      if (hunked.has(path)) continue;
+      const hunk = diffHunk(byPath.get(path), rawEntries, exact);
+      if (!hunk) continue;
+      hunked.add(path);
+      hunks.push(hunk);
+      // The legend is sent, and costs budget, only alongside at least one hunk.
+      Object.assign(payload, { diffHunkFormat: HUNK_FORMAT, diffHunks: hunks });
+      if (Buffer.byteLength(JSON.stringify(payload)) > promptBytes) {
+        hunks.pop();
+        if (!hunks.length) {
+          delete payload.diffHunkFormat;
+          delete payload.diffHunks;
+        }
+      }
+    }
+    used = Buffer.byteLength(JSON.stringify(payload));
+  }
+  let hunkTier = 2;
   for (const item of groups) {
+    // Signal-tier hunks precede generic groups; changed-file hunks precede unchanged context.
+    if (item.priority > hunkTier && hunkTier < 4) {
+      hunkTier = item.priority;
+      addHunks();
+    }
     const descriptor = describe(item);
     if (
       !item.evidenceIds.length ||
@@ -477,6 +513,7 @@ function promptFor(report, inputLimit) {
         payload.differences.pop();
     }
   }
+  addHunks();
   return {
     prompt: JSON.stringify(payload),
     strings: [

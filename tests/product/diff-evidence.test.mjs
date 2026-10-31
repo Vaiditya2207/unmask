@@ -68,7 +68,10 @@ function modelOutput(prompt, hypothesis) {
     ]),
   );
 }
-async function explainWithPrompt(report) {
+async function explainWithPrompt(
+  report,
+  citations = [{ evidenceId: "manifest-a", quote: '"node x.js"' }],
+) {
   let prompt;
   const section = await createGemmaClient({
     apiKey: "test-only-key",
@@ -87,7 +90,7 @@ async function explainWithPrompt(report) {
         explanation: "The artifact declares an install hook requiring review.",
         uncertainty: "Execution was not observed.",
         alternative: "This may be intentional packaging.",
-        citations: [{ evidenceId: "manifest-a", quote: '"node x.js"' }],
+        citations,
       };
       return new Response(
         JSON.stringify({
@@ -200,7 +203,7 @@ test("lifecycle, dependency and executable manifest changes outrank generic meta
     section.omittedEvidenceGroups.some((group) => group.kind === "comparison"),
   );
   assert.match(prompt.task, /signal groups/u);
-  assert.equal(prompt.promptVersion, "diff-1");
+  assert.equal(prompt.promptVersion, "diff-2");
 });
 
 test("signal ranking keeps policy first and orders capability cues by signal", async () => {
@@ -338,5 +341,183 @@ test("cue sets above the hard cap fail closed as input-budget", async () => {
   assert.deepEqual(
     [section.status, section.reason],
     ["unavailable", "input-budget"],
+  );
+});
+
+function hunkReport(pairs) {
+  const evidence = [],
+    files = [];
+  for (const [path, before, after, at = [40, 90]] of pairs) {
+    const s = piece(`${path}#s`, "source", path, before, at[0]);
+    const a = piece(`${path}#a`, "artifact", path, after, at[1]);
+    for (const item of [s, a])
+      if (item.excerpt === "") item.excerpt = undefined;
+    evidence.push(a, s);
+    files.push({
+      path,
+      state: "changed",
+      spans: { artifact: a.range, source: s.range },
+      evidenceIds: [a.id, s.id],
+    });
+  }
+  return {
+    inputs: { artifact: { kind: "local" } },
+    evidence: evidence.map((item) =>
+      item.excerpt === undefined ? { ...item, excerpt: "" } : item,
+    ),
+    files,
+    cues: [],
+    policy: { exitCode: 0, findings: [] },
+    model: { status: "disabled" },
+    run: {},
+  };
+}
+
+test("modified spans become exact before/after line hunks with absolute UTF-8 byte citations", async () => {
+  const before = 'old();\nkeep("é");\nend()';
+  const after = 'evil();\nkeep("é");\nend2()';
+  const { section, prompt } = await explainWithPrompt(
+    hunkReport([["lib/a.js", before, after]]),
+    [
+      { evidenceId: "lib/a.js#a", quote: "evil();" },
+      { evidenceId: "lib/a.js#s", quote: "old();" },
+    ],
+  );
+  assert.equal(section.status, "complete");
+  assert.match(prompt.diffHunkFormat, /source=before artifact=after/u);
+  assert.equal(prompt.promptVersion, "diff-2");
+  assert.deepEqual(prompt.diffHunks, [
+    {
+      path: "lib/a.js",
+      change: "modified",
+      source: [40, 64],
+      artifact: [90, 116],
+      lines: [
+        ["-", 40, 46, "old();"],
+        ["+", 90, 97, "evil();"],
+        [" ", 98, 109, 'keep("é");'],
+        ["-", 59, 64, "end()"],
+        ["+", 110, 116, "end2()"],
+      ],
+    },
+  ]);
+  for (const [op, start, end, text] of prompt.diffHunks[0].lines) {
+    const item = prompt.evidence.find(
+      (e) => e.side === (op === "-" ? "source" : "artifact"),
+    );
+    const offset = start - item.range[0];
+    assert.equal(
+      Buffer.from(item.excerpt)
+        .subarray(offset, end - item.range[0])
+        .toString(),
+      text,
+    );
+  }
+});
+
+test("pure additions and removals are labelled with the empty counterpart span", async () => {
+  const { section, prompt } = await explainWithPrompt(
+    hunkReport([
+      ["lib/added.js", "", "require('x').run();\nnext();", [20, 20]],
+      ["lib/removed.js", "check();\n", "", [5, 7]],
+    ]),
+    [{ evidenceId: "lib/added.js#a", quote: "require('x').run();" }],
+  );
+  assert.equal(section.status, "complete");
+  assert.deepEqual(prompt.diffHunks, [
+    {
+      path: "lib/added.js",
+      change: "added",
+      source: [20, 20],
+      artifact: [20, 47],
+      lines: [
+        ["+", 20, 39, "require('x').run();"],
+        ["+", 40, 47, "next();"],
+      ],
+    },
+    {
+      path: "lib/removed.js",
+      change: "removed",
+      source: [5, 14],
+      artifact: [7, 7],
+      lines: [["-", 5, 13, "check();"]],
+    },
+  ]);
+});
+
+function changedFiles(count) {
+  const report = hunkReport(
+    Array.from({ length: count }, (_, i) => [
+      `lib/f-${String(i).padStart(2, "0")}.js`,
+      `before ${i}();`,
+      `after ${i}();`,
+    ]),
+  );
+  report.evidence[0].range = [90, 400];
+  report.files[0].spans.artifact = [90, 400];
+  return report;
+}
+const cite = [{ evidenceId: "lib/f-01.js#a", quote: "after 1();" }];
+
+test("hunks use only budget left after evidence groups", async () => {
+  const { section, prompt } = await explainWithPrompt(changedFiles(12), cite);
+  assert.equal(section.status, "complete");
+  assert.ok(Buffer.byteLength(JSON.stringify(prompt)) <= 4000 - 256);
+  assert.equal(prompt.diffHunks, undefined);
+  assert.equal(prompt.diffHunkFormat, undefined);
+  const paths = [...new Set(prompt.evidence.map((e) => e.path))];
+  assert.ok(paths.length >= 2);
+  assert.deepEqual(
+    paths,
+    paths.map((_, i) => `lib/f-${String(i).padStart(2, "0")}.js`),
+  );
+});
+
+test("truncated excerpts get no hunk while exact neighbours do", async () => {
+  const { section, prompt } = await explainWithPrompt(changedFiles(2), cite);
+  assert.equal(section.status, "complete");
+  assert.ok(prompt.evidence.some((e) => e.id === "lib/f-00.js#a"));
+  assert.deepEqual(
+    prompt.diffHunks.map((hunk) => [hunk.path, hunk.change, hunk.lines]),
+    [
+      [
+        "lib/f-01.js",
+        "modified",
+        [
+          ["-", 40, 51, "before 1();"],
+          ["+", 90, 100, "after 1();"],
+        ],
+      ],
+    ],
+  );
+});
+
+test("changed-file hunks take budget before unchanged context", async () => {
+  const report = hunkReport([["lib/a.js", "before();", "after();"]]);
+  for (let i = 0; i < 10; i++) {
+    const path = `ctx/${String(i).padStart(2, "0")}.js`;
+    report.evidence.push(
+      piece(`ctx-${i}`, "artifact", path, `unchanged ${i} `.repeat(16)),
+    );
+    report.files.push({ path, state: "byte-identical" });
+  }
+  const { section, prompt } = await explainWithPrompt(report, [
+    { evidenceId: "lib/a.js#a", quote: "after();" },
+  ]);
+  assert.equal(section.status, "complete");
+  assert.deepEqual(
+    prompt.diffHunks.map((hunk) => hunk.lines),
+    [
+      [
+        ["-", 40, 49, "before();"],
+        ["+", 90, 98, "after();"],
+      ],
+    ],
+  );
+  assert.ok(
+    section.omittedEvidenceGroups.some(
+      (group) =>
+        group.ruleId === "unranked-context" && group.reason === "group-budget",
+    ),
   );
 });
