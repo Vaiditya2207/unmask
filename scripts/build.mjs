@@ -30,14 +30,31 @@ export function declaredEntrypoints(pkg) {
     throw new Error("Declared product entrypoint must be under dist/");
   return entries;
 }
+function contained(root, filename) {
+  return realpathSync(filename).startsWith(`${realpathSync(root)}${path.sep}`);
+}
+function directory(root, name) {
+  const filename = path.join(root, name);
+  const stat = lstatSync(filename);
+  if (
+    !stat.isDirectory() ||
+    stat.isSymbolicLink() ||
+    !contained(root, filename)
+  )
+    throw new Error(`Build directory must be regular and contained: ${name}`);
+  return filename;
+}
 function regular(root, name) {
   const filename = path.join(root, name);
   const stat = lstatSync(filename);
   if (!stat.isFile() || stat.isSymbolicLink())
     throw new Error(`Build input/output must be a regular file: ${name}`);
+  if (!contained(root, filename))
+    throw new Error(`Build input/output escapes repository: ${name}`);
   return readFileSync(filename);
 }
 function sourceInputs(root) {
+  const source = directory(root, "src");
   const packageBytes = regular(root, "package.json");
   const lockBytes = regular(root, "package-lock.json");
   const pkg = JSON.parse(packageBytes);
@@ -63,7 +80,7 @@ function sourceInputs(root) {
     if (stable(pkg[key]) !== stable(lock.packages[""][key]))
       throw new Error(`Package and lockfile ${key} differ`);
   }
-  const names = readdirSync(path.join(root, "src"), { recursive: true })
+  const names = readdirSync(source, { recursive: true })
     .filter((name) => {
       const stat = lstatSync(path.join(root, "src", name));
       if (stat.isSymbolicLink())
@@ -151,6 +168,7 @@ export function buildProduct(root) {
   return metadata;
 }
 export function verifyBuild(root, { expectedSha, requireClean = false } = {}) {
+  if (existsSync(path.join(root, "dist"))) directory(root, "dist");
   if (!existsSync(path.join(root, "dist/version.json")))
     throw new Error(
       "Product build is missing; run npm run build before packing",

@@ -1,9 +1,69 @@
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+  mkdirSync,
+  mkdtempSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { checkPackage } from "../../scripts/check-package.mjs";
+import { buildProduct, verifyBuild } from "../../scripts/build.mjs";
 import { buildFixture } from "./build-fixture.mjs";
+
+function externalize(t, root, name) {
+  const outside = mkdtempSync(path.join(os.tmpdir(), "unmask-build-outside-"));
+  t.after(() => rmSync(outside, { recursive: true, force: true }));
+  renameSync(path.join(root, name), path.join(outside, name));
+  symlinkSync(path.join(outside, name), path.join(root, name), "dir");
+}
+
+test("a clean tracked src symlink cannot import external product bytes", (t) => {
+  const f = buildFixture(t);
+  externalize(t, f.root, "src");
+  f.commit();
+  assert.equal(
+    execFileSync("git", ["status", "--porcelain"], {
+      cwd: f.root,
+      encoding: "utf8",
+    }),
+    "",
+  );
+  assert.throws(() => buildProduct(f.root), /directory.*src/i);
+});
+
+test("build reads reject a parent symlink escaping the repository", (t) => {
+  const f = buildFixture(t);
+  externalize(t, f.root, "scripts");
+  f.commit();
+  assert.throws(() => buildProduct(f.root), /contain|outside|escape/i);
+});
+
+test("clean release verification rejects a symlinked dist root", (t) => {
+  const f = buildFixture(t, {
+    clean: true,
+    configure({ root }) {
+      writeFileSync(path.join(root, ".gitignore"), "dist\noutput/\n");
+    },
+  });
+  f.build();
+  externalize(t, f.root, "dist");
+  assert.equal(
+    execFileSync("git", ["status", "--porcelain"], {
+      cwd: f.root,
+      encoding: "utf8",
+    }),
+    "",
+  );
+  assert.throws(
+    () => verifyBuild(f.root, { expectedSha: f.sha, requireClean: true }),
+    /directory.*dist/i,
+  );
+});
 
 test("declared product bin cannot pass packing before a build", (t) => {
   const f = buildFixture(t);
