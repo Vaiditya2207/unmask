@@ -12,20 +12,26 @@ public access, model usefulness or final installed-artifact acceptance; the rele
 owner verifies those through the deployed normal route before merging/releasing.
 
 ```bash
-unmask check package-name@1.2.3 --out OUTPUT
+unmask check package-name@1.2.3
 UNMASK_SERVER_URL=http://127.0.0.1:3000 unmask check package-name@1.2.3 --out OUTPUT
 ```
 
 The override must be a bare HTTPS origin; HTTP is accepted only for `localhost`,
 `127.0.0.1` or `[::1]` local testing. Credentials, paths, queries and fragments are
 rejected. Submission is one form `POST /check`, followed by same-origin
-`GET /r/ID.json` polling. The client sends no cookies or Authorization header and
+`GET /r/ID.json` polling, then one same-origin `GET /r/ID.details.json` for
+advisory facts; if details are unavailable the summary says advisories were not
+assessed. The client sends no cookies or Authorization header and
 never follows a transport redirect. The POST's 303 Location must identify a
 same-origin report. Hosted failure is visible; there is no local fallback.
 
-Hosted mode requires `--out`; `--cache-dir` is optional and unused. It validates
-the returned schema, requested name/version and policy against deterministic
-report evidence before creating `report.json` and escaped `report.html`. Writes
+Every check prints a terminal summary: result, coverage, findings, failures,
+known advisories, AI explanation status and next steps. Untrusted text is
+escaped so it cannot inject terminal control sequences. `--out` is optional and
+nothing is written without it; `--cache-dir` is optional and unused in hosted
+mode. Hosted mode validates the returned schema, requested name/version and
+policy against deterministic report evidence before printing or creating
+`report.json` and escaped `report.html`. Writes
 are exclusive: existing report files are preserved. Exit codes are `0` completed,
 `2` incomplete or request/configuration failure, `3` default policy finding, and
 `1` internal error. A failed transport produces no completed report. Exit `0`
@@ -47,7 +53,7 @@ unmask check --tarball PACKAGE.tgz --offline --cache-dir CACHE --out OUTPUT
 ```
 
 Offline mode keeps the existing archive/source options and requires both
-`--cache-dir` and `--out`. It does no acquisition. Optional `--allow-model` applies
+`--cache-dir`; `--out` is optional. It does no acquisition. Optional `--allow-model` applies
 only to this local mode and permits selected evidence to leave the machine when
 a local provider is configured. Without consent no local model client is built.
 Hosted mode rejects `--allow-model`: its model policy belongs to the selected

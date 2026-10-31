@@ -8,8 +8,9 @@ import { renderReport } from "../viewer/render.mjs";
 import { parsePackageSpec, AcquisitionError } from "../core/acquire.mjs";
 import { addConfiguredModel } from "../core/online.mjs";
 import { modelClientFromEnv } from "../model/config.mjs";
-import { checkHosted } from "./hosted.mjs";
+import { getHostedDetails } from "./hosted.mjs";
 import { infoCommand } from "./info.mjs";
+import { renderCheckSummary } from "./terminal.mjs";
 
 const names = {
   "--tarball": "tarballPath",
@@ -77,8 +78,6 @@ function parse(argv) {
       );
     options[names[key]] = value;
   }
-  if (!options.out)
-    throw new LocalInputError("usage", "Check requires --out DIR");
   if (options.registrySpec) {
     if (
       options.offline ||
@@ -104,7 +103,7 @@ function parse(argv) {
   if (!options.registrySpec && !options.cacheDir)
     throw new LocalInputError(
       "usage",
-      "Offline check requires --cache-dir DIR and --out DIR",
+      "Offline check requires --cache-dir DIR",
     );
   if (options.claim !== undefined) options.claim = exactClaim(options.claim);
   return options;
@@ -165,14 +164,15 @@ export async function main(argv = process.argv.slice(2), runtime = {}) {
   try {
     if (argv[0] === "info") return await infoCommand(argv.slice(1), runtime);
     const { out, offline, allowModel, registrySpec, ...options } = parse(argv);
-    let report;
+    let report, details;
     if (registrySpec)
-      report = await checkHosted(registrySpec, {
+      ({ report, details } = await getHostedDetails(registrySpec, {
         serverUrl: (runtime.env ?? process.env).UNMASK_SERVER_URL,
         fetchImpl: runtime.fetchImpl,
         signal: runtime.signal,
         limits: runtime.hostedLimits,
-      });
+        optionalDetails: true,
+      }));
     else {
       const model = await configuredModel(allowModel, runtime);
       report = await analyzeLocal({ ...options, limits: runtime.limits });
@@ -183,8 +183,9 @@ export async function main(argv = process.argv.slice(2), runtime = {}) {
           model: { status: "not-sent", reason: "consent-required" },
         };
     }
-    await writeReports(out, report);
-    process.stdout.write(`Report written to ${path.resolve(out)}\n`);
+    const outDir = out === undefined ? undefined : path.resolve(out);
+    if (outDir) await writeReports(outDir, report);
+    process.stdout.write(renderCheckSummary(report, { details, outDir }));
     return report.policy.exitCode;
   } catch (error) {
     if (error instanceof LocalInputError) {

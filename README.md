@@ -49,10 +49,12 @@ type an exact release such as `chalk@6.0.1`, and press **check it**.
 **From a terminal:**
 
 ```bash
-npx @xagents_in/unmask check chalk@6.0.1 --out ./unmask-report
+npx @xagents_in/unmask check chalk@6.0.1
 ```
 
-You get `report.json` and an escaped `report.html` in `./unmask-report`. Only the
+The terminal shows the result, coverage, findings, known advisories, the AI
+explanation status and next steps. Add `--out ./unmask-report` to also save
+`report.json` and an escaped `report.html`; nothing is written without it. Only the
 package name and version leave your machine; the hosted service does the rest.
 
 ## What a check returns
@@ -183,8 +185,8 @@ npm run check:package
 node dist/cli/main.mjs check chalk@6.0.1 --out /tmp/unmask-chalk-report
 ```
 
-Choose a fresh output folder for each check; existing report files are never
-replaced. `UNMASK_SERVER_URL` selects another service: an HTTPS origin, or a
+`--out` is optional. When given, choose a fresh output folder for each check;
+existing report files are never replaced. `UNMASK_SERVER_URL` selects another service: an HTTPS origin, or a
 loopback HTTP origin for local testing. A hosted failure never falls back to local
 acquisition. See [CLI configuration and data flow](docs/cli.md).
 

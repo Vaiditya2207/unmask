@@ -95,6 +95,7 @@ async function runHosted(
     fetchImpl = globalThis.fetch,
     signal,
     limits: overrides = {},
+    optionalDetails = false,
   } = {},
   withDetails = false,
 ) {
@@ -231,23 +232,28 @@ async function runHosted(
       if (result) {
         if (!withDetails) return result;
         const detailsUrl = reportUrl.replace(/\.json$/, ".details.json");
-        const details = await request(
-          detailsUrl,
-          { headers: { accept: "application/json" } },
-          async (response) => {
-            if (response.status !== 200)
-              throw failure(
-                "hosted-details-failed",
-                `Hosted package details are unavailable (HTTP ${response.status}).`,
+        const fetchDetails = () =>
+          request(
+            detailsUrl,
+            { headers: { accept: "application/json" } },
+            async (response) => {
+              if (response.status !== 200)
+                throw failure(
+                  "hosted-details-failed",
+                  `Hosted package details are unavailable (HTTP ${response.status}).`,
+                );
+              const value = await readJson(
+                response,
+                Math.min(limits.maxBodyBytes, 4194304),
               );
-            const value = await readJson(
-              response,
-              Math.min(limits.maxBodyBytes, 4194304),
-            );
-            validateDetails(value, result);
-            return value;
-          },
-        );
+              validateDetails(value, result);
+              return value;
+            },
+          );
+        // Check summaries keep a completed report when only details fail.
+        const details = optionalDetails
+          ? await fetchDetails().catch(() => null)
+          : await fetchDetails();
         return { report: result, details, reportUrl, detailsUrl };
       }
       await delay(limits.pollMs, undefined, { signal: lifetime });
