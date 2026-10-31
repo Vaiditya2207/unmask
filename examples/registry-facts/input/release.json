@@ -1,0 +1,10 @@
+{
+  "name": "example",
+  "version": "1.2.3",
+  "maintainers": [{ "name": "fixture-maintainer" }],
+  "_npmUser": { "name": "fixture-publisher" },
+  "deprecated": "Synthetic example only",
+  "license": "MIT",
+  "engines": { "node": ">=20" },
+  "repository": { "type": "git", "url": "https://example.test/repository" }
+}
