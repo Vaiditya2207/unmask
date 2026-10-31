@@ -1,0 +1,3 @@
+Pinned fixture -> fixture@1.2.3
+Completed fixture@1.2.3: policy exit 0; AI status "unavailable".
+No findings do not establish safety.
