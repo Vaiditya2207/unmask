@@ -7,3 +7,6 @@ remaining uncertainty.
 The application architecture and model integration are not implemented yet.
 Start with the [project overview](../README.md) and
 [contribution workflow](../CONTRIBUTING.md).
+
+See [CI, releases and manual deployment](releases.md) for the tooling checks,
+closed product readiness gate and future artifact/deployment contract.

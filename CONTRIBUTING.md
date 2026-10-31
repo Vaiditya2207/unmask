@@ -16,12 +16,14 @@ request. Do not push directly to `main` or rewrite its history.
 
 ## Check and push
 
-Use Node.js 24.22.2, as pinned in `.nvmrc`. The current `check` script checks
-formatting only; it does not validate product behavior.
+Use Node.js 24.22.2, as pinned in `.nvmrc`. The `check` script checks formatting; `test` and `check:package` validate
+release tooling and archive contents. They do not validate product behavior.
 
 ```bash
 npm ci --ignore-scripts
 npm run check
+npm test
+npm run check:package
 git add path/to/changed-file
 git commit -m "docs: describe the change"
 git push -u origin HEAD
@@ -59,7 +61,8 @@ Wait for CI and a teammate's approval before merging. Repository protection is
 configured on GitHub, not by these files; verify the current rules there. This
 scaffold does not configure required status checks. After the workflow has run,
 a maintainer should configure its `Repository checks` job as a required check.
-Product tests must become part of CI when implementation begins.
+Product tests must become part of CI when implementation begins. See
+[release prerequisites](docs/releases.md) before enabling publication.
 
 ## Model and example changes
 
@@ -81,3 +84,24 @@ and a reproducible command under `examples/`. Follow its
 - Do not publish automated issues or comments on real open-source projects.
 - Keep CI passing on the final submitted commit.
 - Finish commits before **1 November 2026, 6:30 AM IST**.
+
+## Restrict required approval to the designated reviewers
+
+The designated reviewers are `@pranay0083`, `@visheshrao17`, and `@Vaiditya2207`.
+One approval from this group is intended; a fourth reviewer can be added later.
+`.github/CODEOWNERS` assigns the group to every file and to CODEOWNERS itself.
+The CODEOWNERS file on the PR's base branch governs review
+requests; adding it only on the proposed branch does not establish that policy.
+
+A maintainer must separately configure the `main` ruleset to require a PR, at
+least one code-owner approval from that group, dismissal of stale approvals,
+resolved conversations and passing `Repository checks`, with no bypass actors.
+Confirm repository permissions and that the chosen owners have write access.
+CODEOWNERS alone does not enforce approval or prevent merging. This change adds
+the file but does not change permissions or configure repository rules. At the
+31 October check, both teammates had read access; they must receive and accept
+Write access before GitHub can recognize them as code owners. The active main
+ruleset required one approval but had code-owner review disabled, no required
+status check, and an administrator PR bypass. Those settings must be updated
+before claiming this reviewer restriction is enforced. Other users can still
+submit reviews; their approvals cannot satisfy the required code-owner review.

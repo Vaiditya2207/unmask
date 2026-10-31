@@ -3,20 +3,16 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+  workflow_call:
 
 permissions:
   contents: read
 
-concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
   repository-checks:
     name: Repository checks
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -27,7 +23,26 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - name: Install repository tooling
+      - name: Install locked tooling without lifecycle scripts
         run: npm ci --ignore-scripts
       - name: Check formatting
         run: npm run check
+      - name: Test release policy and actual npm packaging
+        run: npm test
+      - name: Report product release readiness
+        id: readiness
+        run: node scripts/release-readiness.mjs --github-output
+      - name: Test and build configured application
+        if: steps.readiness.outputs.ready == 'true'
+        run: |
+          npm run test:product
+          npm run build
+          node scripts/release-readiness.mjs --built
+      - name: Set up candidate image builder
+        if: steps.readiness.outputs.ready == 'true'
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Build and smoke-test exact image and npm archive without publishing
+        if: steps.readiness.outputs.ready == 'true'
+        run: node scripts/check-candidate.mjs
+      - name: Inspect npm archive allowlist
+        run: npm run check:package
