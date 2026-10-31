@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "1",
+  "checks": [
+    {
+      "id": "node",
+      "status": "ok",
+      "message": "Node meets the 24.22.2 minimum.",
+      "action": "Use the repository-pinned Node 24.22.2 for reproducible results."
+    },
+    {
+      "id": "config",
+      "status": "warning",
+      "message": "No project guard configuration found.",
+      "action": "Use unmask config to explicitly configure a guard policy."
+    },
+    {
+      "id": "service",
+      "status": "skipped",
+      "message": "Hosted diagnostics skipped explicitly.",
+      "action": "Run doctor without --offline to check the service."
+    },
+    {
+      "id": "guard",
+      "status": "unknown",
+      "message": "Active shell guard integration cannot be verified from a child process.",
+      "action": "Use unmask enable to inspect explicit shell setup, then verify it in the invoking shell. Direct unmask install remains explicit."
+    }
+  ],
+  "service": {
+    "origin": "https://unmask-386156642190.asia-south1.run.app"
+  },
+  "limitations": [
+    "Diagnostics do not assess package safety or make a model request.",
+    "Shell startup files and environment values are not read; active shell guard interception is unverified."
+  ]
+}
