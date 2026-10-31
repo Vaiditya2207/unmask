@@ -1,6 +1,7 @@
 import {
   LockfileError,
   explainDependencyPaths,
+  explainLockfileLocation,
   parseNpmLockfile,
 } from "../core/dependency-graph.mjs";
 
@@ -12,6 +13,7 @@ export const SCREENING_LIMITS = Object.freeze({
   deadlineMs: 60000,
   advisoriesPerDependency: 20,
   explanations: 50,
+  omissionExplanations: 50,
   admissions: 6,
   attempts: 30,
   readers: 2,
@@ -226,7 +228,21 @@ export async function screenDependencyGraph(
     advisoryBearing,
     statement: STATEMENT,
     dependencies: results,
-    rejected: graph.rejected.map((item) => ({ ...item, status: "rejected" })),
+    rejected: graph.rejected.map((item, index) => ({
+      ...item,
+      status: "rejected",
+      explanation:
+        index < limits.omissionExplanations
+          ? explainLockfileLocation(graph, item.location)
+          : {
+              location: item.location,
+              locations: 1,
+              direct: null,
+              paths: [],
+              complete: false,
+              reasons: ["explanation-limit"],
+            },
+    })),
     local: graph.local.map((item) => ({ ...item, status: "not-screened" })),
     limits: {
       identities: limits.identities,

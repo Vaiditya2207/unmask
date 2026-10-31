@@ -238,15 +238,10 @@ function describe(packages, location) {
   };
 }
 
-// Enumerates bounded simple paths from the project root or workspace to every location of an exact identity.
-export function explainDependencyPaths(
-  graph,
-  spec,
-  { limits: overrides = {} } = {},
-) {
+// Enumerates bounded simple paths from the project root or a workspace to each target location.
+function trace(graph, targets, overrides) {
   const limits = { ...PATH_LIMITS, ...overrides };
-  const { reverse, bySpec, packages } = graph.index;
-  const targets = bySpec.get(spec) ?? [];
+  const { reverse, packages } = graph.index;
   const paths = [];
   const reasons = new Set();
   if (graph.index.truncated) reasons.add("edge-limit");
@@ -284,11 +279,35 @@ export function explainDependencyPaths(
     }
   }
   return {
-    spec,
-    locations: targets.length,
     direct: paths.some((path) => path.length === 2 && path[0].location === ""),
     paths,
     complete: reasons.size === 0,
     reasons: [...reasons].sort(),
+  };
+}
+
+export function explainDependencyPaths(
+  graph,
+  spec,
+  { limits: overrides = {} } = {},
+) {
+  const targets = graph.index.bySpec.get(spec) ?? [];
+  return {
+    spec,
+    locations: targets.length,
+    ...trace(graph, targets, overrides),
+  };
+}
+
+export function explainLockfileLocation(
+  graph,
+  location,
+  { limits: overrides = {} } = {},
+) {
+  const present = Object.hasOwn(graph.index.packages, location);
+  return {
+    location,
+    locations: present ? 1 : 0,
+    ...trace(graph, present ? [location] : [], overrides),
   };
 }

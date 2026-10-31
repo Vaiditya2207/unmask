@@ -577,3 +577,56 @@ test("explanation-limit placeholders keep the explanation shape", async () => {
     reasons: ["explanation-limit"],
   });
 });
+
+test("rejected lockfile rows explain why they are present, bounded like dependency paths", async () => {
+  const lock = lockfile({
+    "node_modules/left": registry("left", "1.0.0", {
+      dependencies: { gitdep: "github:x/gitdep", tarball: "1.0.0" },
+    }),
+    "node_modules/gitdep": {
+      version: "1.0.0",
+      resolved: "git+ssh://git@github.com/x/gitdep.git#abc",
+    },
+    "node_modules/tarball": {
+      version: "1.0.0",
+      resolved: "https://evil.example/tarball-1.0.0.tgz",
+    },
+    "vendor/blob": registry("blob", "1.0.0"),
+  });
+  lock.packages[""].dependencies = { left: "1.0.0", tarball: "1.0.0" };
+  const result = await screenDependencyGraph(parseNpmLockfile(lock), {
+    lookup: async (spec) => clean(spec),
+  });
+  const why = Object.fromEntries(
+    result.rejected.map((row) => [
+      row.location,
+      [row.reason, names(row.explanation), row.explanation.reasons],
+    ]),
+  );
+  assert.deepEqual(why, {
+    "node_modules/gitdep": ["non-registry-resolved", ["app>left>gitdep"], []],
+    "node_modules/tarball": [
+      "non-registry-resolved",
+      ["app>tarball", "app>left>tarball"],
+      [],
+    ],
+    "vendor/blob": ["invalid-location", [], ["unreachable-location"]],
+  });
+  assert.equal(
+    result.rejected.find((row) => row.location === "node_modules/tarball")
+      .explanation.direct,
+    true,
+  );
+  const capped = await screenDependencyGraph(parseNpmLockfile(lock), {
+    limits: { omissionExplanations: 1 },
+    lookup: async (spec) => clean(spec),
+  });
+  assert.deepEqual(capped.rejected[1].explanation, {
+    location: capped.rejected[1].location,
+    locations: 1,
+    direct: null,
+    paths: [],
+    complete: false,
+    reasons: ["explanation-limit"],
+  });
+});
