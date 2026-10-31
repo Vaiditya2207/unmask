@@ -57,6 +57,7 @@ const FRESHNESS = {
 export function createAdvisoryCache({
   lookup = lookupNpmAdvisories,
   lookupOptions = {},
+  exposeStats = false,
   clock = systemClock,
   limits: overrides = {},
 } = {}) {
@@ -78,6 +79,16 @@ export function createAdvisoryCache({
   const entries = new Map();
   const flights = new Map();
   let bytes = 0;
+  const counts = {
+    hit: 0,
+    miss: 0,
+    coalesced: 0,
+    stale: 0,
+    uncached: 0,
+    bypass: 0,
+    evicted: 0,
+    expired: 0,
+  };
 
   function drop(key) {
     const entry = entries.get(key);
@@ -87,8 +98,10 @@ export function createAdvisoryCache({
   }
   function prune(now) {
     for (const [key, entry] of entries)
-      if (now < entry.storedAt || now - entry.storedAt >= limits.staleMs)
+      if (now < entry.storedAt || now - entry.storedAt >= limits.staleMs) {
         drop(key);
+        counts.expired++;
+      }
   }
   function cacheable(result, claim) {
     return (
@@ -112,6 +125,7 @@ export function createAdvisoryCache({
     for (const key of entries.keys()) {
       if (entries.size <= limits.entries && bytes <= limits.totalBytes) break;
       drop(key);
+      counts.evicted++;
     }
     return entries.has(claim.key);
   }
@@ -183,10 +197,28 @@ export function createAdvisoryCache({
     return { ...result, cache: provenance("uncached", null, now) };
   }
 
+  // Aggregate counters only: never package identities, keys or timestamps of individual entries.
+  function stats() {
+    return {
+      entries: entries.size,
+      bytes,
+      inflight: flights.size,
+      hits: counts.hit,
+      misses: counts.miss,
+      coalesced: counts.coalesced,
+      staleServed: counts.stale,
+      uncached: counts.uncached,
+      bypassed: counts.bypass,
+      evicted: counts.evicted,
+      expired: counts.expired,
+      limits: { ...limits },
+    };
+  }
   async function cachedLookup(spec, options) {
     const result = await resolve(spec, options);
     const now = clock.now();
     const { status, storedAt } = result.cache;
+    counts[status]++;
     const state =
       FRESHNESS[status] ?? (result.status === "unavailable" ? "none" : "live");
     const queried = Date.parse(result.queriedAt);
@@ -209,6 +241,7 @@ export function createAdvisoryCache({
               }
             : {}),
         },
+        ...(exposeStats ? { cacheStats: stats() } : {}),
       },
     };
   }
@@ -258,5 +291,5 @@ export function createAdvisoryCache({
       }
     }
   }
-  return { lookup: cachedLookup };
+  return { lookup: cachedLookup, stats };
 }

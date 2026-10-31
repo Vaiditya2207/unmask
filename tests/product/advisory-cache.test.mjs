@@ -357,3 +357,69 @@ test("freshness and provider diagnostics distinguish live, cached, stale and non
   assert.deepEqual(none.diagnostics.freshness, { state: "none" });
   assert.doesNotMatch(JSON.stringify([stale, none]), /SYNTHETIC_SECRET/);
 });
+
+test("aggregate stats count outcomes without exposing package identities", async () => {
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  const { clock, upstream, cache } = cacheWith(
+    async (body) => {
+      if (body.package.name === "slow-secret-name") await gate;
+      if (body.package.name === "down-secret-name")
+        return new Response("down", { status: 503 });
+      return { vulns: [record()] };
+    },
+    { limits: { entries: 2 } },
+  );
+  const pending = [
+    cache.lookup("slow-secret-name@1.0.0"),
+    cache.lookup("slow-secret-name@1.0.0"),
+  ];
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(cache.stats().inflight, 1);
+  release();
+  await Promise.all(pending);
+  await cache.lookup("slow-secret-name@1.0.0");
+  await cache.lookup("down-secret-name@1.0.0");
+  await cache.lookup("fixture@latest");
+  await cache.lookup("fixture@1.0.0");
+  await cache.lookup("fixture@1.0.1");
+  clock.advance(ADVISORY_CACHE_LIMITS.staleMs);
+  await cache.lookup("fixture@1.0.2");
+  const stats = cache.stats();
+  assert.deepEqual(
+    { ...stats, limits: undefined },
+    {
+      entries: 1,
+      bytes: stats.bytes,
+      inflight: 0,
+      hits: 1,
+      misses: 4,
+      coalesced: 1,
+      staleServed: 0,
+      uncached: 1,
+      bypassed: 1,
+      evicted: 1,
+      expired: 2,
+      limits: undefined,
+    },
+  );
+  assert.ok(stats.bytes > 0 && stats.bytes <= stats.limits.totalBytes);
+  assert.equal(stats.limits.entries, 2);
+  assert.doesNotMatch(JSON.stringify(stats), /secret-name|fixture|GHSA/);
+  assert.equal(upstream.requests.length, 5);
+});
+
+test("per-response cache stats are opt-in and survive hosted validation", async () => {
+  const plain = cacheWith({ vulns: [] });
+  const quiet = await plain.cache.lookup("fixture@1.0.0");
+  assert.equal(Object.hasOwn(quiet.diagnostics, "cacheStats"), false);
+  const { clock, cache } = cacheWith({ vulns: [] }, { exposeStats: true });
+  await cache.lookup("fixture@1.0.0");
+  const hit = await cache.lookup("fixture@1.0.0");
+  assert.equal(hit.diagnostics.cacheStats.hits, 1);
+  assert.equal(hit.diagnostics.cacheStats.misses, 1);
+  assert.equal(hit.diagnostics.cacheStats.entries, 1);
+  const kept = boundedVulnerabilityCheck(hit, "fixture@1.0.0", clock);
+  assert.deepEqual(kept.diagnostics.cacheStats, hit.diagnostics.cacheStats);
+  assert.doesNotMatch(JSON.stringify(hit.diagnostics), /fixture/);
+});
