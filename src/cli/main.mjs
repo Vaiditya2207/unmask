@@ -20,6 +20,9 @@ import {
   terminalStyle,
 } from "./terminal.mjs";
 import { discoveryCommand, isDiscoveryRequest } from "./discovery.mjs";
+import { runConfig } from "./config.mjs";
+import { runExceptions } from "./exceptions.mjs";
+import { runInit } from "./init.mjs";
 
 const names = {
   "--tarball": "tarballPath",
@@ -177,6 +180,10 @@ export async function main(argv = process.argv.slice(2), runtime = {}) {
   let progress;
   try {
     if (isDiscoveryRequest(argv)) return discoveryCommand(argv, runtime);
+    if (argv[0] === "config") return await runConfig(argv.slice(1), runtime);
+    if (argv[0] === "exceptions")
+      return await runExceptions(argv.slice(1), runtime);
+    if (argv[0] === "init") return await runInit(argv.slice(1), runtime);
     if (argv[0] === "file") return await fileCommand(argv.slice(1), runtime);
     if (argv[0] === "files") return await filesCommand(argv.slice(1), runtime);
     if (argv[0] === "info") return await infoCommand(argv.slice(1), runtime);
