@@ -1,4 +1,4 @@
-export const PROMPT_VERSION = "diff-3";
+export const PROMPT_VERSION = "diff-4";
 export const MAX_HUNKS = 4;
 export const HUNK_FORMAT =
   "source=before artifact=after; line=[op,start,end,text]; -:source-only +:artifact-only space:unchanged(artifact offsets); UTF-8 byte offsets; quote via evidence with same path/side/span";
