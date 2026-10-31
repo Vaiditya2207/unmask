@@ -1282,3 +1282,80 @@ test("shared result lookups isolate release and routing identities as well as th
     assert.equal(store.findKey(key(build)), undefined);
   assert.equal(store.findKey(key(info, "cached@1.0.1")), undefined);
 });
+
+test("package details HTTP shares pending/terminal/expired jobs and leaves raw JSON unchanged", async (t) => {
+  const gate = deferred();
+  const clock = fakeClock();
+  let analysisCalls = 0;
+  let modelCalls = 0;
+  const input = syntheticAnalysis("changed");
+  const before = JSON.stringify(input);
+  const s = await start(t, {
+    clock,
+    limits: { reportTtlMs: 100 },
+    runAnalysis: async () => {
+      analysisCalls++;
+      await gate.promise;
+      modelCalls++;
+      return input;
+    },
+  });
+  assert.equal((await s.get(`/r/${"f".repeat(32)}.details.json`)).status, 404);
+  const response = await s.post("example@1.0.0");
+  const location = response.headers.get("location");
+  const pending = await s.get(location + ".details.json");
+  assert.equal(pending.status, 202);
+  assert.equal(pending.headers.get("retry-after"), "3");
+  assert.equal(pending.headers.get("cache-control"), "no-store");
+  assert.equal((await pending.json()).key, undefined);
+  gate.resolve();
+  const raw = await (await finished(s, location)).text();
+  assert.equal(raw, before);
+  const details = await s.get(location + ".details.json");
+  assert.equal(details.status, 200);
+  assert.equal(
+    details.headers.get("content-disposition"),
+    'attachment; filename="unmask-package-details.json"',
+  );
+  assert.match(details.headers.get("content-type"), /application\/json/u);
+  assert.equal((await details.json()).detailsVersion, "1");
+  clock.advance(99);
+  assert.equal((await s.get(location + ".details.json")).status, 200);
+  assert.equal(await (await s.get(location + ".json")).text(), raw);
+  assert.equal(analysisCalls, 1);
+  assert.equal(modelCalls, 1);
+  clock.advance(1);
+  assert.equal((await s.get(location + ".details.json")).status, 404);
+  assert.equal((await s.get(location + ".json")).status, 404);
+  assert.equal(analysisCalls, 1);
+  assert.equal(modelCalls, 1);
+});
+
+test("package details preserves incomplete reports and terminal jobs without reports", async (t) => {
+  for (const failed of [false, true]) {
+    const input = syntheticAnalysis("changed");
+    input.coverage.inventory.complete = false;
+    input.coverage.inventory.lowerBound = true;
+    input.coverage.complete = false;
+    input.policy = { exitCode: 2, findings: [] };
+    let calls = 0;
+    const s = await start(t, {
+      runAnalysis: async () => {
+        calls++;
+        if (failed) throw new Error("synthetic analysis failure");
+        return input;
+      },
+    });
+    const path = (await s.post("example@1.0.0")).headers.get("location");
+    const raw = await (await finished(s, path)).json();
+    const response = await s.get(path + ".details.json");
+    assert.equal(response.status, 200);
+    const details = await response.json();
+    if (failed) assert.deepEqual(details, raw);
+    else {
+      assert.equal(details.inventory.complete, false);
+      assert.equal(details.coverage.counters.inventory.lowerBound, true);
+    }
+    assert.equal(calls, 1);
+  }
+});
