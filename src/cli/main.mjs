@@ -13,6 +13,7 @@ import { runScan } from "./scan.mjs";
 import { runBatch } from "./batch.mjs";
 import { runCompare } from "./compare.mjs";
 import { runHistory } from "./history.mjs";
+import { doctorCommand } from "./doctor.mjs";
 
 const names = {
   "--tarball": "tarballPath",
@@ -170,6 +171,8 @@ export async function main(argv = process.argv.slice(2), runtime = {}) {
     if (argv[0] === "batch") return await runBatch(argv.slice(1), runtime);
     if (argv[0] === "compare") return await runCompare(argv.slice(1), runtime);
     if (argv[0] === "history") return await runHistory(argv.slice(1), runtime);
+    if (argv[0] === "doctor")
+      return await doctorCommand(argv.slice(1), runtime);
     const { out, offline, allowModel, registrySpec, ...options } = parse(argv);
     let report;
     if (registrySpec)
