@@ -945,6 +945,7 @@ export function createGemmaClient(options = {}) {
         totalMs,
         quota,
         summaryPolicy: SUMMARY_POLICY,
+        promptVersion: PROMPT_VERSION,
         enabled: Boolean(configured && process.env.UNMASK_MODEL !== "off"),
       }),
     );
@@ -1020,6 +1021,7 @@ export function createGemmaClient(options = {}) {
         providerQuota: "unknown",
         operatorDeclaredVerified: options.quotaVerified === true,
         summaryPolicy: SUMMARY_POLICY,
+        promptVersion: PROMPT_VERSION,
         ...(local ? { localLimits: structuredClone(local) } : {}),
         enabled: Boolean(configured && process.env.UNMASK_MODEL !== "off"),
       };

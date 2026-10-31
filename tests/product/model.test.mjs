@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { createGemmaClient, attachModel } from "../../src/model/client.mjs";
 import { validAssessment, validSummary } from "../../src/model/summary.mjs";
+import { PROMPT_VERSION } from "../../src/model/diff-evidence.mjs";
 
 const evidence = [
   {
@@ -102,6 +103,7 @@ test("identical and empty reports still receive a bounded scope-only model summa
   }
   assert.deepEqual(prompts[2].scope.states, { "byte-identical": 1 });
   assert.equal(model.configuration.summaryPolicy, "every-check-2");
+  assert.equal(model.configuration.promptVersion, PROMPT_VERSION);
 });
 
 test("affirmative safety or missing summaries are rejected while negated caveats pass", async () => {
