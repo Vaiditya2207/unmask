@@ -6,6 +6,7 @@ import {
   withAdvisoryResult,
 } from "./advisory-result.mjs";
 import { createDependencyScreening } from "./dependency-screening.mjs";
+import { serveExport } from "./exports.mjs";
 import { createQueue, resolveLimits, systemClock } from "./queue.mjs";
 import { createReportStore } from "./store.mjs";
 import { renderReport } from "../viewer/render.mjs";
@@ -293,6 +294,7 @@ export function createApp({
         if (path === "/version") return json(200, version);
         if (path.startsWith("/api/advisory?"))
           return advisoryEndpoint(new URLSearchParams(path.slice(14)));
+        if (serveExport({ path, queue, versionInfo: version, send })) return;
         const match = /^\/r\/([a-f0-9]{32})(\.details\.json|\.json)?$/.exec(
           path,
         );
