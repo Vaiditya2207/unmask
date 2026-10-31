@@ -1,0 +1,122 @@
+{
+  "manifestVersion": "1",
+  "kind": "unmask-evidence-manifest",
+  "signature": {
+    "status": "unsigned",
+    "note": "No cryptographic signature or attestation is attached to this manifest."
+  },
+  "report": {
+    "id": "<report-id>",
+    "completedAt": "2026-11-01T00:00:00.000Z",
+    "schemaVersion": "1",
+    "servedJsonSha256": "5ae67821624f5f19ead058a78d9b0447a593b04d866521ff9d50822e35d71d12",
+    "canonicalSha256": "9142f1a59b5aec540939b15ccb259e55115ba8cabb266b49ad73610fbb744699",
+    "canonicalization": "Sorted-key JSON of the report excluding run and model, newline terminated."
+  },
+  "analyzer": {
+    "version": "0.0.0",
+    "policyVersion": "default-1",
+    "limitsVersion": "1",
+    "limitsDigest": null,
+    "service": {
+      "version": "example",
+      "commit": "0123456789abcdef0123456789abcdef01234567",
+      "tarballSha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "package": {
+    "status": "claim-conflicts-with-manifest",
+    "name": "@unmask-example/declared",
+    "version": "2.0.0",
+    "purl": null,
+    "requested": {
+      "name": "@unmask-example/requested",
+      "version": "1.0.0"
+    },
+    "declared": {
+      "name": "@unmask-example/declared",
+      "version": "2.0.0"
+    },
+    "manifestStatus": "usable"
+  },
+  "artifacts": [
+    {
+      "role": "npm-tarball",
+      "sha256": "8e3577c4e728d0fae8edc2dd8a02d20845d9f33d0379982a474f129e78183635",
+      "sha512": "986d7c92e32ea0115645aa67f9e2af7d1ba85dbefd48ad7ef6a71188fa97692a58fc60bc171a7e439b7ac520c6d691c211e93e35586ad36e1771c22cee9407ed",
+      "expectedIntegrity": {
+        "status": "unavailable"
+      },
+      "provenance": {
+        "status": "not-recorded"
+      }
+    }
+  ],
+  "inventory": {
+    "files": 4,
+    "bytes": 196,
+    "complete": true,
+    "digestSha256": "e7f77d2671399816cf6b569f43343f7203272eac0c4808daebed73eaa59f0e31",
+    "digestInput": "JSON array of [originalPath, artifactSha256, size] sorted by originalPath."
+  },
+  "source": {
+    "status": "unresolved",
+    "method": "unresolved",
+    "commit": null,
+    "complete": false,
+    "alternatives": 0,
+    "label": "Recorded source selection; method states how it was chosen."
+  },
+  "assessment": {
+    "policyExitCode": 3,
+    "findings": [
+      {
+        "ruleId": "identity-claim-conflict",
+        "count": 1
+      }
+    ],
+    "failures": [],
+    "coverage": {
+      "complete": true,
+      "sourceAvailable": false,
+      "sourceComplete": false,
+      "states": {
+        "byte-identical": {
+          "files": 0,
+          "bytes": 0
+        },
+        "changed": {
+          "files": 0,
+          "bytes": 0
+        },
+        "artifact-only": {
+          "files": 0,
+          "bytes": 0
+        },
+        "not-compared": {
+          "files": 4,
+          "bytes": 196
+        }
+      }
+    },
+    "aiStatus": "not-sent",
+    "safetyVerdict": "not-provided",
+    "limitations": [
+      "Unsigned manifest: digests support integrity comparison only and do not prove authorship or origin.",
+      "Static bounded analysis; package code, install scripts and builds were not executed.",
+      "Dependency versions and transitive dependencies were not resolved.",
+      "Vulnerability advisories are not included; consult the report and details exports.",
+      "Absence of a current finding does not establish that the package is safe.",
+      "No source archive was compared with the published artifact.",
+      "Source selection method is unresolved; the recorded commit is not cryptographically verified by this manifest.",
+      "AI review status is not-sent; no AI conclusion is included.",
+      "Requested identity conflicts with the artifact manifest."
+    ]
+  },
+  "exports": {
+    "report": "/r/<report-id>.json",
+    "details": "/r/<report-id>.details.json",
+    "sbom": "/r/<report-id>.cdx.json",
+    "sbomServedSha256": "34ae50e2bfaa8c4e2b84d906a7adeb4fb87f5506b2362449aefd09e55a08f730"
+  }
+}

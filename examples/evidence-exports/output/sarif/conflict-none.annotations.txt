@@ -1,0 +1,8 @@
+::error title=unmask policy/identity-claim-conflict::Artifact manifest differs from the claimed identity in: name, version. [artifact package.json bytes 0-136]
+::notice title=unmask cue/manifest-artifact-runtime-observation::Artifact declaration observed; source comparison is unavailable. (field /dependencies) [artifact package.json bytes 0-136]
+::notice title=unmask cue/manifest-artifact-runtime-observation::Artifact declaration observed; source comparison is unavailable. (field /bundledDependencies) [artifact package.json bytes 0-136]
+::notice title=unmask cue/manifest-artifact-runtime-observation::Artifact declaration observed; source comparison is unavailable. (field /name) [artifact package.json bytes 0-136]
+::notice title=unmask cue/manifest-artifact-runtime-observation::Artifact declaration observed; source comparison is unavailable. (field /version) [artifact package.json bytes 0-136]
+::warning title=unmask coverage/source-unavailable::No source archive was compared; artifact files have no source correspondence.
+::notice title=unmask coverage/unresolved-files::4 of 4 artifact files are not byte-identical to selected source (4 not compared).
+::notice title=unmask limitation/absence-not-safety::Absence of results does not establish that the package is safe; only recorded evidence, deterministic policy rules and the supplied advisory snapshot are reported.
