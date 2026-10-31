@@ -2281,3 +2281,81 @@ test("three-slot default invalid-output retries stay on the first tier and stop 
   assert.equal(seen.length, 6);
   assert.ok(seen.every((url) => url.includes("gemini-3.5-flash:")));
 });
+
+for (const inputLimit of [4000, 3200]) {
+  test(`code-heavy packing reserves the complete prompt within ${inputLimit} input tokens`, async () => {
+    const r = rankedFixture(16);
+    for (const [index, item] of r.evidence.entries()) {
+      item.id = `evidence-${String(index).padStart(3, "0")}-${"abcdef0123456789".repeat(4)}`;
+      item.excerpt = 'const opaque = ["a", 1, {}, null];'
+        .repeat(20)
+        .slice(0, 512);
+      item.range = [0, Buffer.byteLength(item.excerpt)];
+      r.files[index].state = "changed";
+    }
+    r.policy.findings = [
+      { ruleId: "lifecycle-source-absent", evidenceIds: [r.evidence[15].id] },
+    ];
+    const before = JSON.stringify(r);
+    let prompt;
+    let generations = 0;
+    const section = await client(
+      async (url, options) => {
+        const text = JSON.parse(options.body).contents[0].parts[0].text;
+        prompt = JSON.parse(text);
+        if (url.endsWith(":countTokens"))
+          return Response.json({
+            totalTokens: Math.ceil(Buffer.byteLength(text) / 2),
+          });
+        generations++;
+        const item = prompt.evidence[0];
+        return output({
+          hypotheses: [
+            {
+              ...hypothesis(),
+              citations: [{ evidenceId: item.id, quote: item.excerpt }],
+            },
+          ],
+        });
+      },
+      { maxInputTokens: inputLimit },
+    ).explain(r, { allowLocal: true });
+    assert.equal(section.status, "complete");
+    assert.equal(generations, 1);
+    assert.ok(Buffer.byteLength(JSON.stringify(prompt)) + 256 <= inputLimit);
+    assert.equal(prompt.evidence[0].id, r.evidence[15].id);
+    assert.ok(prompt.evidence.length > 0);
+    assert.ok(section.omittedEvidenceIds.length > 0);
+    assert.equal(JSON.stringify(r), before);
+  });
+}
+
+test("conservative input packing retains a complete paired comparison", async () => {
+  const r = comparisonInput();
+  for (const item of r.evidence) {
+    item.excerpt = item.side === "artifact" ? "a".repeat(512) : "s".repeat(512);
+    item.range = [0, 512];
+    item.excerptRange = [0, 512];
+  }
+  r.files[0].spans = { artifact: [0, 512], source: [0, 512] };
+  const { section, prompt } = await rankedPrompt(r);
+  assert.equal(section.status, "complete");
+  assert.equal(prompt.evidence.length, 2);
+  assert.equal(prompt.evidenceGroups[0].paired, true);
+  assert.ok(Buffer.byteLength(JSON.stringify(prompt)) + 256 <= 4000);
+});
+
+test("an input envelope too small for one complete group sends no provider request", async () => {
+  let requests = 0;
+  const section = await client(
+    () => {
+      requests++;
+      throw new Error("provider must not run without a complete bounded group");
+    },
+    { maxInputTokens: 500 },
+  ).explain(report(), { allowLocal: true });
+  assert.equal(requests, 0);
+  assert.equal(section.reason, "no-evidence");
+  assert.deepEqual(section.omittedEvidenceIds, ["e1"]);
+  assert.equal(section.omittedEvidenceGroups[0].reason, "group-budget");
+});
