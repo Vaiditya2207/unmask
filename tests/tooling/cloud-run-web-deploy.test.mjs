@@ -138,6 +138,19 @@ function fixture() {
           const [revisionName, percent] = part.split("=");
           return { revisionName, percent: Number(percent) };
         });
+        return JSON.stringify(
+          current.status.traffic.map((route) => ({
+            key: route.revisionName,
+            revisionName: route.revisionName,
+            latestRevision: false,
+            specPercent: String(route.percent),
+            statusPercent: String(route.percent),
+            displayPercent: `${route.percent}%`,
+            specTags: "-",
+            statusTags: "-",
+            urls: [],
+          })),
+        );
       } else if (args.includes("revisions")) {
         return JSON.stringify({
           metadata: { name: "unmask-web-new" },
@@ -986,4 +999,39 @@ test("lost promotion response does not roll back an external successor", async (
     1,
   );
   assert.equal(f.current.status.traffic[0].revisionName, "unmask-web-external");
+});
+
+test("promotion accepts gcloud update-traffic traffic-pair output and verifies ownership from the described service", async () => {
+  const f = fixture();
+  const replies = [];
+  const result = await run(f, {
+    execute: (binary, args) => {
+      const output = f.execute(binary, args);
+      if (args.includes("update-traffic")) replies.push(JSON.parse(output));
+      return output;
+    },
+  });
+  assert.equal(result.status, "verified");
+  assert.equal(replies.length, 1);
+  assert.ok(Array.isArray(replies[0]));
+  assert.equal(replies[0][0].metadata, undefined);
+  assert.equal(replies[0][0].revisionName, "unmask-web-new");
+  assert.equal(f.smokes.length, 2);
+  assert.equal(f.smokes[1].phase, "public");
+});
+
+test("a failed public smoke reports its phase and restores the previous route", async () => {
+  const f = fixture();
+  await assert.rejects(
+    run(f, {
+      smoke: async (options) => {
+        if (options.phase === "public") throw new Error("hidden");
+        return f.smoke(options);
+      },
+    }),
+    /^Error: Web verification failed during public smoke; previous route restored$/,
+  );
+  const promotions = f.calls.filter((c) => c.args.includes("update-traffic"));
+  assert.equal(promotions.length, 2);
+  assert.ok(promotions[1].args.includes("unmask-web-old=100"));
 });
