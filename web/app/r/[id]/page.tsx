@@ -10,6 +10,7 @@ import { fetchJob, type Job } from "@/lib/analyzer.ts";
 import { formatUtc } from "@/lib/report.ts";
 import { PackageDetailsView } from "@/components/report/PackageDetailsView";
 import { fetchPackageDetails, evidenceAnchors } from "@/lib/package-details.ts";
+import { parseAdvisoryResult } from "@/lib/advisory-result.ts";
 
 type Params = Promise<{ id: string }>;
 
@@ -41,6 +42,9 @@ const messages: Record<Exclude<Job["status"], "completed">, string> = {
 function StatusView({ job }: { job: Job }) {
   const status = job.status === "completed" ? "failed" : job.status;
   const active = status === "queued" || status === "running";
+  const advisory = active
+    ? null
+    : parseAdvisoryResult(job.advisoryResult, job.nameAtExactVersion);
   return (
     <main className="viewer viewer-status" id="main">
       {active ? <AutoRefresh /> : null}
@@ -72,6 +76,39 @@ function StatusView({ job }: { job: Job }) {
           <a href={`/api/reports/${job.id}`}>View job JSON</a>
         </p>
       </section>
+      {advisory ? (
+        <section className="card status-card" aria-label="Advisory-only result">
+          <div className="card-head">
+            <h2>Advisory-only result</h2>
+            <span className="pill pill-negative">Artifact not verified</span>
+          </div>
+          <p className="status-text-lg">{advisory.headline}</p>
+          <p>{advisory.detail}</p>
+          {advisory.reported ? (
+            <ul>
+              {advisory.vulnerability.advisories.slice(0, 20).map((item) => (
+                <li key={String(item.id)}>
+                  <code>{String(item.id)}</code>
+                  {typeof item.summary === "string"
+                    ? `: ${item.summary.slice(0, 300)}`
+                    : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <p className="faint">
+            OSV lookup: <code>{advisory.vulnerability.status}</code>
+            {advisory.vulnerability.reasons.length ? (
+              <>
+                {" "}
+                (<code>{advisory.vulnerability.reasons.join(", ")}</code>)
+              </>
+            ) : null}
+            . Artifact verification not performed:{" "}
+            <code>{advisory.artifactReason}</code>.
+          </p>
+        </section>
+      ) : null}
     </main>
   );
 }
