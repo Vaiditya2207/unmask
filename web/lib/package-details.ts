@@ -10,6 +10,7 @@ export interface DetailList {
 }
 export interface PackageDetails {
   detailsVersion: "1";
+  vulnerabilityCheck?: unknown;
   reportSchemaVersion: "1";
   scope: DetailRecord;
   identity: DetailList;

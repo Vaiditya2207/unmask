@@ -9,6 +9,7 @@ import {
   preview,
 } from "@/lib/package-details.ts";
 import { formatBytes } from "@/lib/report.ts";
+import { parseVulnerabilityCheck, safeHttps } from "@/lib/vulnerabilities.ts";
 
 const ROWS = 30;
 const number = (value: unknown) =>
@@ -110,6 +111,10 @@ export function PackageDetailsView({
     typeof requested.name === "string" && typeof requested.version === "string"
       ? `${text(requested.name, 214)}@${text(requested.version, 100)}`
       : `Check ${id.slice(0, 8)}`;
+  const vulnerability = parseVulnerabilityCheck(
+    d.vulnerabilityCheck,
+    requested,
+  );
   const fields = rows(d.declarations.fields);
   const source = record(
     rows(d.provenance.facts).find((item) => item.field === "source")?.value,
@@ -124,6 +129,7 @@ export function PackageDetailsView({
     ["inventory", "Files"],
     ["observations", "Observed behavior"],
     ["source", "Source comparison"],
+    ["vulnerabilities", "Known vulnerabilities"],
     ["advisory", "AI advice"],
     ["coverage", "Coverage and limits"],
   ];
@@ -608,6 +614,149 @@ export function PackageDetailsView({
         </details>
       </Section>
 
+      <Section id="vulnerabilities" title="Known vulnerabilities from OSV">
+        <p className="notice">
+          {vulnerability.status === "not-assessed"
+            ? "No vulnerability lookup was recorded for this check."
+            : vulnerability.status === "none-reported"
+              ? "OSV reported no advisories for this exact package/version at the recorded time. This is not a safety verdict or proof that vulnerabilities do not exist."
+              : vulnerability.status === "found"
+                ? "OSV returned known advisory records for this exact package/version."
+                : vulnerability.status === "incomplete"
+                  ? "The OSV lookup is incomplete. Returned advisory records are partial; no complete result is available."
+                  : "The OSV lookup is unavailable. No conclusion about known vulnerabilities is available."}
+        </p>
+        <dl className="detail-kv">
+          <div>
+            <dt>Source</dt>
+            <dd>
+              <a href="https://osv.dev" rel="noreferrer noopener">
+                OSV
+              </a>
+            </dd>
+          </div>
+          <div>
+            <dt>Lookup status</dt>
+            <dd>{status(vulnerability.status)}</dd>
+          </div>
+          <div>
+            <dt>Queried package</dt>
+            <dd>
+              {vulnerability.package ? (
+                <code>
+                  {vulnerability.package.name}@{vulnerability.package.version}
+                </code>
+              ) : (
+                "Not recorded"
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>Query time</dt>
+            <dd>
+              {vulnerability.queriedAt ? (
+                <time dateTime={vulnerability.queriedAt}>
+                  {vulnerability.queriedAt}
+                </time>
+              ) : (
+                "Not recorded"
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>Pages fetched</dt>
+            <dd>{number(vulnerability.pagesFetched)}</dd>
+          </div>
+        </dl>
+        <p className="detail-note">
+          Only the directly submitted exact npm package/version is queried.
+          Dependency ranges and transitive packages are not resolved or scanned.
+          This stored result is reused with the report; reading this page does
+          not query OSV again.
+        </p>
+        {vulnerability.reasons.length ? (
+          <p>
+            Lookup limits or failures:{" "}
+            {vulnerability.reasons.map(status).join(", ")}. See details JSON for
+            the recorded result.
+          </p>
+        ) : null}
+        <ul className="detail-list">
+          {vulnerability.advisories.slice(0, 20).map((advisory, index) => (
+            <li key={index}>
+              <h3>
+                <a
+                  href={`https://osv.dev/vulnerability/${encodeURIComponent(String(advisory.id))}`}
+                  rel="noreferrer noopener"
+                >
+                  {text(advisory.id, 256)}
+                </a>
+              </h3>
+              <p>{text(advisory.summary)}</p>
+              {Array.isArray(advisory.aliases) ? (
+                <p>
+                  Aliases:{" "}
+                  {advisory.aliases
+                    .slice(0, 16)
+                    .map((alias) => text(alias, 256))
+                    .join(", ")}
+                </p>
+              ) : null}
+              {advisory.databaseSeverity ? (
+                <p>
+                  OSV-declared severity: {text(advisory.databaseSeverity, 64)}
+                </p>
+              ) : null}
+              {Array.isArray(advisory.severity)
+                ? advisory.severity.slice(0, 8).map((item, i) => {
+                    const severity = record(item);
+                    return (
+                      <p key={i}>
+                        OSV-declared {text(severity.type, 32)}:{" "}
+                        <code>{text(severity.score, 512)}</code>
+                      </p>
+                    );
+                  })
+                : null}
+              <p className="faint">
+                Published: {text(advisory.published, 64)}. Modified:{" "}
+                {text(advisory.modified, 64)}.
+              </p>
+              {advisory.truncated === true ? (
+                <p className="notice">
+                  This advisory record was bounded by the adapter. Consult the
+                  linked source for its full contents.
+                </p>
+              ) : null}
+              {Array.isArray(advisory.references) ? (
+                <ul className="detail-refs">
+                  {advisory.references.slice(0, 4).map((item, i) => {
+                    const reference = record(item);
+                    const href = safeHttps(reference.url);
+                    return href ? (
+                      <li key={i}>
+                        <a href={href} rel="noreferrer noopener">
+                          {text(reference.type, 32)}: {text(href, 160)}
+                        </a>
+                      </li>
+                    ) : null;
+                  })}
+                </ul>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+        {vulnerability.advisories.length > 0 ? (
+          <p className="detail-note">
+            Showing {Math.min(vulnerability.advisories.length, 20)} of{" "}
+            {vulnerability.advisories.length} returned advisory records. Other
+            returned records and references remain in the{" "}
+            <a href={`${raw}/details`}>details JSON</a>. Severity and affected
+            ranges are OSV declarations, not a new rating or local exploit test.
+          </p>
+        ) : null}
+      </Section>
+
       <Section id="advisory" title="AI advisory explanation">
         <p>
           Status: {status(model.status)}. Model:{" "}
@@ -729,9 +878,9 @@ export function PackageDetailsView({
             inspected evidence.
           </li>
           <li>
-            Vulnerability status is not assessed in this overview. A missing
-            vulnerability section is not a zero-vulnerability result. License
-            compliance is not assessed.
+            Known vulnerability lookup is scoped to the exact package and
+            recorded time. A missing or partial lookup is not a
+            zero-vulnerability result. License compliance is not assessed.
           </li>
           <li>
             Target execution, install simulation and transitive dependency

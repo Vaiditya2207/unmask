@@ -137,6 +137,10 @@ async function renderOverview(details: unknown, rawModel?: unknown) {
     .replaceAll(
       '"@/lib/report.ts"',
       JSON.stringify(new URL("./report.ts", import.meta.url).href),
+    )
+    .replaceAll(
+      '"@/lib/vulnerabilities.ts"',
+      JSON.stringify(new URL("./vulnerabilities.ts", import.meta.url).href),
     );
   const { PackageDetailsView } = await import(
     `data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`
@@ -211,4 +215,60 @@ test("omitted details metadata can show explicitly attributed raw-report model i
   assert.ok(html.includes("fixture-model"));
   assert.ok(html.includes("shown from the raw report"));
   assert.ok(html.includes("API omitted 1"));
+});
+
+test("OSV rendering keeps partial failures distinct and escapes advisory data and links", async () => {
+  const requested = { name: "example", version: "1.2.3" };
+  const base = {
+    schemaVersion: "1",
+    source: "OSV",
+    package: { ...requested, ecosystem: "npm" },
+    queriedAt: "2026-10-31T20:41:39.100Z",
+    status: "none-reported",
+    complete: true,
+    reasons: [],
+    advisories: [],
+    pagesFetched: 1,
+    limits: {},
+  };
+  for (const [extra, phrase] of [
+    [{}, "OSV reported no advisories"],
+    [
+      { status: "incomplete", complete: false, reasons: ["page-limit"] },
+      "lookup is incomplete",
+    ],
+    [
+      { status: "unavailable", complete: false, reasons: ["timeout"] },
+      "lookup is unavailable",
+    ],
+  ] as const) {
+    const d = {
+      ...fixture(),
+      identity: list([{ requested }]),
+      vulnerabilityCheck: { ...base, ...extra },
+    };
+    const html = await renderOverview(parsePackageDetails(d));
+    assert.ok(html.includes(phrase));
+    assert.ok(html.includes("directly submitted exact npm package/version"));
+    if (extra.status) assert.ok(!html.includes("OSV reported no advisories"));
+  }
+  const advisory = {
+    id: "GHSA-test",
+    summary: '<img src=x onerror="bad">',
+    references: [
+      { url: "javascript:alert(1)", type: "ADVISORY" },
+      { url: "https://advisory.invalid/id", type: "ADVISORY" },
+    ],
+  };
+  const d = {
+    ...fixture(),
+    identity: list([{ requested }]),
+    vulnerabilityCheck: { ...base, status: "found", advisories: [advisory] },
+  };
+  const html = await renderOverview(parsePackageDetails(d));
+  assert.ok(html.includes("&lt;img"));
+  assert.ok(!html.includes("<img src=x"));
+  assert.ok(!html.includes('href="javascript:'));
+  assert.ok(html.includes('href="https://advisory.invalid/id"'));
+  assert.ok(html.includes('rel="noreferrer noopener"'));
 });
