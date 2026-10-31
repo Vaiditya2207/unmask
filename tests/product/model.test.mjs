@@ -350,6 +350,29 @@ test("summaries cannot contradict deterministic finding, cue or correspondence c
   assert.equal(generations, 2);
 });
 
+test("invisible format characters cannot hide verdicts while visible unicode stays admissible", () => {
+  for (const [text, valid] of [
+    ["The package is s\u200bafe.", false],
+    ["The package is s\u2060afe.", false],
+    ["The package is s\ufeffafe.", false],
+    ["Soft\u00adhyphen text.", false],
+    ["Tag \u{e0041} character.", false],
+    ["Line\u2028separator.", false],
+    ["Résumé café: 1 file changed in lib/日本.js 🚧.", true],
+    ["Two lines\nwith a\ttab.", true],
+  ]) {
+    assert.equal(validSummary(text, "test-only-key", {}), valid, text);
+    assert.equal(
+      validAssessment(
+        { uncertainty: text, nextAction: "Review the changed hook." },
+        "test-only-key",
+      ),
+      valid,
+      text,
+    );
+  }
+});
+
 test("changed, artifact-only and not-compared files remain eligible without a policy finding", async () => {
   for (const state of ["changed", "artifact-only", "not-compared"]) {
     let requests = 0;
