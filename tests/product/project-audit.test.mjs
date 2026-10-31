@@ -286,12 +286,13 @@ test("audit keeps unbound, mismatched and unreported artifact hashes incomplete"
         "node_modules/b": pkg("b", "1.0.0"),
         "node_modules/c": { version: "1.0.0" },
         "node_modules/d": pkg("d", "1.0.0", { integrity: "sha1-AAAA" }),
+        "node_modules/f": pkg("f", "1.0.0", { integrity: "sha512-AAAA" }),
         "node_modules/e": pkg("e", "1.0.0"),
       },
     }),
   );
   const result = await auditLock(lock, {
-    max: 5,
+    max: 6,
     check: async (spec) =>
       spec === "b@1.0.0"
         ? { ...bound(0), inputs: { artifact: { sha512: "f".repeat(128) } } }
@@ -307,12 +308,13 @@ test("audit keeps unbound, mismatched and unreported artifact hashes incomplete"
       ["c@1.0.0", "no-findings", "unbound"],
       ["d@1.0.0", "no-findings", "unbound"],
       ["e@1.0.0", "no-findings", "unavailable"],
+      ["f@1.0.0", "no-findings", "unbound"],
     ],
   );
   assert.deepEqual(result.coverage.binding, {
     verified: 1,
     mismatch: 1,
-    unbound: 2,
+    unbound: 3,
     unavailable: 1,
   });
   assert.equal(result.coverage.complete, false);

@@ -181,7 +181,7 @@ export function parseLockfile(text, limits = LOCKFILE_LIMITS) {
           raw.name ?? nameFromKey(key),
           raw.version,
         ) &&
-        /^sha512-[A-Za-z0-9+/]+={0,2}$/.test(raw.integrity ?? ""),
+        /^sha512-[A-Za-z0-9+/]{86}==$/.test(raw.integrity ?? ""),
       edges: entryEdges,
       edgesValid,
     });
