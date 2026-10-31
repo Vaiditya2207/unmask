@@ -18,8 +18,8 @@ const COMMANDS = [
     summary:
       "Check an exact npm version via the hosted service, or a local tarball offline.",
     usage: [
-      "unmask check NAME@VERSION --out DIR",
-      "unmask check --tarball FILE --offline --cache-dir DIR --out DIR [--claim NAME@VERSION] [--source-archive FILE --commit SHA --source-root DIR [--source-dir DIR]] [--allow-model]",
+      "unmask check NAME@VERSION [--out DIR]",
+      "unmask check --tarball FILE --offline --cache-dir DIR [--out DIR] [--claim NAME@VERSION] [--source-archive FILE --commit SHA --source-root DIR [--source-dir DIR]] [--allow-model]",
     ],
   },
   {
@@ -54,8 +54,16 @@ const COMMANDS = [
     module: "files.mjs",
     summary: "List a checked version's file inventory with hashes and states.",
     usage: [
-      "unmask files NAME@VERSION [--report ID] [--path TEXT] [--state STATE] [--limit 1-200] [--offset N]",
+      "unmask files NAME@VERSION [--report ID] [--path TEXT] [--state STATE] [--limit 1..200] [--offset N]",
     ],
+  },
+  {
+    name: "file",
+    group: 0,
+    module: "file.mjs",
+    summary:
+      "Show one recorded file's evidence, bound to a hosted report ID and file ID.",
+    usage: ["unmask file NAME@VERSION --report REPORT_ID --file-id FILE_ID"],
   },
   {
     name: "compare",
@@ -143,6 +151,14 @@ const COMMANDS = [
     module: "shell-integration.mjs",
     summary: "Print shell code that removes the guard routing.",
     usage: ["unmask disable bash|zsh|fish"],
+  },
+  {
+    name: "init",
+    group: 2,
+    module: "init.mjs",
+    summary:
+      "Create a new project .unmask.json guard configuration; never overwrites an existing one.",
+    usage: ["unmask init [--profile strict|balanced|audit] [--project DIR]"],
   },
   {
     name: "config",
@@ -304,7 +320,7 @@ function renderCommand(command) {
     lines.push("Usage:", ...command.usage.map((usage) => `  ${usage}`));
   return lines.join("\n") + "\n";
 }
-function discover(argv, runtime) {
+export function discoveryCommand(argv, runtime = {}) {
   const stdout = runtime.stdout ?? process.stdout;
   if (argv[0] === "--version" || argv[0] === "version") {
     const json = argv[1] === "--json";
@@ -347,17 +363,6 @@ function discover(argv, runtime) {
     );
   stdout.write(renderCommand(command));
   return 0;
-}
-export function discoveryCommand(argv, runtime = {}) {
-  try {
-    return discover(argv, runtime);
-  } catch (error) {
-    if (!(error instanceof LocalInputError)) throw error;
-    (runtime.stderr ?? process.stderr).write(
-      `${error.code}: ${error.message}\n`,
-    );
-    return 2;
-  }
 }
 export function isDiscoveryRequest(argv) {
   return (
