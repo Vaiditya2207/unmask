@@ -37,6 +37,14 @@ jobs:
         run: node scripts/release-readiness.mjs --github-output --version-candidate
   publish:
     needs: [checks, readiness]
+    outputs:
+      complete: ${{ steps.release.outputs.complete }}
+      npm_published: ${{ steps.release.outputs.npm_published }}
+      image: ${{ steps.release.outputs.image }}
+      commit: ${{ steps.release.outputs.commit }}
+      version: ${{ steps.release.outputs.version }}
+      tarball_sha256: ${{ steps.release.outputs.tarball_sha256 }}
+      release_id: ${{ steps.release.outputs.release_id }}
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.checks.result == 'success' && needs.readiness.outputs.ready == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -93,6 +101,7 @@ jobs:
           SMOKE_RESULT: ${{ steps.smoke.outcome }}
         run: node scripts/release.mjs npm-publish
       - name: Publish new immutable release after checks
+        id: release
         env:
           GITHUB_TOKEN: ${{ github.token }}
           RELEASE_SETTINGS_TOKEN: ${{ secrets.RELEASE_SETTINGS_TOKEN }}
@@ -101,3 +110,49 @@ jobs:
           CANDIDATE_IMAGE_ID: ${{ steps.image.outputs.image_id }}
           SMOKE_RESULT: ${{ steps.smoke.outcome }}
         run: node scripts/release.mjs publish
+
+  deploy:
+    needs: publish
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.publish.outputs.complete == 'true' && needs.publish.outputs.npm_published == 'true'
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      DEPLOY_REPOSITORY_ID: ${{ github.repository_id }}
+      DEPLOY_OWNER_ID: ${{ github.repository_owner_id }}
+      DEPLOY_ENVIRONMENT: production
+      RELEASE_COMPLETE: ${{ needs.publish.outputs.complete }}
+      RELEASE_NPM_PUBLISHED: ${{ needs.publish.outputs.npm_published }}
+      RELEASE_IMAGE_DIGEST: ${{ needs.publish.outputs.image }}
+      RELEASE_COMMIT: ${{ needs.publish.outputs.commit }}
+      RELEASE_VERSION: ${{ needs.publish.outputs.version }}
+      RELEASE_PACKAGE_SHA256: ${{ needs.publish.outputs.tarball_sha256 }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.publish.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Validate confirmed production references before authentication
+        id: config
+        run: node scripts/cloud-run-deploy.mjs --validate
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          project_id: ${{ steps.config.outputs.project_id }}
+          service_account: ${{ steps.config.outputs.service_account }}
+          workload_identity_provider: ${{ steps.config.outputs.workload_identity_provider }}
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+        with:
+          version: 591.0.0
+      - name: Deploy exact digest and verify serving identity and real model route
+        id: deploy
+        run: node scripts/cloud-run-deploy.mjs

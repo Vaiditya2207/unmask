@@ -1,0 +1,10 @@
+{
+  "project": "unmask-513319",
+  "region": "asia-south1",
+  "service": "unmask",
+  "serviceAccount": "unmask-github-deploy@unmask-513319.iam.gserviceaccount.com",
+  "workloadIdentityProvider": "projects/386156642190/locations/global/workloadIdentityPools/unmask-github/providers/github",
+  "runtimeServiceAccount": "unmask-runtime@unmask-513319.iam.gserviceaccount.com",
+  "smokePackage": "zod@4.6.7",
+  "modelExpectation": null
+}

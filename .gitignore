@@ -12,6 +12,7 @@ __pycache__/
 .DS_Store
 models/
 artifacts/
+gha-creds-*.json
 
 # Internal planning/research notes: never commit (keep them in ../unmask-research)
 internal/
