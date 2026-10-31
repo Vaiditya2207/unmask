@@ -355,6 +355,19 @@ export async function readGuardConfig(projectDir, { now = new Date() } = {}) {
   }
 }
 
+async function syncDirectory(directory) {
+  let handle;
+  try {
+    handle = await open(directory, constants.O_RDONLY);
+    await handle.sync();
+  } catch (error) {
+    if (!["EINVAL", "EISDIR", "EPERM", "ENOTSUP"].includes(error.code))
+      throw error;
+  } finally {
+    await handle?.close();
+  }
+}
+
 export async function writeGuardConfig(
   projectDir,
   config,
@@ -378,6 +391,7 @@ export async function writeGuardConfig(
     await handle.sync();
     await handle.close();
     await rename(temporary, location.file);
+    await syncDirectory(location.root);
   } catch (error) {
     await handle.close().catch(() => {});
     await unlink(temporary).catch(() => {});
@@ -404,6 +418,8 @@ export async function createGuardConfig(
     await handle.close();
     // link() refuses any existing entry, including dangling symlinks, so creation is exclusive.
     await link(temporary, location.file);
+    await unlink(temporary);
+    await syncDirectory(location.root);
   } catch (error) {
     await handle.close().catch(() => {});
     if (error.code === "EEXIST")
