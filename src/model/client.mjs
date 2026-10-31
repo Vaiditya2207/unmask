@@ -462,6 +462,30 @@ function promptFor(report, inputLimit) {
     }
     used = Buffer.byteLength(JSON.stringify(payload));
   }
+  const selectedGroups = [];
+  let partials = 0;
+  function admit(descriptor, additions) {
+    // Prompt descriptors omit the metadata-only group ID; results keep the full descriptor.
+    const { id, ...shown } = descriptor;
+    if (
+      payload.evidence.length + additions.length > 16 ||
+      used + Buffer.byteLength(JSON.stringify(shown)) > promptBytes
+    )
+      return false;
+    const previous = payload.evidence.length;
+    payload.evidence.push(...additions);
+    payload.evidenceGroups.push(shown);
+    const size = Buffer.byteLength(JSON.stringify(payload));
+    if (size > promptBytes) {
+      payload.evidence.length = previous;
+      payload.evidenceGroups.pop();
+      return false;
+    }
+    used = size;
+    selectedGroups.push(descriptor);
+    for (const e of additions) selected.set(e.id, e);
+    return true;
+  }
   let hunkTier = 2;
   for (const item of groups) {
     // Signal-tier hunks precede generic groups; changed-file hunks precede unchanged context.
@@ -483,26 +507,35 @@ function promptFor(report, inputLimit) {
     const additions = item.evidenceIds
       .filter((id) => !selected.has(id))
       .map((id) => entries.get(id));
-    // The descriptor alone is a lower bound on growth, so large cue sets skip full re-serialization.
-    if (
-      payload.evidence.length + additions.length > 16 ||
-      used + Buffer.byteLength(JSON.stringify(descriptor)) > promptBytes
-    ) {
-      omittedEvidenceGroups.push({ ...descriptor, reason: "group-budget" });
-      continue;
+    if (admit(descriptor, additions)) continue;
+    let kept = null;
+    if (item.kind === "policy" && additions.length > 1 && partials < 2) {
+      // An oversized policy group keeps its leading evidence as an unpaired partial; cue groups stay atomic.
+      partials++;
+      for (let n = Math.min(additions.length - 1, 16); n > 0 && !kept; n--) {
+        const subset = new Set(additions.slice(0, n).map((e) => e.id));
+        const partial = {
+          ...descriptor,
+          evidenceIds: descriptor.evidenceIds.filter(
+            (id) => selected.has(id) || subset.has(id),
+          ),
+          paired: false,
+          partial: true,
+        };
+        if (admit(partial, additions.slice(0, n))) kept = subset;
+      }
     }
-    const previous = payload.evidence.length;
-    payload.evidence.push(...additions);
-    payload.evidenceGroups.push(descriptor);
-    const size = Buffer.byteLength(JSON.stringify(payload));
-    if (size > promptBytes) {
-      payload.evidence.length = previous;
-      payload.evidenceGroups.pop();
-      omittedEvidenceGroups.push({ ...descriptor, reason: "group-budget" });
-    } else {
-      used = size;
-      for (const e of additions) selected.set(e.id, e);
-    }
+    omittedEvidenceGroups.push({
+      ...descriptor,
+      ...(kept
+        ? {
+            evidenceIds: additions
+              .map((e) => e.id)
+              .filter((id) => !kept.has(id)),
+          }
+        : {}),
+      reason: kept ? "group-partial" : "group-budget",
+    });
   }
   const paths = new Set(payload.evidence.map((e) => e.path));
   for (const file of [...files].sort((a, b) =>
@@ -528,7 +561,7 @@ function promptFor(report, inputLimit) {
       ...groups.flatMap((g) => [g.ruleId, ...g.evidenceIds]),
     ],
     selected,
-    evidenceGroups: payload.evidenceGroups,
+    evidenceGroups: selectedGroups,
     omittedEvidenceGroups,
     omittedEvidenceIds: [...all].filter((id) => !selected.has(id)).sort(order),
   };

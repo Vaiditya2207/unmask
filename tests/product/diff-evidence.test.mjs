@@ -71,6 +71,7 @@ function modelOutput(prompt, hypothesis) {
 async function explainWithPrompt(
   report,
   citations = [{ evidenceId: "manifest-a", quote: '"node x.js"' }],
+  limits = {},
 ) {
   let prompt;
   const section = await createGemmaClient({
@@ -81,6 +82,7 @@ async function explainWithPrompt(
     requestsPerMinute: 20,
     inputTokensPerMinute: 20000,
     totalMs: 90000,
+    ...limits,
     fetchImpl: async (url, options) => {
       prompt = JSON.parse(JSON.parse(options.body).contents[0].parts[0].text);
       if (url.endsWith(":countTokens"))
@@ -203,7 +205,7 @@ test("lifecycle, dependency and executable manifest changes outrank generic meta
     section.omittedEvidenceGroups.some((group) => group.kind === "comparison"),
   );
   assert.match(prompt.task, /signal groups/u);
-  assert.equal(prompt.promptVersion, "diff-2");
+  assert.equal(prompt.promptVersion, "diff-3");
 });
 
 test("signal ranking keeps policy first and orders capability cues by signal", async () => {
@@ -385,7 +387,7 @@ test("modified spans become exact before/after line hunks with absolute UTF-8 by
   );
   assert.equal(section.status, "complete");
   assert.match(prompt.diffHunkFormat, /source=before artifact=after/u);
-  assert.equal(prompt.promptVersion, "diff-2");
+  assert.equal(prompt.promptVersion, "diff-3");
   assert.deepEqual(prompt.diffHunks, [
     {
       path: "lib/a.js",
@@ -519,5 +521,100 @@ test("changed-file hunks take budget before unchanged context", async () => {
       (group) =>
         group.ruleId === "unranked-context" && group.reason === "group-budget",
     ),
+  );
+});
+
+function topHeavyReport() {
+  const long = (side) =>
+    `{"scripts":{"postinstall":"node ${side}.js"},"pad":"${"x".repeat(470)}"}`.slice(
+      0,
+      512,
+    );
+  const id = (side) => `manifest-${side}-${"0123456789abcdef".repeat(4)}`;
+  const report = crowdedReport();
+  report.evidence = [
+    piece(id("artifact"), "artifact", "package.json", long("artifact")),
+    piece(id("source"), "source", "package.json", long("source")),
+    piece("small", "artifact", "zzz.js", "tiny();"),
+  ];
+  report.files = [
+    { path: "package.json", state: "changed" },
+    { path: "zzz.js", state: "byte-identical" },
+  ];
+  report.cues = [{ ruleId: "generic-observation", evidenceIds: ["small"] }];
+  report.policy.findings = [
+    {
+      ruleId: "lifecycle-source-absent",
+      evidenceIds: [id("artifact"), id("source")],
+    },
+  ];
+  return { report, artifactId: id("artifact"), sourceId: id("source") };
+}
+
+test("prompt group descriptors omit metadata-only IDs while results keep them", async () => {
+  const { section, prompt } = await explainWithPrompt(crowdedReport());
+  assert.equal(section.status, "complete");
+  assert.ok(prompt.evidenceGroups.every((group) => !("id" in group)));
+  assert.deepEqual(
+    section.evidenceGroups.map(({ id, ...rest }) => [/^group-/.test(id), rest]),
+    prompt.evidenceGroups.map((group) => [true, group]),
+  );
+});
+
+test("a top-priority group too large for the budget keeps its leading evidence instead of being replaced", async () => {
+  const { report, artifactId, sourceId } = topHeavyReport();
+  const { section, prompt } = await explainWithPrompt(
+    report,
+    [{ evidenceId: artifactId, quote: "node artifact.js" }],
+    { maxInputTokens: 3200 },
+  );
+  assert.equal(section.status, "complete");
+  assert.deepEqual(prompt.evidenceGroups[0], {
+    kind: "policy",
+    ruleId: "lifecycle-source-absent",
+    evidenceIds: [artifactId],
+    paired: false,
+    partial: true,
+  });
+  assert.equal(prompt.evidence[0].id, artifactId);
+  assert.ok(
+    section.omittedEvidenceGroups.some(
+      (group) =>
+        group.reason === "group-partial" &&
+        group.evidenceIds.length === 1 &&
+        group.evidenceIds[0] === sourceId,
+    ),
+  );
+  assert.ok(section.omittedEvidenceIds.includes(sourceId));
+});
+
+test("two code-heavy policy findings both fit the default budget alongside the summary scope", async () => {
+  const report = crowdedReport();
+  report.evidence = Array.from({ length: 16 }, (_, i) =>
+    piece(
+      `evidence-${String(i).padStart(3, "0")}-${"abcdef0123456789".repeat(4)}`,
+      "artifact",
+      `aaa-${String(i).padStart(2, "0")}.js`,
+      'const opaque = ["a", 1, {}, null];'.repeat(20).slice(0, 512),
+    ),
+  );
+  report.files = report.evidence.map((e) => ({
+    path: e.path,
+    state: "changed",
+    evidenceIds: [e.id],
+  }));
+  report.cues = [];
+  const policyIds = [report.evidence[14].id, report.evidence[15].id];
+  report.policy.findings = policyIds.map((id) => ({
+    ruleId: "lifecycle-source-absent",
+    evidenceIds: [id],
+  }));
+  const { section, prompt } = await explainWithPrompt(report, [
+    { evidenceId: policyIds[0], quote: "const opaque" },
+  ]);
+  assert.equal(section.status, "complete");
+  assert.deepEqual(
+    prompt.evidence.map((e) => e.id),
+    policyIds,
   );
 });
