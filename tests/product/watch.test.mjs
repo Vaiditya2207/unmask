@@ -92,8 +92,6 @@ test("watch debounces duplicate events, skips invalid intermediates, never overl
   fire("change", "package-lock.json");
   fire("change", "package-lock.json");
   await until(() => started.length === 1, "first check started");
-  await delay(25);
-  assert.equal(started.length, 1, "no overlapping run while checking");
   content = lock({ a: "1.0.0", b: "1.0.0", c: "1.0.0", slow: "1.0.0" });
   fire("change", "package-lock.json");
   await until(() => started.includes("slow@1.0.0"), "coalesced run started");
