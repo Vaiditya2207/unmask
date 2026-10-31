@@ -1,4 +1,5 @@
 import { LocalInputError } from "../core/pipeline.mjs";
+import { AcquisitionError } from "../core/acquire.mjs";
 import { checkHosted } from "./hosted.mjs";
 import { exactTargets, readLockfile } from "./lockfile.mjs";
 
@@ -8,6 +9,20 @@ export const AUDIT_LIMITS = Object.freeze({
   maxConcurrency: 2,
 });
 const STATUS_BY_EXIT = { 0: "no-findings", 2: "incomplete", 3: "findings" };
+
+export function bindingStatus(target, report) {
+  if (!target.bound) return "unbound";
+  const actual = report?.inputs?.artifact?.sha512;
+  if (typeof actual !== "string" || !/^[a-f0-9]{128}$/.test(actual))
+    return "unavailable";
+  const locked = target.integrity
+    .flatMap((value) => value.split(/\s+/))
+    .filter((value) => value.startsWith("sha512-"))
+    .map((value) => Buffer.from(value.slice(7), "base64").toString("hex"));
+  return locked.length > 0 && locked.every((value) => value === actual)
+    ? "verified"
+    : "mismatch";
+}
 
 function positive(value, max, label) {
   if (!/^[1-9]\d*$/.test(value ?? "") || Number(value) > max)
@@ -69,6 +84,7 @@ async function checkOne(target, check) {
     return {
       ...target,
       status: STATUS_BY_EXIT[exitCode] ?? "incomplete",
+      binding: bindingStatus(target, report),
       exitCode,
       findings: (report.policy.findings ?? []).map((item) => item.ruleId),
       model: report.model?.status ?? "not-reported",
@@ -80,7 +96,9 @@ async function checkOne(target, check) {
       error:
         error instanceof LocalInputError
           ? { code: error.code, message: error.message }
-          : { code: "internal", message: "Check failed unexpectedly." },
+          : error instanceof AcquisitionError
+            ? { code: error.code, message: "Invalid exact package identity." }
+            : { code: "internal", message: "Check failed unexpectedly." },
     };
   }
 }
@@ -109,10 +127,17 @@ export async function auditLock(
   for (const item of [...results, ...notChecked])
     counts[item.status] = (counts[item.status] ?? 0) + 1;
   const skippedTotal = Object.values(skipped).reduce((a, b) => a + b, 0);
+  const binding = {};
+  for (const item of results)
+    if (item.binding) binding[item.binding] = (binding[item.binding] ?? 0) + 1;
   const complete =
     skippedTotal === 0 &&
     notChecked.length === 0 &&
-    results.every((item) => ["no-findings", "findings"].includes(item.status));
+    results.every(
+      (item) =>
+        ["no-findings", "findings"].includes(item.status) &&
+        item.binding === "verified",
+    );
   return {
     schemaVersion: "1",
     lockfileVersion: lock.lockfileVersion,
@@ -123,6 +148,7 @@ export async function auditLock(
       uniqueExact: targets.length,
       checked: results.length,
       counts,
+      binding,
       skipped,
     },
     exitCode: counts.findings ? 3 : complete ? 0 : 2,
@@ -131,6 +157,8 @@ export async function auditLock(
       "No findings means no deterministic policy finding in the checked scope, not that a package is safe.",
       "Removed or unpublished registry versions fail acquisition and are reported as failed, not clean.",
       "Git, URL, file, workspace and invalid entries are not audited by exact registry identity.",
+      "Coverage requires each locked sha512 integrity to equal the hosted artifact sha512; unbound (no registry.npmjs.org resolved or sha512 integrity), mismatched or unreported hashes stay incomplete.",
+      "At most --max (default 6, matching the hosted limit of six new checks per ten minutes) unique versions are checked, in name order; the rest are not-checked.",
     ],
   };
 }
@@ -145,9 +173,10 @@ function formatText(result) {
     const detail =
       item.status === "failed"
         ? ` ${item.error.code}`
-        : item.findings?.length
-          ? ` ${item.findings.join(",")}`
-          : "";
+        : (item.findings?.length ? ` ${item.findings.join(",")}` : "") +
+          (item.binding && item.binding !== "verified"
+            ? ` [binding ${item.binding}]`
+            : "");
     lines.push(`  ${item.status.padEnd(12)} ${item.spec}${detail}`);
   }
   for (const [reason, count] of Object.entries(coverage.skipped))

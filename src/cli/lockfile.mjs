@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { constants, open } from "node:fs/promises";
 import { LocalInputError } from "../core/pipeline.mjs";
 
 export const LOCKFILE_LIMITS = Object.freeze({
@@ -7,7 +7,7 @@ export const LOCKFILE_LIMITS = Object.freeze({
 });
 const EXACT =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
-const NAME = /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/;
+const NAME = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
 const EDGE_TYPES = [
   ["dependencies", "prod"],
   ["optionalDependencies", "optional"],
@@ -19,7 +19,16 @@ const isObject = (value) =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
 export const isExactVersion = (value) =>
-  typeof value === "string" && value.length <= 256 && EXACT.test(value);
+  typeof value === "string" &&
+  value.length <= 256 &&
+  EXACT.test(value) &&
+  !value
+    .split("+")[0]
+    .split("-")
+    .slice(1)
+    .join("-")
+    .split(".")
+    .some((part) => /^0\d+$/.test(part));
 export const isPackageName = (value) =>
   typeof value === "string" && value.length <= 214 && NAME.test(value);
 
@@ -144,16 +153,37 @@ export function parseLockfile(text, limits = LOCKFILE_LIMITS) {
 }
 
 export async function readLockfile(filename, limits = LOCKFILE_LIMITS) {
-  let text;
-  try {
-    text = await readFile(filename, "utf8");
-  } catch {
-    throw new LocalInputError(
+  const unreadable = () =>
+    new LocalInputError(
       "lockfile-unreadable",
-      "The lockfile could not be read; pass --lockfile PATH to package-lock.json.",
+      "The lockfile must be a readable regular file within the size limit; pass --lockfile PATH to package-lock.json.",
     );
+  let handle;
+  try {
+    // Nonblocking open plus fstat rejects FIFOs/devices before any read.
+    handle = await open(filename, constants.O_RDONLY | constants.O_NONBLOCK);
+    const info = await handle.stat();
+    if (!info.isFile() || info.size > limits.maxBytes) throw unreadable();
+    const buffer = Buffer.alloc(info.size + 1);
+    let length = 0;
+    while (length < buffer.length) {
+      const { bytesRead } = await handle.read(
+        buffer,
+        length,
+        buffer.length - length,
+        length,
+      );
+      if (bytesRead === 0) break;
+      length += bytesRead;
+    }
+    if (length !== info.size) throw unreadable();
+    return parseLockfile(buffer.subarray(0, length).toString("utf8"), limits);
+  } catch (error) {
+    if (error instanceof LocalInputError) throw error;
+    throw unreadable();
+  } finally {
+    await handle?.close();
   }
-  return parseLockfile(text, limits);
 }
 
 export function resolveEdge(lock, fromKey, name) {
@@ -189,8 +219,13 @@ export function exactTargets(lock, { omitDev = false } = {}) {
       name: entry.name,
       version: entry.version,
       locations: [],
+      bound: true,
+      integrity: [],
     };
     target.locations.push(entry.key);
+    target.bound &&= entry.bound;
+    if (entry.integrity && !target.integrity.includes(entry.integrity))
+      target.integrity.push(entry.integrity);
     unique.set(spec, target);
   }
   return {

@@ -2,12 +2,15 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import {
   exactTargets,
   parseLockfile,
+  readLockfile,
   resolveEdge,
 } from "../../src/cli/lockfile.mjs";
 import { auditLock } from "../../src/cli/audit.mjs";
@@ -19,8 +22,13 @@ const tgz = (name, version) =>
 const pkg = (name, version, extra = {}) => ({
   version,
   resolved: tgz(name, version),
-  integrity: "sha512-AAAA",
+  integrity: "sha512-" + createHash("sha512").update("tgz").digest("base64"),
   ...extra,
+});
+const tgzSha512 = createHash("sha512").update("tgz").digest("hex");
+const bound = (exitCode, findings = []) => ({
+  policy: { exitCode, findings },
+  inputs: { artifact: { sha512: tgzSha512 } },
 });
 function fixtureLock() {
   return {
@@ -234,8 +242,9 @@ test("audit statuses, bounds and coverage never treat failures as clean", async 
         packages: { "": {}, "node_modules/a": pkg("a", "1.0.0") },
       }),
     ),
-    { check: async () => ({ policy: { exitCode: 0, findings: [] } }) },
+    { check: async () => bound(0) },
   );
+  assert.equal(clean.results[0].binding, "verified");
   assert.equal(clean.coverage.complete, true);
   assert.equal(clean.exitCode, 0);
   const failed = await auditLock(lock, {
@@ -246,6 +255,79 @@ test("audit statuses, bounds and coverage never treat failures as clean", async 
   });
   assert.equal(failed.exitCode, 2);
   assert.equal(failed.results[0].error.code, "internal");
+});
+
+test("audit keeps unbound, mismatched and unreported artifact hashes incomplete", async () => {
+  const lock = parseLockfile(
+    text({
+      lockfileVersion: 3,
+      packages: {
+        "": {},
+        "node_modules/a": pkg("a", "1.0.0"),
+        "node_modules/b": pkg("b", "1.0.0"),
+        "node_modules/c": { version: "1.0.0" },
+        "node_modules/d": pkg("d", "1.0.0", { integrity: "sha1-AAAA" }),
+        "node_modules/e": pkg("e", "1.0.0"),
+      },
+    }),
+  );
+  const result = await auditLock(lock, {
+    max: 5,
+    check: async (spec) =>
+      spec === "b@1.0.0"
+        ? { ...bound(0), inputs: { artifact: { sha512: "f".repeat(128) } } }
+        : spec === "e@1.0.0"
+          ? { policy: { exitCode: 0, findings: [] } }
+          : bound(0),
+  });
+  assert.deepEqual(
+    result.results.map((r) => [r.spec, r.status, r.binding]),
+    [
+      ["a@1.0.0", "no-findings", "verified"],
+      ["b@1.0.0", "no-findings", "mismatch"],
+      ["c@1.0.0", "no-findings", "unbound"],
+      ["d@1.0.0", "no-findings", "unbound"],
+      ["e@1.0.0", "no-findings", "unavailable"],
+    ],
+  );
+  assert.deepEqual(result.coverage.binding, {
+    verified: 1,
+    mismatch: 1,
+    unbound: 2,
+    unavailable: 1,
+  });
+  assert.equal(result.coverage.complete, false);
+  assert.equal(result.exitCode, 2);
+});
+
+test("lockfile reads are bounded and reject FIFOs and identities parsePackageSpec rejects", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "unmask-lockread-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const fifo = path.join(root, "fifo");
+  execFileSync("mkfifo", [fifo]);
+  await assert.rejects(readLockfile(fifo), { code: "lockfile-unreadable" });
+  await assert.rejects(readLockfile(root), { code: "lockfile-unreadable" });
+  const big = path.join(root, "big.json");
+  await writeFile(big, text(fixtureLock()));
+  await assert.rejects(readLockfile(big, { maxBytes: 64, maxEntries: 10 }), {
+    code: "lockfile-unreadable",
+  });
+  assert.equal((await readLockfile(big)).entries.size, 10);
+  const lock = parseLockfile(
+    text({
+      lockfileVersion: 3,
+      packages: {
+        "": {},
+        "node_modules/z": pkg("z", "1.0.0-01"),
+        "node_modules/y": pkg("y", "1.0.0-0.1a.10"),
+        "node_modules/x~": { version: "1.0.0" },
+      },
+    }),
+  );
+  assert.deepEqual(
+    [...lock.entries.values()].slice(1).map((e) => e.reason),
+    ["inexact-version", null, "invalid-name"],
+  );
 });
 
 test("unmask audit CLI uses the real hosted transport against a local server", async (t) => {
