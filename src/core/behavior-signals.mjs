@@ -499,7 +499,7 @@ const DECODED_HINTS = [
   ".npmrc",
   "/bin/sh",
 ];
-const MODULES = new Set(["child_process", "vm", "zlib"]);
+const MODULES = new Set(["child_process", "vm", "zlib", "module"]);
 
 function stringLiteral(node) {
   return node?.type === "Literal" && typeof node.value === "string"
@@ -585,6 +585,10 @@ function isEncodedText(value) {
 function decoderOf(node, aliases) {
   if (!["CallExpression", "NewExpression"].includes(node.type)) return null;
   const name = qualified(node.callee, aliases);
+  if (name.startsWith("decoder-helper:")) {
+    const [, helper, encoding] = name.split(":");
+    return `${helper}():${encoding}`;
+  }
   if (!DECODERS.has(name)) return null;
   if (name === "Buffer.from" || name === "Buffer") {
     const encoding = stringLiteral(node.arguments[1]);
@@ -707,21 +711,116 @@ function findDecoder(starts, aliases, bindings) {
   return truncated || stack.length ? { capped: true } : null;
 }
 
+function unwrapToString(node) {
+  return node?.type === "CallExpression" &&
+    node.callee.type === "MemberExpression" &&
+    !node.callee.computed &&
+    node.callee.property.name === "toString"
+    ? node.callee.object
+    : node;
+}
+function decodeHelpers(all, aliases) {
+  for (const node of all) {
+    const [name, fn] =
+      node.type === "FunctionDeclaration" && node.id
+        ? [node.id.name, node]
+        : node.type === "VariableDeclarator" &&
+            node.id.type === "Identifier" &&
+            FUNCTIONS.has(node.init?.type)
+          ? [node.id.name, node.init]
+          : [];
+    const param = fn?.params[0];
+    if (param?.type !== "Identifier") continue;
+    const body =
+      fn.body.type === "BlockStatement"
+        ? fn.body.body.length === 1 &&
+          fn.body.body[0].type === "ReturnStatement"
+          ? fn.body.body[0].argument
+          : null
+        : fn.body;
+    const call = unwrapToString(body);
+    const decoder = call && decoderOf(call, aliases);
+    if (
+      !decoder ||
+      call.arguments[0]?.type !== "Identifier" ||
+      call.arguments[0].name !== param.name
+    )
+      continue;
+    const encoding = decoder.split(":")[1] || "base64";
+    aliases.set(name, `decoder-helper:${name}:${encoding}`);
+  }
+}
+function moduleInstances(all, aliases) {
+  const names = new Set();
+  for (const node of all)
+    if (
+      node.type === "VariableDeclarator" &&
+      node.id.type === "Identifier" &&
+      node.init?.type === "NewExpression" &&
+      ["module.constructor", "module"].includes(
+        qualified(node.init.callee, aliases),
+      )
+    )
+      names.add(node.id.name);
+  return names;
+}
+
 export function obfuscationSignals(all) {
   const aliases = moduleAliases(all);
+  decodeHelpers(all, aliases);
+  const instances = moduleInstances(all, aliases);
+  const requires = new Set(["require"]);
+  for (const node of all)
+    if (
+      node.type === "VariableDeclarator" &&
+      node.id.type === "Identifier" &&
+      node.init?.type === "Identifier" &&
+      node.init.name === "require"
+    )
+      requires.add(node.id.name);
   const bindings = singleBindings(all);
   const signals = [];
   let sinks = 0,
     capped = false;
   for (const node of all) {
     if (!["CallExpression", "NewExpression"].includes(node.type)) continue;
-    const name = qualified(node.callee, aliases);
+    const callee = node.callee;
+    const instanceCall =
+      callee.type === "MemberExpression" &&
+      callee.object.type === "Identifier" &&
+      instances.has(callee.object.name);
+    const name = instanceCall
+      ? callee.computed
+        ? "Module#[computed]"
+        : `Module#${callee.property.name}`
+      : qualified(callee, aliases);
     const module = requiredModule(node);
-    const dynamic = DYNAMIC_SINKS.has(name);
+    if (instanceCall && callee.computed) {
+      const found = findDecoder([callee.property], aliases, bindings);
+      if (found && !found.capped) {
+        if (++sinks > OBFUSCATION_LIMITS.sinksPerFile) {
+          capped = true;
+          break;
+        }
+        signals.push({
+          ruleId: "behavior-encoded-dynamic-code",
+          priority: "HIGH",
+          node,
+          related: [found.node].filter((item) => item !== node),
+          detail: {
+            sink: name,
+            decoder: found.decoder,
+            decodedProperty: true,
+          },
+        });
+        continue;
+      }
+    }
+    const dynamic = DYNAMIC_SINKS.has(name) || name === "Module#_compile";
     const spawnsProcess = PROCESS_SINKS.has(name);
     const encodedRequire =
       node.callee.type === "Identifier" &&
-      node.callee.name === "require" &&
+      requires.has(node.callee.name) &&
       module === undefined &&
       node.arguments.length === 1;
     if (!dynamic && !spawnsProcess && !encodedRequire) continue;

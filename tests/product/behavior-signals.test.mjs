@@ -654,3 +654,77 @@ test("ordinary recursive deletes, formatters and copies are not overwrite cues",
     [],
   );
 });
+
+test("decode helpers, require aliases and computed Module calls expose the flatmap-stream loader shape", () => {
+  const hex = (text) => Buffer.from(text).toString("hex");
+  const artifact = inventory({
+    "loader.js": [
+      "var r = require;",
+      'function e(r) { return Buffer.from(r, "hex").toString(); }',
+      `const d = (x) => atob(x);`,
+      `var cp = r(e("${hex("child_process")}"));`,
+      `var data = r(e("${hex("./test/data")}"));`,
+      `eval(e("${hex("globalThis.__unmaskHelperRan = 1")}"));`,
+      "var f = new module.constructor;",
+      "f.paths = module.paths;",
+      "f[e(data[7])](source, '');",
+    ].join("\n"),
+  });
+  const result = inspectJavaScript(artifact, null);
+  const cues = obfuscation(result);
+  assert.deepEqual(
+    cues.map((c) => [
+      c.ruleId,
+      c.priority,
+      c.signal.sink,
+      c.signal.decoder,
+      c.signal.decodedModule,
+    ]),
+    [
+      [
+        "behavior-encoded-module-load",
+        "HIGH",
+        "require",
+        "e()",
+        "child_process",
+      ],
+      [
+        "behavior-encoded-module-load",
+        "review",
+        "require",
+        "e()",
+        "./test/data",
+      ],
+      ["behavior-encoded-dynamic-code", "HIGH", "eval", "e()", undefined],
+      [
+        "behavior-encoded-dynamic-code",
+        "HIGH",
+        "Module#[computed]",
+        "e()",
+        undefined,
+      ],
+    ],
+  );
+  assert.deepEqual(spans(artifact, result, cues[3]), [
+    "f[e(data[7])](source, '')",
+    "e(data[7])",
+  ]);
+  assert.equal(globalThis.__unmaskHelperRan, undefined);
+});
+
+test("helpers used for display, multi-statement decoders and undecoded Module calls are not cues", () => {
+  const artifact = inventory({
+    "ok.js": [
+      'function e(r) { return Buffer.from(r, "hex").toString(); }',
+      'console.log(e("68656c6c6f"));',
+      'function size(s) { const b = Buffer.from(s, "hex"); return b.length; }',
+      'eval(size("00"));',
+      "const fs = require('fs');",
+      "var m = new module.constructor();",
+      "m._compile(fs.readFileSync('./plugin.js', 'utf8'), 'plugin.js');",
+      "m[key]();",
+    ].join("\n"),
+  });
+  const result = inspectJavaScript(artifact, null);
+  assert.deepEqual(obfuscation(result), []);
+});
