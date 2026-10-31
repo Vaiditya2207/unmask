@@ -218,12 +218,12 @@ test("unmask sarif CLI writes SARIF to stdout or an exclusive file and rejects b
   assert.equal(cli(["sarif", "--report", reportPath, "--out", out]).status, 2);
   const missing = cli(["sarif"]);
   assert.equal(missing.status, 2);
-  assert.match(missing.stderr, /^usage:/);
+  assert.match(missing.stderr, /^unmask error usage:/);
   const broken = path.join(root, "broken.json");
   await writeFile(broken, "{");
   assert.match(
     cli(["sarif", "--report", broken]).stderr,
-    /^input-read-failed:/,
+    /^unmask error input-read-failed:/,
   );
   const details = path.join(root, "details.json");
   await writeFile(
@@ -301,7 +301,7 @@ test("unmask sarif refuses a FIFO report without blocking", async (t) => {
   assert.equal(spawnSync("mkfifo", [fifo]).status, 0);
   const result = cli(["sarif", "--report", fifo]);
   assert.equal(result.status, 2, result.stderr);
-  assert.match(result.stderr, /^input-read-failed:/);
+  assert.match(result.stderr, /^unmask error input-read-failed:/);
 });
 
 test("SARIF exposes requested and declared identities and caveats advisories bound to a conflicting claim without altering completeness", async (t) => {
