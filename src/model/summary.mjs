@@ -19,6 +19,12 @@ const REVIEW_STEP =
   /^(?:review|inspect|compare|confirm|verify|check|locate|examine|trace|investigate|read|diff|audit)\b/iu;
 const GO_AHEAD =
   /\b(?:proceed|go ahead|approve|ok(?:ay)? to|fine to|safe to|allow(?:ed)? to install)\b/iu;
+const CONTROL =
+  /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
+const FENCE = /^\s*```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*```\s*$/u;
+export const hasControl = (value) => CONTROL.test(value);
+// One whole-body code fence is unwrapped; JSON embedded in other prose is still rejected.
+export const unfence = (raw) => FENCE.exec(raw)?.[1] ?? raw;
 const counter = (value) =>
   Number.isSafeInteger(value) && value >= 0 ? value : null;
 const ruleIds = (items) =>
@@ -101,6 +107,7 @@ function prose(value, max, secret) {
     value.trim().length > 0 &&
     value.length <= max &&
     !value.includes(secret) &&
+    !hasControl(value) &&
     !VERDICT.test(value.replace(CAVEAT, " ")) &&
     !ABSENCE_CLAIM.test(value.replace(SCOPED_ABSENCE, " "))
   );

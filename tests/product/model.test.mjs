@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { createGemmaClient, attachModel } from "../../src/model/client.mjs";
-import { validAssessment, validSummary } from "../../src/model/summary.mjs";
+import {
+  unfence,
+  validAssessment,
+  validSummary,
+} from "../../src/model/summary.mjs";
 import { PROMPT_VERSION } from "../../src/model/diff-evidence.mjs";
 
 const evidence = [
@@ -236,6 +240,73 @@ test("assessment next action must be a review step and uncertainty keeps absence
       valid,
       value.nextAction,
     );
+});
+
+test("one whole-body code fence is unwrapped but prose-wrapped or control-bearing output is rejected", async () => {
+  const body = JSON.stringify({
+    summary: SUMMARY,
+    assessment: ASSESSMENT,
+    hypotheses: [hypothesis()],
+  });
+  const withText = (overrides) =>
+    JSON.stringify({
+      summary: SUMMARY,
+      assessment: ASSESSMENT,
+      hypotheses: [hypothesis()],
+      ...overrides,
+    });
+  for (const [label, raw, status] of [
+    ["json fence", "```json\n" + body + "\n```", "complete"],
+    ["bare fence", "```\n" + body + "\n```\n", "complete"],
+    ["leading prose", "Here is the JSON:\n" + body, "unavailable"],
+    [
+      "two fences",
+      "```json\n" + body + "\n```\n```json\n{}\n```",
+      "unavailable",
+    ],
+    [
+      "ansi summary",
+      withText({ summary: "One \u001b[31mhook\u001b[0m." }),
+      "unavailable",
+    ],
+    [
+      "bidi next action",
+      withText({
+        assessment: {
+          ...ASSESSMENT,
+          nextAction: "Review the \u202ehook\u202c.",
+        },
+      }),
+      "unavailable",
+    ],
+    [
+      "control explanation",
+      withText({
+        hypotheses: [{ ...hypothesis(), explanation: "Review \u0007 this." }],
+      }),
+      "unavailable",
+    ],
+  ]) {
+    let generations = 0;
+    const section = await client(async (url) => {
+      if (url.endsWith(":countTokens"))
+        return new Response('{"totalTokens":100}');
+      generations++;
+      return Response.json({
+        candidates: [{ content: { parts: [{ text: raw }] } }],
+      });
+    }).explain(report(), { allowLocal: true });
+    assert.equal(section.status, status, label);
+    assert.equal(generations, status === "complete" ? 1 : 2, label);
+  }
+  const started = performance.now();
+  for (const raw of [
+    "```\n" + "\n".repeat(65000),
+    "```\n" + "\n```   x".repeat(8000),
+    "```json\n" + " ".repeat(65000) + "x",
+  ])
+    assert.equal(unfence(raw), raw);
+  assert.ok(performance.now() - started < 250);
 });
 
 test("changed, artifact-only and not-compared files remain eligible without a policy finding", async () => {

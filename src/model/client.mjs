@@ -9,7 +9,9 @@ import {
 import {
   SUMMARY_POLICY,
   checkedScopeFor,
+  hasControl,
   summaryBundle,
+  unfence,
   validAssessment,
   validSummary,
 } from "./summary.mjs";
@@ -598,10 +600,12 @@ function hypothesesFor(envelope, selected, secret, evidenceGroups) {
   let result;
   try {
     result = JSON.parse(
-      parts
-        .filter((p) => p.thought !== true)
-        .map((p) => p.text)
-        .join(""),
+      unfence(
+        parts
+          .filter((p) => p.thought !== true)
+          .map((p) => p.text)
+          .join(""),
+      ),
     );
   } catch {
     throw new Failure("invalid-output", true);
@@ -629,6 +633,7 @@ function hypothesesFor(envelope, selected, secret, evidenceGroups) {
       !text(item.explanation, 1000) ||
       !text(item.uncertainty, 500) ||
       !text(item.alternative, 500) ||
+      [item.explanation, item.uncertainty, item.alternative].some(hasControl) ||
       !Array.isArray(item.citations) ||
       !item.citations.length ||
       item.citations.length > 8
