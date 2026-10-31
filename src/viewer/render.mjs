@@ -237,7 +237,15 @@ export function renderReport(report) {
   const modelText =
     model.status === "disabled"
       ? "Model is disabled"
-      : `Model status: ${model.status}`;
+      : `Model status: ${model.status}${model.reason ? ` (${model.reason})` : ""}`;
+  const assessed =
+    model.status === "complete" &&
+    typeof model.summary === "string" &&
+    model.assessment?.source === "model";
+  const scope = assessed ? model.assessment.checkedScope || {} : {};
+  const assessment = assessed
+    ? `<h3>AI summary</h3><p>${text(model.summary, 600)}</p><dl><dt>Uncertainty</dt><dd>${text(model.assessment.uncertainty, 300)}</dd><dt>Next action</dt><dd>${text(model.assessment.nextAction, 200)}</dd><dt>Checked scope</dt><dd>${text(scope.evidenceSupplied ?? 0)} evidence items supplied, ${text(scope.evidenceOmitted ?? 0)} omitted. Not checked: ${text((scope.notChecked || []).join(", ") || "unspecified")}.</dd></dl><p class="note">The AI summary is advisory and is not a safety signal.</p>`
+    : '<p class="note">No AI summary is available for this check. This notice is not model output and is not a safety signal.</p>';
   const csp = `default-src 'none'; script-src 'sha256-${assetHash(script)}'; style-src 'sha256-${assetHash(css)}'; connect-src 'none'; base-uri 'none'; form-action 'none'`;
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${escape(csp)}"><meta name="referrer" content="no-referrer"><meta name="robots" content="noindex"><title>UNMASK · ${text(identity)}</title><style>${css}</style></head><body>
 <a class="skip" href="#content">Skip to evidence</a><header><strong>UNMASK</strong><p>Published bytes. Source claims. Evidence to review.</p></header>
@@ -250,6 +258,6 @@ export function renderReport(report) {
 <section><h2>Inert links</h2><p class="note">Artifact links: ${text(report.coverage?.links?.artifact ?? "unknown")}. Source links: ${text(report.coverage?.links?.source ?? "unknown")}.</p>${links.html || '<p class="empty">No inert link entries recorded.</p>'}</section>
 <section><h2>Source-only paths</h2>${sourceOnly.html ? `<ul>${sourceOnly.body}</ul>${sourceOnly.notice}` : '<p class="empty">No source-only paths recorded. Source availability and completeness still apply.</p>'}</section>
 <section><h2>Bound evidence</h2><p class="note">Excerpts show original text data. Excerpt display limit: 512 bytes per evidence item. Byte ranges are half-open: start included, end excluded. Open a citation to inspect its digest-bound evidence.</p>${catalog.html || '<p class="empty">No bound evidence recorded.</p>'}</section>
-<section class="model"><h2>Model explanations</h2><p>${text(modelText)}</p><p class="note">Hypotheses are separate from deterministic evidence. A valid citation proves its location, not the reasoning.</p>${hypotheses.html}</section>
+<section class="model"><h2>Model explanations</h2><p>${text(modelText)}</p>${assessment}<p class="note">Hypotheses are separate from deterministic evidence. A valid citation proves its location, not the reasoning.</p>${hypotheses.html}</section>
 </div></main><footer>UNMASK presents evidence for review. It never declares a package safe. HTML display limits do not change the full JSON report.</footer><script>${script}</script></body></html>`;
 }

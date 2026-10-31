@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto";
-import { SUMMARY_POLICY, summaryBundle, validSummary } from "./summary.mjs";
+import {
+  SUMMARY_POLICY,
+  checkedScopeFor,
+  summaryBundle,
+  validAssessment,
+  validSummary,
+} from "./summary.mjs";
 
 const HOST = "generativelanguage.googleapis.com";
 const MODELS = new Set([
@@ -505,8 +511,9 @@ function hypothesesFor(envelope, selected, secret, evidenceGroups) {
     throw new Failure("invalid-output", true);
   }
   if (
-    !exactKeys(result, ["summary", "hypotheses"]) ||
+    !exactKeys(result, ["summary", "assessment", "hypotheses"]) ||
     !validSummary(result.summary, secret) ||
+    !validAssessment(result.assessment, secret) ||
     !Array.isArray(result.hypotheses) ||
     result.hypotheses.length > 5
   )
@@ -583,6 +590,10 @@ function hypothesesFor(envelope, selected, secret, evidenceGroups) {
   }
   return {
     summary: result.summary,
+    assessment: {
+      uncertainty: result.assessment.uncertainty,
+      nextAction: result.assessment.nextAction,
+    },
     hypotheses: result.hypotheses.map((item) => ({
       ...item,
       evidenceIds: [
@@ -1208,7 +1219,16 @@ export function createGemmaClient(options = {}) {
             const validated = await Promise.race([run(), timeout, cancelled]);
             record.status = "complete";
             record.latencyMs = Math.max(0, Math.floor(now() - attemptStarted));
-            return { status: "complete", ...validated, ...metadata() };
+            return {
+              status: "complete",
+              ...validated,
+              assessment: {
+                source: "model",
+                ...validated.assessment,
+                checkedScope: checkedScopeFor(bundle),
+              },
+              ...metadata(),
+            };
           } catch (error) {
             failed =
               error instanceof Failure ? error : new Failure("invalid-output");

@@ -877,6 +877,10 @@ test(
                     {
                       text: JSON.stringify({
                         summary: "One changed file has an excerpt to review.",
+                        assessment: {
+                          uncertainty: "Runtime behavior was not observed.",
+                          nextAction: "Review the changed index.js hunk.",
+                        },
                         hypotheses: prompt.evidence.length
                           ? [
                               {
@@ -1042,6 +1046,10 @@ test(
                     {
                       text: JSON.stringify({
                         summary: `Scope lists ${prompt.scope.files} files; matching bytes are not proof the package is safe.`,
+                        assessment: {
+                          uncertainty: "Runtime behavior was not observed.",
+                          nextAction: "Confirm the selected source commit.",
+                        },
                         hypotheses: [],
                       }),
                     },
@@ -1098,6 +1106,19 @@ test(
       assert.match(result.model.summary, /not proof the package is safe/);
       assert.deepEqual(result.model.hypotheses, []);
       assert.equal(result.model.scope.files, input.files.length);
+      assert.equal(result.model.assessment.source, "model");
+      assert.equal(
+        result.model.assessment.nextAction,
+        "Confirm the selected source commit.",
+      );
+      assert.ok(
+        result.model.assessment.checkedScope.notChecked.includes(
+          "runtime-behavior",
+        ),
+      );
+      const details = await (await s.get(path + ".details.json")).json();
+      assert.equal(details.ai.assessment.status, "complete");
+      assert.equal(details.ai.assessment.summary, result.model.summary);
       assert.equal(canonicalReport(result), canonicalReport(input));
       assert.equal(client.configHash, build.modelConfigDigest);
       for (const route of [path, path + ".json", "/healthz", "/version"])

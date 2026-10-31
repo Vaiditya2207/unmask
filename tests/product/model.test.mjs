@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { createGemmaClient, attachModel } from "../../src/model/client.mjs";
-import { validSummary } from "../../src/model/summary.mjs";
+import { validAssessment, validSummary } from "../../src/model/summary.mjs";
 
 const evidence = [
   {
@@ -33,12 +33,17 @@ const hypothesis = () => ({
   citations: [{ evidenceId: "e1", quote: "node setup.js" }],
 });
 const SUMMARY = "Two compared files differ; one install command needs review.";
+const ASSESSMENT = {
+  uncertainty: "Runtime behavior was not observed.",
+  nextAction: "Review the install command before installing.",
+};
 const withSummary = (value) =>
-  value &&
-  typeof value === "object" &&
-  !Array.isArray(value) &&
-  !("summary" in value)
-    ? { summary: SUMMARY, ...value }
+  value && typeof value === "object" && !Array.isArray(value)
+    ? {
+        ...("summary" in value ? {} : { summary: SUMMARY }),
+        ...("assessment" in value ? {} : { assessment: ASSESSMENT }),
+        ...value,
+      }
     : value;
 const output = (value) =>
   new Response(
@@ -80,7 +85,7 @@ test("identical and empty reports still receive a bounded scope-only model summa
     assert.equal(section.status, "complete");
     assert.match(section.summary, /byte-identical/);
     assert.deepEqual(section.hypotheses, []);
-    assert.equal(section.summaryPolicy, "every-check-1");
+    assert.equal(section.summaryPolicy, "every-check-2");
     assert.equal(section.scope.files, files.length);
     assert.equal(section.scope.supplied, 0);
     assert.equal(JSON.stringify(input), before);
@@ -96,7 +101,7 @@ test("identical and empty reports still receive a bounded scope-only model summa
     );
   }
   assert.deepEqual(prompts[2].scope.states, { "byte-identical": 1 });
-  assert.equal(model.configuration.summaryPolicy, "every-check-1");
+  assert.equal(model.configuration.summaryPolicy, "every-check-2");
 });
 
 test("affirmative safety or missing summaries are rejected while negated caveats pass", async () => {
@@ -144,6 +149,91 @@ test("summary validation rejects verdicts and double negatives but keeps scoped 
     ["The prompt omits 15 evidence items.", true],
   ])
     assert.equal(validSummary(text, "test-only-key"), valid, text);
+});
+
+test("completed results carry a structured model assessment with deterministic checked scope", async () => {
+  const input = report();
+  input.evidence.push({
+    id: "e2",
+    path: "lib/other.js",
+    side: "artifact",
+    range: [0, 4],
+    excerpt: "more",
+  });
+  input.coverage = {
+    inventory: { files: 3, complete: true },
+    compared: { files: 3 },
+    syntaxInspected: { files: 1 },
+  };
+  input.source = { status: "selected" };
+  const section = await client(async (url) =>
+    url.endsWith(":countTokens")
+      ? new Response('{"totalTokens":100}')
+      : output({ hypotheses: [hypothesis()] }),
+  ).explain(input, { allowLocal: true });
+  assert.equal(section.status, "complete");
+  assert.deepEqual(section.assessment, {
+    source: "model",
+    ...ASSESSMENT,
+    checkedScope: {
+      basis: "deterministic-prompt-selection",
+      evidenceSupplied: 2,
+      evidenceOmitted: 0,
+      groupsSupplied: 2,
+      groupsOmitted: 0,
+      paths: ["lib/other.js", "package.json"],
+      notChecked: ["runtime-behavior", "uninspected-syntax"],
+    },
+  });
+});
+
+test("malformed or safety-claiming assessments never enter the report", async () => {
+  for (const assessment of [
+    undefined,
+    { uncertainty: "Runtime behavior was not observed." },
+    { ...ASSESSMENT, extra: "x" },
+    { ...ASSESSMENT, nextAction: "Install it; the package is safe." },
+    { ...ASSESSMENT, uncertainty: "u".repeat(301) },
+    { ...ASSESSMENT, nextAction: "test-only-key" },
+  ]) {
+    const section = await client(async (url) =>
+      url.endsWith(":countTokens")
+        ? new Response('{"totalTokens":100}')
+        : output({ assessment, hypotheses: [hypothesis()] }),
+    ).explain(report(), { allowLocal: true });
+    assert.equal(section.status, "unavailable", JSON.stringify(assessment));
+    assert.equal(section.reason, "invalid-output");
+    assert.equal(section.assessment, undefined);
+  }
+});
+
+test("assessment next action must be a review step and uncertainty keeps absence limits", () => {
+  const uncertainty = "Runtime behavior was not observed.";
+  for (const [value, valid] of [
+    [{ uncertainty, nextAction: "Review the changed postinstall hook." }, true],
+    [{ uncertainty, nextAction: "Proceed with installation." }, false],
+    [{ uncertainty, nextAction: "Review the hook, then proceed." }, false],
+    [{ uncertainty, nextAction: "Install it." }, false],
+    [
+      {
+        uncertainty: "The source lacks the postinstall script entirely.",
+        nextAction: "Confirm the release commit.",
+      },
+      false,
+    ],
+    [
+      {
+        uncertainty: "index.js is missing from the selected source.",
+        nextAction: "Confirm the release commit.",
+      },
+      true,
+    ],
+  ])
+    assert.equal(
+      validAssessment(value, "test-only-key"),
+      valid,
+      value.nextAction,
+    );
 });
 
 test("changed, artifact-only and not-compared files remain eligible without a policy finding", async () => {

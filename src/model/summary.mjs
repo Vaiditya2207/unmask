@@ -1,7 +1,11 @@
-export const SUMMARY_POLICY = "every-check-1";
+export const SUMMARY_POLICY = "every-check-2";
 const SUMMARY_TEMPLATE = "≤600 chars";
 const SUMMARY_TASK =
-  " Ground summary in scope and evidence; no safety verdicts.";
+  " Ground summary and assessment in scope and evidence; no safety verdicts.";
+const ASSESSMENT_TEMPLATE = {
+  uncertainty: "unchecked ≤300",
+  nextAction: "review step ≤200",
+};
 const VERDICT =
   /\b(?:(?:un)?safe(?:ly|ty)?|benign|harmless|malware-free|risk-free|trustworthy|no risks?)\b/iu;
 // Only exact caveat templates may mention safety; any other negation still counts as a verdict.
@@ -11,6 +15,10 @@ const ABSENCE_CLAIM =
   /\b(?:absent|missing|lacks?|omits?)\b|does not (?:exist|contain|include)|not (?:present|in)\b|not found(?! within supplied evidence)/iu;
 const SCOPED_ABSENCE =
   /\b(?:absent|missing|not (?:present|found|in))\s+(?:(?:from|in|within)\s+)?(?:the\s+)?(?:selected source|supplied (?:evidence|scope))\b|\bsource(?: archive)? (?:is|was) (?:missing|absent)\b|\bomits?\s+\d+\s+(?:evidence\s+)?(?:items?|groups?)\b/giu;
+const REVIEW_STEP =
+  /^(?:review|inspect|compare|confirm|verify|check|locate|examine|trace|investigate|read|diff|audit)\b/iu;
+const GO_AHEAD =
+  /\b(?:proceed|go ahead|approve|ok(?:ay)? to|fine to|safe to|allow(?:ed)? to install)\b/iu;
 const counter = (value) =>
   Number.isSafeInteger(value) && value >= 0 ? value : null;
 const ruleIds = (items) =>
@@ -75,6 +83,7 @@ export function summaryBundle(promptFor, report, inputLimit) {
       task: payload.task + SUMMARY_TASK,
       output: {
         summary: SUMMARY_TEMPLATE,
+        assessment: ASSESSMENT_TEMPLATE,
         ...payload.output,
       },
       scope,
@@ -99,4 +108,42 @@ function prose(value, max, secret) {
 
 export function validSummary(value, secret) {
   return prose(value, 600, secret);
+}
+
+export function validAssessment(value, secret) {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 2 &&
+    prose(value.uncertainty, 300, secret) &&
+    prose(value.nextAction, 200, secret) &&
+    REVIEW_STEP.test(value.nextAction.trim()) &&
+    !GO_AHEAD.test(value.nextAction)
+  );
+}
+
+export function checkedScopeFor(bundle) {
+  const { scope } = bundle;
+  const notChecked = ["runtime-behavior"];
+  if (scope.omitted) notChecked.push("omitted-evidence");
+  if (!scope.complete) notChecked.push("incomplete-inventory");
+  if (!["selected", "resolved"].includes(scope.source))
+    notChecked.push("unselected-source");
+  for (const [key, code] of [
+    ["compared", "uncompared-files"],
+    ["syntax", "uninspected-syntax"],
+  ])
+    if (!(scope[key] >= (scope.inventory ?? 0))) notChecked.push(code);
+  return {
+    basis: "deterministic-prompt-selection",
+    evidenceSupplied: scope.supplied,
+    evidenceOmitted: scope.omitted,
+    groupsSupplied: bundle.evidenceGroups.length,
+    groupsOmitted: bundle.omittedEvidenceGroups.length,
+    paths: [...new Set([...bundle.selected.values()].map((e) => e.path))]
+      .sort()
+      .slice(0, 16),
+    notChecked,
+  };
 }
