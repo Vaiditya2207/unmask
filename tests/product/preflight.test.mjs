@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -14,7 +15,7 @@ import { lockDiff, preflight } from "../../src/cli/preflight.mjs";
 const registry = (name, version) =>
   `https://registry.npmjs.org/${name}/-/${name.split("/").pop()}-${version}.tgz`;
 const integrity = (name, version) =>
-  `sha512-${Buffer.from(`${name}@${version}`).toString("base64")}`;
+  `sha512-${createHash("sha512").update(`${name}@${version}`).digest("base64")}`;
 function lock(packages) {
   const entries = { "": { name: "app", version: "1.0.0" } };
   for (const [location, entry] of Object.entries(packages)) {
@@ -61,7 +62,7 @@ test("lockDiff reports new, source-changed, removed and unsupported entries", ()
     "node_modules/left-pad": {
       version: "1.3.0",
       resolved: registry("left-pad", "1.3.0"),
-      integrity: "sha512-dGFtcGVyZWQ=",
+      integrity: integrity("left-pad", "tampered"),
     },
     "node_modules/chalk": "5.4.0",
     "node_modules/x/node_modules/chalk": "5.4.0",
@@ -326,4 +327,50 @@ test("a workspace entry carrying artifact claims is unsupported, matching depend
   assert.deepEqual(diff.unsupported, [
     { path: "packages/evil", reason: "workspace-artifact-claim" },
   ]);
+});
+
+test("conflicting integrity, new unresolved required dependencies and invalid dependency maps keep coverage incomplete", async () => {
+  const head = JSON.parse(base);
+  head.packages["node_modules/dup"] = {
+    version: "1.0.0",
+    resolved: registry("dup", "1.0.0"),
+    integrity: integrity("dup", "1.0.0"),
+  };
+  head.packages["node_modules/x/node_modules/dup"] = {
+    version: "1.0.0",
+    resolved: registry("dup", "1.0.0"),
+    integrity: integrity("dup", "other"),
+  };
+  head.packages[""].dependencies = { ghost: "^1.0.0" };
+  head.packages[""].optionalDependencies = { maybe: "^1.0.0" };
+  head.packages["node_modules/odd"] = {
+    version: "1.0.0",
+    resolved: registry("odd", "1.0.0"),
+    integrity: integrity("odd", "1.0.0"),
+    dependencies: ["not", "a", "map"],
+  };
+  const result = await preflight({
+    baselineText: base,
+    lockfileText: JSON.stringify(head),
+    checkPackage: async () => report(0),
+  });
+  assert.deepEqual(
+    result.changes.added.map((item) => [item.name, item.bound]),
+    [
+      ["dup", false],
+      ["odd", true],
+    ],
+  );
+  assert.deepEqual(result.coverage.unsupported, [
+    { path: "node_modules/odd", reason: "invalid-dependencies" },
+    { path: "ghost (required by root)", reason: "unresolved-dependency" },
+  ]);
+  assert.equal(result.status, "incomplete");
+  assert.equal(result.exitCode, 2);
+  const unchanged = await preflight({
+    baselineText: JSON.stringify(head),
+    lockfileText: JSON.stringify(head),
+    checkPackage: () => assert.fail("nothing changed"),
+  });
+  assert.equal(unchanged.status, "pass");
 });

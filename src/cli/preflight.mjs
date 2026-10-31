@@ -1,7 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { LocalInputError } from "../core/pipeline.mjs";
 import { checkHosted } from "./hosted.mjs";
-import { parseLockfile } from "./lockfile.mjs";
+import { parseLockfile, unresolvedEdges } from "./lockfile.mjs";
 
 export const PREFLIGHT_SCHEMA = "unmask-preflight-1";
 const MAX_LOCKFILE_BYTES = 32 * 1024 * 1024;
@@ -14,6 +14,13 @@ export function lockIdentities(text) {
   const identities = new Map();
   const unsupported = [];
   for (const entry of lock.entries.values()) {
+    if (entry.edgesValid === false)
+      unsupported.push({
+        path: entry.key,
+        reason: "invalid-dependencies",
+        version: entry.version,
+        resolved: entry.resolved,
+      });
     const claimsArtifact =
       entry.kind === "workspace" && (entry.resolved || entry.integrity);
     if (["root", "workspace", "link"].includes(entry.kind) && !claimsArtifact)
@@ -33,13 +40,23 @@ export function lockIdentities(text) {
       version: entry.version,
       paths: [],
       sources: new Set(),
+      integrities: new Set(),
       bound: true,
     };
     existing.paths.push(entry.key);
     existing.sources.add(JSON.stringify([entry.resolved, entry.integrity]));
-    existing.bound &&= entry.bound === true;
+    existing.integrities.add(entry.integrity);
+    existing.bound &&= entry.bound === true && existing.integrities.size === 1;
     identities.set(key, existing);
   }
+  for (const edge of unresolvedEdges(lock))
+    unsupported.push({
+      path: `${edge.name} (required by ${edge.from || "root"})`,
+      reason: "unresolved-dependency",
+      version: edge.type,
+      resolved: null,
+    });
+  for (const item of identities.values()) delete item.integrities;
   return { identities, unsupported };
 }
 

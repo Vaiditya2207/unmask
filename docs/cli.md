@@ -82,7 +82,12 @@ screening rejects it. A changed identity that is not bound (a
 `registry.npmjs.org` tarball URL plus a sha512 integrity in every location) is
 still checked by name and version, but counts under `coverage.unbound` and keeps
 coverage incomplete, because the checked artifact is not tied to what npm will
-install. The baseline itself is not audited; use `unmask audit` for that.
+install. A version recorded with different integrity values in different
+locations is also unbound. A newly unresolved required dependency (one npm would
+fetch without a locked entry; optional dependencies excluded) is listed as
+`unresolved-dependency`, and a changed entry whose dependency map is malformed as
+`invalid-dependencies`; both keep coverage incomplete. The baseline itself is
+not audited; use `unmask audit` for that.
 
 The `unmask-preflight-1` JSON document has `status`, `exitCode`, `changes`
 (`added`, `removed`), per-identity `checks` (`completed` with policy exit and

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { mkdtemp, rename, rm, writeFile } from "node:fs/promises";
@@ -16,7 +17,9 @@ const entrypoint = fileURLToPath(
   new URL("../../src/cli/main.mjs", import.meta.url),
 );
 const integrity = (name, version) =>
-  `sha512-${Buffer.from(name + version).toString("base64")}`;
+  `sha512-${createHash("sha512")
+    .update(name + version)
+    .digest("base64")}`;
 function entry(name, version, { withIntegrity = true } = {}) {
   return {
     version,
