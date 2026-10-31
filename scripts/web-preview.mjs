@@ -806,7 +806,12 @@ export async function mutatePreview({
   );
   assertRuntime(revision.spec, revision.metadata.annotations);
   assert(
-    revision.spec.containers[0].image === image &&
+    [
+      image,
+      ...(metadata.runtimeManifestDigest
+        ? [`${PREVIEW.image}@${metadata.runtimeManifestDigest}`]
+        : []),
+    ].includes(revision.spec.containers[0].image) &&
       [
         imageDigest,
         image,

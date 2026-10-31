@@ -936,3 +936,47 @@ test("containerd Docker saves bind OCI index, amd64 manifest, config and layer d
     } else await assert.rejects(validateArtifact(f.directory, f.plan), /OCI/u);
   }
 });
+
+test("Cloud Run may canonicalize spec and status only to the proven same-repository OCI leaf", async () => {
+  const { mutatePreview } = await import("../../scripts/web-preview.mjs");
+  const leaf = `sha256:${"c".repeat(64)}`;
+  for (const variant of ["valid-leaf", "wrong-repository", "wrong-leaf"]) {
+    const f = cloudFixture();
+    const execute = (binary, args) => {
+      const result = f.execute(binary, args);
+      if (args[1] === "services" && args[2] === "update") {
+        const revision = [...f.revisions.values()].at(-1);
+        revision.spec.containers[0].image =
+          variant === "wrong-repository"
+            ? `asia-south1-docker.pkg.dev/unmask-513319/unmask/web@${leaf}`
+            : `asia-south1-docker.pkg.dev/unmask-513319/unmask-preview/web@${variant === "wrong-leaf" ? `sha256:${"f".repeat(64)}` : leaf}`;
+        revision.status.imageDigest = revision.spec.containers[0].image;
+      }
+      return result;
+    };
+    const operation = mutatePreview({
+      ...f,
+      execute,
+      mode: "deploy",
+      event: {},
+      plan: {
+        pr: 12,
+        commit: sha,
+        version: "0.1.1",
+        runId: 123,
+        attempt: 1,
+        tag: "pr-12",
+      },
+      metadata: {
+        commit: sha,
+        version: "0.1.1",
+        imageId: `sha256:${"e".repeat(64)}`,
+        runtimeManifestDigest: leaf,
+      },
+      pause: async () => {},
+    });
+    if (variant === "valid-leaf")
+      assert.equal((await operation).status, "verified");
+    else await assert.rejects(operation, /digest differs/u);
+  }
+});
