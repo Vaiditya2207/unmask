@@ -2,22 +2,102 @@ import { parsePackageSpec } from "./acquire.mjs";
 import { validateReport } from "./report.mjs";
 
 export const GUARD_POLICY_VERSION = "guard-1";
-const hardRules = new Set([
-  "integrity-mismatch",
-  "provenance-verification-failed",
-  "identity-claim-conflict",
-]);
+const strictPolicy = Object.freeze({
+  unknownDecision: "block",
+  blockSeverity: "medium",
+  enforcement: "enforce",
+});
+const severityOrder = ["unknown", "low", "medium", "high", "critical"];
+function advisorySeverity(record, identity) {
+  const values = [record.databaseSeverity];
+  if (Array.isArray(record.affected)) {
+    for (const affected of record.affected.slice(0, 8)) {
+      if (
+        affected?.package?.ecosystem === "npm" &&
+        affected.package.name === identity.name
+      )
+        values.push(affected.ecosystemSeverity);
+    }
+  }
+  let rank = 0;
+  for (const value of values) {
+    if (typeof value !== "string" || value.length > 64) continue;
+    const normalized =
+      value.toLowerCase() === "moderate" ? "medium" : value.toLowerCase();
+    rank = Math.max(rank, severityOrder.indexOf(normalized));
+  }
+  return severityOrder[rank];
+}
 const identifier = (value) =>
   typeof value === "string" && /^[a-zA-Z0-9:_.-]{1,256}$/.test(value);
 const samePackage = (value, expected) =>
   value?.name === expected.name && value?.version === expected.version;
-const malwareId = (value) => /^MAL-\d{4}-\d+$/i.test(value);
+const historicalMalware = new Map([
+  [
+    "GHSA-pjwm-rvh2-c87w",
+    { name: "ua-parser-js", versions: ["0.7.29", "0.8.0", "1.0.0"] },
+  ],
+  ["GHSA-mh6f-8j2x-4483", { name: "event-stream", versions: ["3.3.6"] }],
+  ["GHSA-97m3-w2cp-4xx6", { name: "node-ipc", versions: ["10.1.1", "10.1.2"] }],
+]);
+function malwareId(value, identity) {
+  if (/^MAL-\d{4}-\d+$/i.test(value)) return true;
+  const incident = historicalMalware.get(value);
+  return (
+    incident?.name === identity.name &&
+    incident.versions.includes(identity.version)
+  );
+}
+
+function validAdvisoryRecord(record) {
+  return (
+    identifier(record?.id) &&
+    Array.isArray(record.aliases) &&
+    record.aliases.length <= 16 &&
+    record.aliases.every(identifier) &&
+    (record.withdrawn === undefined ||
+      (typeof record.withdrawn === "string" &&
+        Number.isFinite(Date.parse(record.withdrawn))))
+  );
+}
+
+export function classifyGuardAdvisory(record, packageIdentity) {
+  let identity;
+  try {
+    if (packageIdentity?.ecosystem !== "npm")
+      throw new TypeError("Invalid ecosystem");
+    identity = parsePackageSpec(
+      `${packageIdentity.name}@${packageIdentity.version}`,
+    );
+  } catch {
+    throw new TypeError(
+      "Advisory classification requires an exact npm package identity",
+    );
+  }
+  if (!validAdvisoryRecord(record))
+    return {
+      id: identifier(record?.id) ? record.id : null,
+      status: "invalid",
+      knownMalware: false,
+      severity: "unknown",
+    };
+  const active = record.withdrawn === undefined;
+  return {
+    id: record.id,
+    status: active ? "active" : "withdrawn",
+    knownMalware:
+      active &&
+      [record.id, ...record.aliases].some((id) => malwareId(id, identity)),
+    severity: active ? advisorySeverity(record, identity) : "unknown",
+  };
+}
 
 export function evaluateGuardDecision({
   nameAtExactVersion,
   report,
   vulnerabilityCheck,
 } = {}) {
+  const policy = strictPolicy;
   let identity;
   try {
     identity = parsePackageSpec(nameAtExactVersion);
@@ -62,19 +142,17 @@ export function evaluateGuardDecision({
     check.advisories.length <= 100
       ? check.advisories
       : [];
-  const validRecords = records.filter(
-    (record) =>
-      identifier(record?.id) &&
-      Array.isArray(record.aliases) &&
-      record.aliases.length <= 16 &&
-      record.aliases.every(identifier) &&
-      (record.withdrawn === undefined ||
-        (typeof record.withdrawn === "string" &&
-          Number.isFinite(Date.parse(record.withdrawn)))),
-  );
+  const validRecords = records.filter(validAdvisoryRecord);
   const advisoriesComplete = Boolean(
     advisoryIdentity &&
     check.complete === true &&
+    typeof check.queriedAt === "string" &&
+    Number.isFinite(Date.parse(check.queriedAt)) &&
+    Number.isSafeInteger(check.pagesFetched) &&
+    check.pagesFetched > 0 &&
+    check.limits !== null &&
+    typeof check.limits === "object" &&
+    !Array.isArray(check.limits) &&
     ["found", "none-reported"].includes(check.status) &&
     Array.isArray(check.reasons) &&
     check.reasons.length === 0 &&
@@ -89,7 +167,11 @@ export function evaluateGuardDecision({
     (record) => record.withdrawn === undefined,
   );
   const knownMalware = active
-    .filter((record) => [record.id, ...record.aliases].some(malwareId))
+    .filter(
+      (record) =>
+        classifyGuardAdvisory(record, { ecosystem: "npm", ...identity })
+          .knownMalware,
+    )
     .map((record) => ({ id: record.id, aliases: [...record.aliases] }));
   for (const record of knownMalware)
     reasons.push({
@@ -107,36 +189,83 @@ export function evaluateGuardDecision({
   const ordinary = active.filter(
     (record) => !knownMalware.some((item) => item.id === record.id),
   );
-  for (const record of ordinary)
-    reasons.push({ code: "known-vulnerability", advisoryId: record.id });
-  const modelStatus = validReport ? report.model.status : "unavailable";
+  const severities = ordinary.map((record) => ({
+    id: record.id,
+    severity: advisorySeverity(record, identity),
+  }));
+  for (const record of severities)
+    reasons.push({
+      code: "known-vulnerability",
+      advisoryId: record.id,
+      severity: record.severity,
+      severitySource: "OSV-declaration",
+    });
+  const advisorySeverityComplete = severities.every(
+    (record) => record.severity !== "unknown",
+  );
+  const unknownSeverityBlock = !advisorySeverityComplete;
+  if (unknownSeverityBlock) reasons.push({ code: "advisory-severity-unknown" });
+  const severityBlock = severities.some(
+    (record) =>
+      severityOrder.indexOf(record.severity) >=
+      severityOrder.indexOf(policy.blockSeverity),
+  );
+  const model = validReport ? report.model : null;
+  const invalidModel =
+    model?.status === "complete" &&
+    (!Array.isArray(model.hypotheses) ||
+      model.hypotheses.some(
+        (item) =>
+          !item ||
+          !["possible-transformation", "review-concern", "unknown"].includes(
+            item.category,
+          ),
+      ));
+  const modelStatus = invalidModel
+    ? "invalid-output"
+    : (model?.status ?? "unavailable");
   const aiReviewConcern =
     validReport &&
     modelStatus === "complete" &&
     Array.isArray(report.model.hypotheses) &&
     report.model.hypotheses.some(
-      (hypothesis) => hypothesis.category === "review-concern",
+      (hypothesis) => hypothesis?.category === "review-concern",
     );
   if (aiReviewConcern)
     reasons.push({ code: "ai-review-concern", binding: false });
   const complete = artifactComplete && sourceComplete && advisoriesComplete;
   const decision =
     knownMalware.length ||
-    findings.some((finding) => hardRules.has(finding.ruleId))
+    findings.length ||
+    severityBlock ||
+    unknownSeverityBlock
       ? "block"
       : !complete
-        ? "unknown"
-        : findings.length || ordinary.length || aiReviewConcern
+        ? "block"
+        : ordinary.length || aiReviewConcern
           ? "warn"
           : "allow";
+  if (!complete) reasons.push({ code: "profile-unknown-blocked" });
+  if (severityBlock)
+    reasons.push({
+      code: "profile-severity-blocked",
+      threshold: policy.blockSeverity,
+    });
   return {
     decisionVersion: "1",
     policyVersion: GUARD_POLICY_VERSION,
-    profile: "balanced",
+    profile: "strict",
+    appliedPolicy: { ...policy },
     package: { ecosystem: "npm", ...identity },
+    artifact: validReport
+      ? {
+          sha256: report.inputs.artifact.sha256,
+          sha512: report.inputs.artifact.sha512,
+        }
+      : null,
     decision,
     permitted: ["allow", "warn"].includes(decision),
-    enforcement: "enforce",
+    enforcement: policy.enforcement,
     reasons,
     knownMalware,
     policyExitCode: validReport ? report.policy.exitCode : null,
@@ -145,6 +274,7 @@ export function evaluateGuardDecision({
       artifactComplete,
       sourceComplete,
       advisoriesComplete,
+      advisorySeverityComplete,
       modelStatus,
       modelComplete: modelStatus === "complete",
     },

@@ -1,12 +1,18 @@
 {
   "decisionVersion": "1",
   "policyVersion": "guard-1",
-  "profile": "balanced",
+  "profile": "strict",
+  "appliedPolicy": {
+    "unknownDecision": "block",
+    "blockSeverity": "medium",
+    "enforcement": "enforce"
+  },
   "package": {
     "ecosystem": "npm",
     "name": "synthetic-example",
     "version": "1.2.3"
   },
+  "artifact": null,
   "decision": "block",
   "permitted": false,
   "enforcement": "enforce",
@@ -27,6 +33,9 @@
       "code": "known-malware",
       "advisoryId": "MAL-2026-1234",
       "aliases": []
+    },
+    {
+      "code": "profile-unknown-blocked"
     }
   ],
   "knownMalware": [
@@ -41,6 +50,7 @@
     "artifactComplete": false,
     "sourceComplete": false,
     "advisoriesComplete": false,
+    "advisorySeverityComplete": true,
     "modelStatus": "unavailable",
     "modelComplete": false
   },
