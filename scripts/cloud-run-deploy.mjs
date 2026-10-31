@@ -41,6 +41,7 @@ export function deploymentInputs(env = process.env) {
     GCP_RUNTIME_SERVICE_ACCOUNT: committed.runtimeServiceAccount,
     GCP_WORKLOAD_IDENTITY_PROVIDER: committed.workloadIdentityProvider,
     CLOUD_RUN_SMOKE_PACKAGE: committed.smokePackage,
+    CLOUD_RUN_MODEL_SECRET_VERSION: committed.modelSecretVersion,
     CLOUD_RUN_MODEL_EXPECTATIONS: committed.modelExpectation
       ? JSON.stringify(committed.modelExpectation)
       : undefined,
@@ -53,6 +54,9 @@ export function deploymentInputs(env = process.env) {
     serviceAccount: env.GCP_SERVICE_ACCOUNT,
     runtimeServiceAccount: env.GCP_RUNTIME_SERVICE_ACCOUNT,
     workloadIdentityProvider: env.GCP_WORKLOAD_IDENTITY_PROVIDER,
+    ...(env.CLOUD_RUN_MODEL_SECRET_VERSION === undefined
+      ? {}
+      : { modelSecretVersion: env.CLOUD_RUN_MODEL_SECRET_VERSION }),
   };
   const context = {
     eventName: env.GITHUB_EVENT_NAME,
@@ -410,6 +414,9 @@ export async function deployCloudRun({
       url: verified.url,
       reportUrl: new URL(observed.reportPath, verified.url).href,
       runtimeFingerprint: verified.runtimeFingerprint,
+      ...(plan.modelSecretRotation
+        ? { modelSecretRotation: plan.modelSecretRotation }
+        : {}),
       modelProof: observed.modelProof,
     };
   } catch {
