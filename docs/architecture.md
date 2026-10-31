@@ -11,6 +11,8 @@ UNMASK inventories a package tarball, selects a disclosed source reference,
 compares regular-file bytes, and renders evidence for human review. An integrity
 match, a source claim, byte correspondence, syntax cues and model hypotheses are
 separate facts. None establishes that the whole package is safe.
+The intended dependency-review persona is a hypothesis; it has not been validated
+with users.
 
 ```mermaid
 flowchart LR

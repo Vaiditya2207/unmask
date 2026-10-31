@@ -11,10 +11,14 @@ implementation branches**. The documentation branch starts from main revision
 not an analyzer or running website. Module paths below describe the pending
 layout; this documentation change does not add those modules to main.
 
-The implementation reference inspected for these pages is
-`e847e386b323078eaf3859165241a767cdd5d0c7`. Reading that source establishes the
-interfaces described here, not a successful deployment, public npm publication,
-provider-backed model result, or production resource guarantee.
+The pending local implementation revision inspected for these pages is
+`e847e386b323078eaf3859165241a767cdd5d0c7`. It is not yet public; the identifier
+records local source review, not a publicly inspectable remote reference. That
+review establishes the interfaces described here, not a successful deployment,
+public npm publication, provider-backed model result, or production resource
+guarantee.
+
+The hosted model gate has not passed and no human usefulness review has taken place.
 
 ## Read the design
 
