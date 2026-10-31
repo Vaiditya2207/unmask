@@ -35,6 +35,8 @@ import { runCompare } from "./compare.mjs";
 import { runHistory } from "./history.mjs";
 import { doctorCommand } from "./doctor.mjs";
 import { cacheCommand } from "./cache.mjs";
+import { sarifCommand } from "./sarif.mjs";
+import { annotationsCommand } from "./annotations.mjs";
 
 const names = {
   "--tarball": "tarballPath",
@@ -215,6 +217,9 @@ export async function main(argv = process.argv.slice(2), runtime = {}) {
     if (argv[0] === "doctor")
       return await doctorCommand(argv.slice(1), runtime);
     if (argv[0] === "cache") return await cacheCommand(argv.slice(1), runtime);
+    if (argv[0] === "sarif") return await sarifCommand(argv.slice(1));
+    if (argv[0] === "annotations")
+      return await annotationsCommand(argv.slice(1));
     const { out, offline, allowModel, registrySpec, ...options } = parse(argv);
     progress = createProgress(stderr, { env, subject: registrySpec });
     let report, details;
