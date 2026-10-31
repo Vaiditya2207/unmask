@@ -7,6 +7,12 @@ import { LocalInputError } from "../core/pipeline.mjs";
 import { checkHosted } from "./hosted.mjs";
 
 const failure = (code, message) => new LocalInputError(code, message);
+const terminalValue = (value) =>
+  JSON.stringify(value).replace(
+    /[\u007f-\u009f\u2028\u2029]/gu,
+    (character) =>
+      `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
 
 export async function resolveScanSpec(spec, runtime = {}) {
   if (typeof spec !== "string" || spec.length > 512)
@@ -116,7 +122,7 @@ export async function runScan(argv, runtime = {}) {
     );
   else
     stdout.write(
-      `Completed ${resolution.spec}: policy exit ${report.policy.exitCode}; AI status ${JSON.stringify(report.model?.status ?? "unavailable")}.\nNo findings do not establish safety.\n`,
+      `Completed ${resolution.spec}: policy exit ${report.policy.exitCode}; AI status ${terminalValue(report.model?.status ?? "unavailable")}.\nNo findings do not establish safety.\n`,
     );
   return report.policy.exitCode;
 }

@@ -180,7 +180,7 @@ test("terminal output names the pin before a failed hosted request and escapes m
   assert.match(output, /Pinned fixture@1.2.3 -> fixture@1.2.3/);
   assert.doesNotMatch(output, /Completed/);
   const value = report();
-  value.model = { status: "unavailable\u001b[2J\nforged" };
+  value.model = { status: "unavailable\u001b[2J\nforged\u009b2J" };
   runtime.fetchImpl = async (_url, options) =>
     options.method === "POST"
       ? new Response(null, {
@@ -191,6 +191,7 @@ test("terminal output names the pin before a failed hosted request and escapes m
   output = "";
   assert.equal(await main(["scan", "fixture@1.2.3"], runtime), 0);
   assert.doesNotMatch(output, /\u001b/);
+  assert.doesNotMatch(output, /\u009b/);
   assert.match(output, /No findings do not establish safety/);
 });
 
