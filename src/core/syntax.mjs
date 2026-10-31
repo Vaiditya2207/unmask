@@ -5,6 +5,8 @@ import {
   BEHAVIOR_LIMITS,
   javascriptSignal,
   manifestScriptSpans,
+  obfuscationSignals,
+  OBFUSCATION_LIMITS,
   scriptSignals,
   summaryFor,
 } from "./behavior-signals.mjs";
@@ -301,7 +303,30 @@ export function inspectJavaScript(artifact, source, overrides = {}) {
       coverage.files++;
       coverage.bytes += entry.size;
       const positions = offsets(text);
-      for (const node of nodes(ast)) {
+      const all = nodes(ast);
+      if (side === "artifact") {
+        const hooks = hookTargets.get(entry.path);
+        const found = obfuscationSignals(all);
+        if (found.capped) skip("behavior-obfuscation-cap");
+        for (const {
+          ruleId,
+          priority,
+          node,
+          related,
+          detail,
+        } of found.signals) {
+          if (admitBehavior(priority, entry.path, ruleId))
+            candidates.push({
+              behavior: { ruleId, priority, ...detail },
+              hooks,
+              evidence: evidenceFor(side, inventory, entry, node, positions),
+              related: related.map((item) =>
+                evidenceFor(side, inventory, entry, item, positions),
+              ),
+            });
+        }
+      }
+      for (const node of all) {
         if (side === "source") {
           if (
             node.type === "Literal" &&
@@ -369,6 +394,10 @@ export function inspectJavaScript(artifact, source, overrides = {}) {
     const hookTarget = candidate.hooks
       ? { installHookTarget: candidate.hooks }
       : {};
+    for (const item of candidate.related || []) {
+      evidence.set(item.id, item);
+      if (!ids.includes(item.id)) ids.push(item.id);
+    }
     if (candidate.behavior) {
       const { ruleId, priority, ...signal } = candidate.behavior;
       result.cues.push({
@@ -417,7 +446,7 @@ export function inspectJavaScript(artifact, source, overrides = {}) {
   result.annotations.push({
     type: "behavior-scope",
     manifest: behaviorManifest,
-    limits: { ...BEHAVIOR_LIMITS },
+    limits: { ...BEHAVIOR_LIMITS, obfuscation: { ...OBFUSCATION_LIMITS } },
     limitation:
       "Behavior cues are static text and syntax suspicions, not proof of execution or intent. Install hooks and package code were not run; aliases, computed names and runtime-constructed paths are not resolved.",
   });
