@@ -32,3 +32,22 @@ per excerpt are returned within a 128 KiB serialized response. Range fields
 identify both returned and originally recorded excerpts. Omission counts expose
 truncation. Render parsed excerpt strings as plain text. The HTTP JSON response
 escapes HTML-sensitive characters and uses attachment disposition and nosniff.
+
+## Short selectors for hosted inventory rows
+
+Hosted inventory rows expose an opaque `fileId`, bound to the stored report ID
+and exact recorded file identity. Prefer
+`GET /r/<report-id>/file.json?fileId=<fileId>` after selecting an inventory row.
+IDs have the form `f-` followed by 43 base64url characters. They are stable within
+the stored report, are not portable to another report, and confer no new access
+outside that report's existing route. Unknown or cross-report IDs return 404.
+Malformed IDs return 400. Supply exactly one of `fileId`, `path`, or
+`originalPath`; mixed/duplicate selectors and unknown query keys return 400.
+
+The ID route returns the same stored evidence and never starts analysis. It
+handles long escaped filenames whose path-based URL would exceed the unchanged
+HTTP header limit. The standalone example omits hosted report context and keeps
+its existing path-only output. Pure core callers may supply a third context
+argument `{ reportId: "<32 lowercase hex characters>" }` to inventory or evidence
+helpers to generate/resolve the hosted IDs. Never derive an ID from a displayed
+path in a client: use the inventory's opaque value for that report.

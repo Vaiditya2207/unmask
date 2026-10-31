@@ -23,3 +23,12 @@ paths may include nonregular entries; unknown hashes and sizes remain null.
 Incomplete coverage does not prove absence or safety. Excerpts are not returned
 by the inventory endpoint. Filenames remain data in JSON with HTML-sensitive
 characters escaped, attachment disposition, and nosniff.
+
+With the evidence-drilldown feature installed, each HTTP inventory row also
+contains an opaque `fileId`. Prefer
+`GET /r/<report-id>/file.json?fileId=<fileId>` when selecting a row. The short ID
+is bound to this report and the recorded path identity; IDs from another report
+return 404. IDs remain stable while this report is stored and expire with it.
+This avoids oversized percent-encoded URLs for long or Unicode filenames while
+keeping the server's existing HTTP header budget. The standalone core example
+has no hosted report ID and therefore does not emit hosted file IDs.

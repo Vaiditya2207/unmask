@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 const states = new Map([
   ["changed", "changed"],
   ["artifact-only", "added"],
@@ -35,7 +37,9 @@ export function explorationJson(value) {
   );
 }
 
-export function reportFileRows(report) {
+export function reportFileRows(report, { reportId } = {}) {
+  if (reportId !== undefined && !/^[a-f0-9]{32}$/.test(reportId))
+    throw new TypeError("Invalid report identity");
   const rows = [];
   const paths = new Set();
   let omitted = 0;
@@ -84,12 +88,26 @@ export function reportFileRows(report) {
       order(a.path ?? a.originalPath, b.path ?? b.originalPath) ||
       order(a.originalPath ?? "", b.originalPath ?? ""),
   );
+  if (reportId !== undefined)
+    for (const file of rows) {
+      file.fileId = `f-${createHash("sha256")
+        .update(
+          JSON.stringify([
+            "unmask-file-id-v1",
+            reportId,
+            file.path,
+            file.originalPath,
+          ]),
+        )
+        .digest("base64url")}`;
+    }
   return { rows, omitted };
 }
 
 export function buildReportFileInventory(
   report,
   { state = "all", prefix = "", offset = 0, limit = 50 } = {},
+  context = {},
 ) {
   if (
     !["all", "removed", ...states.values()].includes(state) ||
@@ -101,7 +119,7 @@ export function buildReportFileInventory(
     limit > 100
   )
     throw new TypeError("Invalid inventory query");
-  const { rows, omitted } = reportFileRows(report);
+  const { rows, omitted } = reportFileRows(report, context);
   const filtered = rows.filter(
     (file) =>
       (state === "all" || file.state === state) &&
@@ -184,19 +202,24 @@ function recordedExcerpt(item) {
   };
 }
 
-export function buildReportFileEvidence(report, selection) {
+export function buildReportFileEvidence(report, selection, context = {}) {
   const keys = Object.keys(selection ?? {});
   if (
     keys.length !== 1 ||
-    !["path", "originalPath"].includes(keys[0]) ||
-    !safeExplorationPath(selection[keys[0]])
+    !["path", "originalPath", "fileId"].includes(keys[0]) ||
+    (keys[0] === "fileId"
+      ? !/^[a-f0-9]{32}$/.test(context.reportId ?? "") ||
+        !/^f-[A-Za-z0-9_-]{43}$/.test(selection.fileId)
+      : !safeExplorationPath(selection[keys[0]]))
   )
     throw new TypeError("Invalid file selection");
-  const { rows } = reportFileRows(report);
+  const { rows } = reportFileRows(report, context);
   const matches = rows.filter((file) =>
-    keys[0] === "path"
-      ? file.path === selection.path
-      : file.path === null && file.originalPath === selection.originalPath,
+    keys[0] === "fileId"
+      ? file.fileId === selection.fileId
+      : keys[0] === "path"
+        ? file.path === selection.path
+        : file.path === null && file.originalPath === selection.originalPath,
   );
   if (matches.length !== 1) return null;
   const file = matches[0];

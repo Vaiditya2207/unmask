@@ -34,12 +34,17 @@ export function handleReportExploration({ path, getJob, send }) {
       ...headers,
     });
   const drilldown = match[2] === "file";
+  const context = { reportId: match[1] };
   let options;
   try {
     if (drilldown) {
-      const params = queryParameters(match[3] ?? "", ["path", "originalPath"]);
+      const params = queryParameters(match[3] ?? "", [
+        "path",
+        "originalPath",
+        "fileId",
+      ]);
       options = Object.fromEntries(params);
-      buildReportFileEvidence({ files: [] }, options);
+      buildReportFileEvidence({ files: [] }, options, context);
     } else {
       const params = queryParameters(match[3] ?? "", [
         "state",
@@ -53,7 +58,7 @@ export function handleReportExploration({ path, getJob, send }) {
         offset: integer(params, "offset", 0),
         limit: integer(params, "limit", 50),
       };
-      buildReportFileInventory({ files: [] }, options);
+      buildReportFileInventory({ files: [] }, options, context);
     }
   } catch {
     json(400, { error: "invalid-query" });
@@ -73,8 +78,8 @@ export function handleReportExploration({ path, getJob, send }) {
     );
   } else {
     const body = drilldown
-      ? buildReportFileEvidence(job.report, options)
-      : buildReportFileInventory(job.report, options);
+      ? buildReportFileEvidence(job.report, options, context)
+      : buildReportFileInventory(job.report, options, context);
     if (!body) json(404, { error: "file-unavailable" });
     else json(200, { reportId: match[1], ...body });
   }
