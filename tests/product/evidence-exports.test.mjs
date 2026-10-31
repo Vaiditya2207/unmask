@@ -430,6 +430,12 @@ test("evidence manifest surfaces integrity mismatch and identity conflict", () =
   );
   assert.equal(manifest.artifacts[0].expectedIntegrity.status, "mismatch");
   assert.equal(manifest.package.status, "claim-conflicts-with-manifest");
+  assert.equal(manifest.package.purl, null);
+  assert.equal(manifest.package.name, "@acme/widget");
+  assert.deepEqual(manifest.package.requested, {
+    name: "other",
+    version: "2.0.0",
+  });
   assert.deepEqual(manifest.assessment.findings, [
     { ruleId: "identity-claim-conflict", count: 1 },
     { ruleId: "integrity-mismatch", count: 1 },

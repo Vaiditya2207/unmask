@@ -405,18 +405,12 @@ export function buildEvidenceManifest(
         role: "npm-tarball",
         sha256: artifact.sha256,
         sha512: artifact.sha512,
-        expectedIntegrity: expected
-          ? expected.status === "unavailable"
-            ? { status: "unavailable" }
-            : {
-                algorithm: expected.algorithm,
-                digest: expected.digest,
-                status:
-                  expected.digest === artifact[expected.algorithm]
-                    ? "matches"
-                    : "mismatch",
-              }
-          : { status: "not-recorded" },
+        expectedIntegrity: {
+          status: integrityStatus(artifact),
+          ...(expected?.algorithm
+            ? { algorithm: expected.algorithm, digest: expected.digest }
+            : {}),
+        },
         provenance: artifact.provenance ?? { status: "not-recorded" },
       },
       ...["sourceArchive", "registryDocument"]
