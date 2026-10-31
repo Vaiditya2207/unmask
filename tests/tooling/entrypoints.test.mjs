@@ -51,10 +51,19 @@ test("CLI readiness fails closed; report mode explicitly reports blocked", (t) =
     cwd: root,
     env: { ...process.env, GITHUB_OUTPUT: output },
   });
-  assert.equal(readFileSync(output, "utf8"), "ready=false\n");
+  assert.equal(
+    readFileSync(output, "utf8"),
+    "ready=false\nnpm_publish=false\n",
+  );
 });
 
-for (const mode of ["prepare", "publish"]) {
+for (const mode of [
+  "prepare",
+  "build",
+  "publish",
+  "npm-preflight",
+  "npm-publish",
+]) {
   test(`real ${mode} entrypoint refuses the scaffold before any network request`, (t) => {
     const root = scaffold(t);
     const guard = path.join(root, "no-network.mjs");

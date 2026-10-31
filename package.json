@@ -1,17 +1,24 @@
 {
-  "name": "unmask",
+  "name": "@xagents_in/unmask",
   "version": "0.0.0",
   "private": true,
-  "description": "Repository tooling for the UNMASK package integrity analyzer",
+  "description": "Evidence-based comparison of npm packages and their source archives",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Vaiditya2207/unmask.git"
+  },
   "engines": {
     "node": "24.22.2"
   },
   "scripts": {
+    "build": "node scripts/build.mjs",
     "check": "prettier --check .",
     "format": "prettier --write .",
-    "test": "node --test tests/tooling/*.test.mjs",
-    "check:package": "node scripts/check-package.mjs",
+    "test": "node --test tests/tooling/*.test.mjs tests/product/*.test.mjs",
+    "test:product": "node --test tests/product/*.test.mjs",
+    "check:package": "node scripts/check-package.mjs --build",
+    "test:release": "node scripts/smoke-candidate.mjs",
     "release:readiness": "node scripts/release-readiness.mjs"
   },
   "devDependencies": {
@@ -19,5 +26,9 @@
   },
   "files": [
     "dist"
-  ]
+  ],
+  "dependencies": {
+    "acorn": "8.19.0",
+    "tar-stream": "3.2.2"
+  }
 }

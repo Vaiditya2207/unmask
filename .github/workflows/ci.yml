@@ -25,8 +25,14 @@ jobs:
           cache: npm
       - name: Install locked tooling without lifecycle scripts
         run: npm ci --ignore-scripts
+      - name: Validate pinned tooling and script syntax
+        run: |
+          node scripts/check-toolchain.mjs
+          for script in scripts/*.mjs; do node --check "$script"; done
       - name: Check formatting
         run: npm run check
+      - name: Build actual product before artifact checks
+        run: npm run build
       - name: Test release policy and actual npm packaging
         run: npm test
       - name: Report product release readiness

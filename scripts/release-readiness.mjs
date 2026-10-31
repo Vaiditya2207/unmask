@@ -7,6 +7,7 @@ import {
   realpathSync,
 } from "node:fs";
 import path from "node:path";
+import { verifyBuild } from "./build.mjs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -35,7 +36,7 @@ export function localFile(root, relative) {
   );
 }
 
-export function readiness(root, { built = false } = {}) {
+export function readiness(root, { built = false, expectedSha } = {}) {
   const pkg = JSON.parse(readFileSync(path.join(root, "package.json")));
   const config = JSON.parse(
     readFileSync(path.join(root, "release.config.json")),
@@ -111,6 +112,16 @@ export function readiness(root, { built = false } = {}) {
         `Missing ${built ? "built " : ""}${entry} entrypoint under dist/`,
       );
   }
+  if (built) {
+    try {
+      verifyBuild(root, {
+        expectedSha,
+        requireClean: expectedSha !== undefined,
+      });
+    } catch (error) {
+      reasons.push(error.message);
+    }
+  }
   if (typeof pkg.bin?.unmask !== "string" || pkg.bin.unmask !== config.cli)
     reasons.push("npm bin.unmask must identify the CLI entrypoint");
   return {
@@ -118,6 +129,7 @@ export function readiness(root, { built = false } = {}) {
     enabled: config.enabled === true,
     reasons,
     version: pkg.version,
+    npmPublishEnabled: config.npmPublishEnabled === true,
   };
 }
 
@@ -146,7 +158,10 @@ if (
   if (process.argv.includes("--github-output")) {
     if (!process.env.GITHUB_OUTPUT)
       throw new Error("GITHUB_OUTPUT is required");
-    appendFileSync(process.env.GITHUB_OUTPUT, `ready=${result.ready}\n`);
+    appendFileSync(
+      process.env.GITHUB_OUTPUT,
+      `ready=${result.ready}\nnpm_publish=${result.npmPublishEnabled}\n`,
+    );
     if (
       result.enabled &&
       !result.ready &&

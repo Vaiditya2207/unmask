@@ -23,6 +23,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       ready: ${{ steps.gate.outputs.ready }}
+      npm_publish: ${{ steps.gate.outputs.npm_publish }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -36,7 +37,7 @@ jobs:
         run: node scripts/release-readiness.mjs --github-output --version-candidate
   publish:
     needs: [checks, readiness]
-    if: needs.checks.result == 'success' && needs.readiness.outputs.ready == 'true'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.checks.result == 'success' && needs.readiness.outputs.ready == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -50,6 +51,7 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+          registry-url: https://registry.npmjs.org
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - run: npm ci --ignore-scripts
       - name: Test and build real application
@@ -61,28 +63,41 @@ jobs:
         id: plan
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_SETTINGS_TOKEN: ${{ secrets.RELEASE_SETTINGS_TOKEN }}
           CHECKS_RESULT: ${{ needs.checks.result }}
         run: node scripts/release.mjs prepare
-      - name: Build candidate image without publishing
+      - name: Build exact tested npm archive image without publishing
         id: image
         env:
-          RELEASE_IMAGE: ${{ steps.plan.outputs.image }}
-          RELEASE_DOCKERFILE: ${{ steps.plan.outputs.dockerfile }}
-          CANDIDATE_SHA: ${{ github.sha }}
-        run: |
-          docker buildx build --platform linux/amd64 --load --file "$RELEASE_DOCKERFILE" --label "org.opencontainers.image.revision=$CANDIDATE_SHA" --tag "$RELEASE_IMAGE" .
-          echo "image_id=$(docker image inspect --format '{{.Id}}' "$RELEASE_IMAGE")" >> "$GITHUB_OUTPUT"
+          CHECKS_RESULT: ${{ needs.checks.result }}
+        run: node scripts/release.mjs build
       - name: Exercise exact CLI tarball and website image
         id: smoke
         env:
           RELEASE_IMAGE: ${{ steps.plan.outputs.image }}
           RELEASE_PACKAGE: ${{ steps.plan.outputs.package }}
+          RELEASE_LOCKFILE: package-lock.json
+          RELEASE_PACKAGE_SHA256: ${{ steps.image.outputs.package_sha256 }}
+          RELEASE_LOCKFILE_SHA256: ${{ steps.image.outputs.lockfile_sha256 }}
+          RELEASE_VERSION: ${{ steps.image.outputs.version }}
+          RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_SMOKE_PACKAGE: is-number@7.0.0
+          RELEASE_SMOKE_MODE: live-public
         run: npm run test:release
+      - name: Publish exact tested archive to public npm
+        id: npm
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.readiness.outputs.npm_publish == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          SMOKE_RESULT: ${{ steps.smoke.outcome }}
+        run: node scripts/release.mjs npm-publish
       - name: Publish new immutable release after checks
         env:
           GITHUB_TOKEN: ${{ github.token }}
           RELEASE_SETTINGS_TOKEN: ${{ secrets.RELEASE_SETTINGS_TOKEN }}
           CHECKS_RESULT: ${{ needs.checks.result }}
+          NPM_RESULT: ${{ steps.npm.outcome }}
           CANDIDATE_IMAGE_ID: ${{ steps.image.outputs.image_id }}
           SMOKE_RESULT: ${{ steps.smoke.outcome }}
         run: node scripts/release.mjs publish
