@@ -17,8 +17,9 @@ npm run typecheck
 npm run build && npm start
 ```
 
-`next/font` downloads Libre Franklin, Source Serif 4 and JetBrains Mono from
-Google Fonts at build time and serves them from this site.
+Bricolage Grotesque and IBM Plex Mono are bundled in `public/fonts/` and served
+from this site, so builds need no network access. See
+[the font notes](public/fonts/README.md) before changing them.
 
 ## The analyzer connection
 
