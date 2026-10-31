@@ -76,7 +76,9 @@ identity is a new `name@version`, or an existing one whose recorded `resolved`
 or `integrity` changed in any location, including removal of either field.
 Lockfile parsing is shared with `unmask audit`: changed non-registry or
 non-exact entries are listed under `coverage.unsupported`, and local workspaces
-and links are not checked. A changed identity that is not bound (a
+and links are not checked. A changed workspace entry that claims a `resolved` or
+`integrity` artifact is listed as `workspace-artifact-claim`, as dependency
+screening rejects it. A changed identity that is not bound (a
 `registry.npmjs.org` tarball URL plus a sha512 integrity in every location) is
 still checked by name and version, but counts under `coverage.unbound` and keeps
 coverage incomplete, because the checked artifact is not tied to what npm will

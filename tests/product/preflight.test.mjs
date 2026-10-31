@@ -312,3 +312,18 @@ test("preflight checks changed identity through the real hosted app over local H
   ]);
   assert.equal(result.coverage.complete, true);
 });
+
+test("a workspace entry carrying artifact claims is unsupported, matching dependency screening", () => {
+  const head = JSON.parse(base);
+  head.packages["packages/evil"] = {
+    version: "1.0.0",
+    resolved: "https://evil.example/evil-1.0.0.tgz",
+    integrity: integrity("evil", "1.0.0"),
+  };
+  head.packages["packages/plain"] = { name: "plain", version: "1.0.0" };
+  const diff = lockDiff(base, JSON.stringify(head));
+  assert.deepEqual(diff.added, []);
+  assert.deepEqual(diff.unsupported, [
+    { path: "packages/evil", reason: "workspace-artifact-claim" },
+  ]);
+});

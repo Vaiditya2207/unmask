@@ -14,11 +14,14 @@ export function lockIdentities(text) {
   const identities = new Map();
   const unsupported = [];
   for (const entry of lock.entries.values()) {
-    if (["root", "workspace", "link"].includes(entry.kind)) continue;
+    const claimsArtifact =
+      entry.kind === "workspace" && (entry.resolved || entry.integrity);
+    if (["root", "workspace", "link"].includes(entry.kind) && !claimsArtifact)
+      continue;
     if (entry.kind !== "registry") {
       unsupported.push({
         path: entry.key,
-        reason: entry.reason,
+        reason: claimsArtifact ? "workspace-artifact-claim" : entry.reason,
         version: entry.version,
         resolved: entry.resolved,
       });
