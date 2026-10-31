@@ -123,7 +123,10 @@ test("real watch process checks atomically rewritten dependency changes, tamperi
     },
   );
   const killer = setTimeout(() => child.kill("SIGKILL"), 30000);
-  t.after(() => clearTimeout(killer));
+  t.after(() => {
+    clearTimeout(killer);
+    child.kill("SIGKILL");
+  });
   let stdout = "";
   child.stdout.on("data", (chunk) => (stdout += chunk));
   const events = () =>
@@ -137,9 +140,10 @@ test("real watch process checks atomically rewritten dependency changes, tamperi
     assert.ok(predicate(), `${label}\n${stdout}`);
   }
 
-  await until(() => events().length === 1, "baseline event");
+  await until(() => events().length === 2, "start and baseline events");
+  assert.equal(events()[0].type, "watching");
   assert.deepEqual(
-    { type: events()[0].type, audited: events()[0].audited },
+    { type: events()[1].type, audited: events()[1].audited },
     { type: "baseline", audited: false },
   );
   assert.deepEqual(specs, [], "the baseline itself is not checked");
@@ -198,5 +202,10 @@ test("real watch process checks atomically rewritten dependency changes, tamperi
     cancelled.checks.map((item) => [item.name, item.status]),
     [["slow", "cancelled"]],
   );
-  assert.match(stdout, /in-progress run was cancelled and claims no result\n$/);
+  assert.deepEqual(events().at(-1), {
+    type: "stopped",
+    runs: 3,
+    interrupted: true,
+    exitCode: 130,
+  });
 });
