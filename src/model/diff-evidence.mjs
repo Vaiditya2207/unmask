@@ -5,6 +5,7 @@ export const SIGNALS = Object.freeze([
   "executable",
   "network",
   "secret-access",
+  "environment-access",
 ]);
 const INSTALL_HOOKS = new Set([
   "preinstall",
@@ -31,7 +32,7 @@ const RULE_SIGNALS = new Map([
   ["syntax-process-execution", "executable"],
   ["syntax-dynamic-code", "executable"],
   ["syntax-network-call", "network"],
-  ["syntax-environment-access", "secret-access"],
+  ["syntax-environment-access", "environment-access"],
   ["behavior-install-remote-shell", "lifecycle"],
   ["behavior-install-network-fetch", "lifecycle"],
   ["behavior-install-inline-execution", "lifecycle"],

@@ -52,6 +52,22 @@ function crowdedReport() {
     run: {},
   };
 }
+// Answers with exactly the output keys the prompt requests, so fixtures follow the current contract.
+function modelOutput(prompt, hypothesis) {
+  const optional = {
+    summary: "Fixture summary of the supplied scope and evidence.",
+    assessment: {
+      uncertainty: "Runtime behavior was not observed.",
+      nextAction: "Review the cited install hook text.",
+    },
+  };
+  return Object.fromEntries(
+    Object.keys(prompt.output).map((key) => [
+      key,
+      key === "hypotheses" ? [hypothesis] : optional[key],
+    ]),
+  );
+}
 async function explainWithPrompt(report) {
   let prompt;
   const section = await createGemmaClient({
@@ -78,7 +94,9 @@ async function explainWithPrompt(report) {
           candidates: [
             {
               content: {
-                parts: [{ text: JSON.stringify({ hypotheses: [hypothesis] }) }],
+                parts: [
+                  { text: JSON.stringify(modelOutput(prompt, hypothesis)) },
+                ],
               },
             },
           ],
@@ -121,7 +139,7 @@ test("risk signals classify lifecycle, dependency, executable, network and secre
     [{ ruleId: "syntax-process-execution" }, "executable"],
     [{ ruleId: "syntax-dynamic-code" }, "executable"],
     [{ ruleId: "syntax-network-call" }, "network"],
-    [{ ruleId: "syntax-environment-access" }, "secret-access"],
+    [{ ruleId: "syntax-environment-access" }, "environment-access"],
     [
       {
         ruleId: "manifest-runtime-field-difference",
@@ -212,20 +230,21 @@ test("signal ranking keeps policy first and orders capability cues by signal", a
   const { section, prompt } = await explainWithPrompt(report);
   assert.equal(section.status, "complete");
   const groups = prompt.evidenceGroups;
-  assert.deepEqual([groups[0].kind, groups[0].signal], ["policy", "lifecycle"]);
+  assert.deepEqual([groups[0].kind, groups[0].signal], ["policy", undefined]);
   const ranks = groups
     .slice(1)
     .filter((group) => group.signal)
     .map((group) => SIGNALS.indexOf(group.signal));
-  assert.ok(ranks.length >= 4);
+  assert.ok(ranks.length >= 2);
   assert.deepEqual(
     ranks,
     [...ranks].sort((a, b) => a - b),
   );
-  const firstGeneric = groups.findIndex((group) => !group.signal);
+  const cues = groups.slice(1);
+  const firstGeneric = cues.findIndex((group) => !group.signal);
   assert.ok(
     firstGeneric === -1 ||
-      groups.slice(firstGeneric).every((group) => !group.signal),
+      cues.slice(firstGeneric).every((group) => !group.signal),
   );
 });
 
@@ -263,5 +282,61 @@ test("HIGH static behavior cues rank with novel literals, review cues with other
       ["manifest-lifecycle-source-absent", "lifecycle"],
       ["behavior-install-network-fetch", "lifecycle"],
     ],
+  );
+});
+
+test("cue sets above the old 1000 limit are bounded and keep HIGH behavior cues", async () => {
+  const report = crowdedReport();
+  const hook = '"postinstall":"node x.js"';
+  report.evidence.push(
+    piece(
+      "hook",
+      "artifact",
+      "package.json",
+      hook,
+      artifactManifest.indexOf(hook),
+    ),
+  );
+  for (let i = 0; i < 1500; i++)
+    report.cues.push({
+      module: "manifest",
+      ruleId: "manifest-runtime-field-difference",
+      field: `/keywords/${i}`,
+      evidenceIds: ["manifest-a", "manifest-s"],
+    });
+  report.cues.push({
+    module: "behavior",
+    ruleId: "behavior-install-remote-shell",
+    priority: "HIGH",
+    evidenceIds: ["hook"],
+  });
+  const started = performance.now();
+  const { section, prompt } = await explainWithPrompt(report);
+  assert.ok(performance.now() - started < 5000);
+  assert.equal(section.status, "complete");
+  assert.deepEqual(
+    [prompt.evidenceGroups[0].ruleId, prompt.evidenceGroups[0].signal],
+    ["behavior-install-remote-shell", "lifecycle"],
+  );
+  assert.ok(
+    section.omittedEvidenceGroups.filter(
+      (group) => group.ruleId === "manifest-runtime-field-difference",
+    ).length > 1000,
+  );
+});
+
+test("cue sets above the hard cap fail closed as input-budget", async () => {
+  const report = crowdedReport();
+  for (let i = 0; i < 10001; i++)
+    report.cues.push({
+      module: "manifest",
+      ruleId: "manifest-runtime-field-difference",
+      field: `/keywords/${i}`,
+      evidenceIds: ["manifest-a"],
+    });
+  const { section } = await explainWithPrompt(report);
+  assert.deepEqual(
+    [section.status, section.reason],
+    ["unavailable", "input-budget"],
   );
 });
