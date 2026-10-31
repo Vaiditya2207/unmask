@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+coverage/
+package-lock.json
+examples/**/input/**
+examples/**/output/**
+
+# Preserve the initial declaration and keep private notes out of tooling.
+HACKATHON.md
+internal/
+research/
+*.internal.md

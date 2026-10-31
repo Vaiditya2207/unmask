@@ -1,0 +1,17 @@
+{
+  "name": "unmask",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Repository tooling for the UNMASK package integrity analyzer",
+  "license": "MIT",
+  "engines": {
+    "node": "24.22.2"
+  },
+  "scripts": {
+    "check": "prettier --check .",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "prettier": "3.9.10"
+  }
+}
