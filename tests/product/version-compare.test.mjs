@@ -234,3 +234,51 @@ test("compare exit aggregates both sides so an incomplete old version is not hid
   assert.equal(aggregateExit(clean, { policy: { exitCode: 3 } }), 3);
   assert.equal(aggregateExit(clean, clean), 0);
 });
+
+test("compare uses own keys only and labels non-string manifest values without coercion", async (t) => {
+  const before = await report(t, {
+    name: "fixture",
+    version: "1.0.0",
+    scripts: { toString: "inert" },
+  });
+  const after = await report(t, {
+    name: "fixture",
+    version: "1.1.0",
+    scripts: {
+      postinstall: { toString: "not-a-function", valueOf: "not-a-function" },
+    },
+    dependencies: JSON.parse('{"constructor":"1.0.0","__proto__":"2.0.0"}'),
+  });
+  const result = compareReports(before, after);
+  assert.deepEqual(
+    result.dependencies.dependencies.map(({ key, change, from, to }) => ({
+      key,
+      change,
+      from,
+      to,
+    })),
+    [
+      { key: "__proto__", change: "added", from: undefined, to: "2.0.0" },
+      { key: "constructor", change: "added", from: undefined, to: "1.0.0" },
+    ],
+  );
+  const postinstall = result.scripts.find((c) => c.key === "postinstall");
+  assert.equal(postinstall.change, "added");
+  assert.equal(postinstall.toType, "object");
+  assert.equal(
+    postinstall.to,
+    '{"toString":"not-a-function","valueOf":"not-a-function"}',
+  );
+  assert.deepEqual(
+    result.scripts.find((c) => c.key === "toString"),
+    { key: "toString", change: "removed", from: "inert", lifecycle: false },
+  );
+  const stdout = capture();
+  const code = await main(["compare", "fixture@1.0.0", "fixture@1.1.0"], {
+    checkHosted: async (spec) => (spec.endsWith("1.0.0") ? before : after),
+    stdout,
+  });
+  assert.equal(code, aggregateExit(before, after));
+  assert.match(stdout.text(), /\+ postinstall \[lifecycle\]: <object> /);
+  assert.match(stdout.text(), /values are not strings/);
+});

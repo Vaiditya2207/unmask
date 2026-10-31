@@ -51,22 +51,41 @@ const manifestOf = (report) =>
     : null;
 const plainObject = (value) =>
   value && typeof value === "object" && !Array.isArray(value) ? value : {};
+const kind = (value) =>
+  value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
+function entry(map, key, label) {
+  if (!Object.hasOwn(map, key)) return {};
+  const value = map[key];
+  if (typeof value === "string") return { [label]: value };
+  return {
+    [label]: JSON.stringify(value) ?? kind(value),
+    [`${label}Type`]: kind(value),
+  };
+}
 function diffMap(before, after) {
   const changes = [];
-  const keys = new Set([
-    ...Object.keys(plainObject(before)),
-    ...Object.keys(plainObject(after)),
-  ]);
+  const a = plainObject(before);
+  const b = plainObject(after);
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
   for (const key of [...keys].sort()) {
-    const from = plainObject(before)[key];
-    const to = plainObject(after)[key];
-    if (from === to) continue;
+    const from = entry(a, key, "from");
+    const to = entry(b, key, "to");
+    if (
+      Object.hasOwn(a, key) &&
+      Object.hasOwn(b, key) &&
+      from.from === to.to &&
+      from.fromType === to.toType
+    )
+      continue;
     changes.push({
       key,
-      change:
-        from === undefined ? "added" : to === undefined ? "removed" : "changed",
-      ...(from === undefined ? {} : { from: String(from) }),
-      ...(to === undefined ? {} : { to: String(to) }),
+      change: !Object.hasOwn(a, key)
+        ? "added"
+        : !Object.hasOwn(b, key)
+          ? "removed"
+          : "changed",
+      ...from,
+      ...to,
     });
   }
   return changes;
@@ -140,6 +159,14 @@ export function compareReports(older, newer) {
         `${label} ${version}: deterministic failures ${report.failures.map((failure) => failure.code).join(", ")}.`,
       );
   }
+  if (
+    [scripts, ...Object.values(dependencies)].some((changes) =>
+      changes.some((change) => change.fromType || change.toType),
+    )
+  )
+    caveats.push(
+      "Some changed script or dependency values are not strings; they are shown as JSON with their type and may be malformed.",
+    );
   if (scripts.some((change) => change.lifecycle && change.change !== "removed"))
     caveats.push(
       "A lifecycle script was added or changed; installs may run it automatically.",
@@ -166,7 +193,9 @@ const escapeUnsafe = (text, pattern = UNSAFE) =>
     pattern,
     (char) => "\\u" + char.charCodeAt(0).toString(16).padStart(4, "0"),
   );
-const display = (value) => JSON.stringify(value).slice(0, 200);
+const display = (change, side) =>
+  (change[`${side}Type`] ? `<${change[`${side}Type`]}> ` : "") +
+  JSON.stringify(change[side]).slice(0, 200);
 function listed(lines, items, format) {
   for (const item of items.slice(0, MAX_LISTED)) lines.push(format(item));
   if (items.length > MAX_LISTED)
@@ -178,8 +207,8 @@ function mapLines(lines, title, changes) {
     const mark = { added: "+", removed: "-", changed: "~" }[change.change];
     const flag = change.lifecycle ? " [lifecycle]" : "";
     if (change.change === "changed")
-      return `  ${mark} ${change.key}${flag}: ${display(change.from)} -> ${display(change.to)}`;
-    return `  ${mark} ${change.key}${flag}: ${display(change.to ?? change.from)}`;
+      return `  ${mark} ${change.key}${flag}: ${display(change, "from")} -> ${display(change, "to")}`;
+    return `  ${mark} ${change.key}${flag}: ${display(change, change.change === "added" ? "to" : "from")}`;
   });
 }
 export function renderComparison(result) {
