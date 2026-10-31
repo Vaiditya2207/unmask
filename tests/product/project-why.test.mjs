@@ -108,6 +108,31 @@ test("why handles dev, alias, truncation, orphan cycles and unresolved peers", (
     assert.throws(() => parseQuery(bad), { code: "invalid-package" });
 });
 
+test("why explains workspace packages instead of reporting them absent", () => {
+  const ws = parseLockfile(
+    JSON.stringify({
+      lockfileVersion: 3,
+      packages: {
+        "": { name: "ws-root", workspaces: ["packages/*"] },
+        "node_modules/a": { resolved: "packages/a", link: true },
+        "node_modules/b": { resolved: "packages/b", link: true },
+        "packages/a": { version: "1.0.0", dependencies: { b: "1.0.0" } },
+        "packages/b": { version: "1.0.0" },
+      },
+    }),
+  );
+  const b = explainWhy(ws, parseQuery("b"));
+  assert.equal(b.found, true);
+  assert.deepEqual(
+    b.matches.map((m) => [m.key, m.workspace, chains(m)]),
+    [["packages/b", true, ["a@1.0.0 (workspace) > b@1.0.0 (workspace)"]]],
+  );
+  assert.match(b.limitations.join(" "), /part of the project itself/);
+  const a = explainWhy(ws, parseQuery("a"));
+  assert.deepEqual(a.matches[0].paths, []);
+  assert.doesNotMatch(a.limitations.join(" "), /extraneous/);
+});
+
 test("unmask why CLI prints paths, JSON and honest not-found errors", async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "unmask-why-"));
   t.after(() => rm(root, { recursive: true, force: true }));

@@ -106,7 +106,7 @@ function pathsTo(lock, dependents, key, limits) {
       return;
     }
     const entry = lock.entries.get(current);
-    if (isRoot(entry)) {
+    if (isRoot(entry) && current !== key) {
       paths.push(trail.slice().reverse());
       return;
     }
@@ -146,7 +146,7 @@ export function explainWhy(lock, query, { maxPaths = 10 } = {}) {
   const { dependents, unresolved } = graph(lock);
   const matches = [];
   for (const entry of lock.entries.values()) {
-    if (isRoot(entry) || entry.kind === "link") continue;
+    if (entry.kind === "root" || entry.kind === "link") continue;
     const alias = nameFromKey(entry.key);
     if (entry.name !== query.name && alias !== query.name) continue;
     if (query.version && entry.version !== query.version) continue;
@@ -161,6 +161,7 @@ export function explainWhy(lock, query, { maxPaths = 10 } = {}) {
       optional: entry.optional,
       bundled: entry.bundled,
       direct: paths.some((trail) => trail.length === 2),
+      workspace: entry.kind === "workspace",
       paths,
       truncated,
     });
@@ -175,9 +176,13 @@ export function explainWhy(lock, query, { maxPaths = 10 } = {}) {
     );
   if (matches.some((match) => match.truncated))
     limitations.push("Some path lists were truncated by traversal limits.");
-  if (matches.some((match) => match.paths.length === 0))
+  if (matches.some((match) => !match.workspace && match.paths.length === 0))
     limitations.push(
       "Entries with no path are extraneous, bundled or reached only through unresolved links.",
+    );
+  if (matches.some((match) => match.workspace))
+    limitations.push(
+      "A workspace is part of the project itself; paths show only other workspaces that depend on it.",
     );
   if ([...lock.entries.values()].some((entry) => entry.kind === "workspace"))
     limitations.push(
@@ -199,7 +204,7 @@ function formatText(result) {
   const lines = [];
   for (const match of result.matches) {
     const flags = [
-      match.direct ? "direct" : "transitive",
+      match.workspace ? null : match.direct ? "direct" : "transitive",
       match.dev && "dev",
       match.optional && "optional",
       match.bundled && "bundled",
