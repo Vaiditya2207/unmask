@@ -295,3 +295,25 @@ test("cache limits cannot be expanded or inverted", () => {
   ])
     assert.throws(() => createAdvisoryCache({ limits }), TypeError);
 });
+
+test("total byte cap below the entry cap is rejected and at-cap stores never throw", async () => {
+  assert.throws(
+    () => createAdvisoryCache({ limits: { totalBytes: 100 } }),
+    TypeError,
+  );
+  const big = record();
+  big.summary = "x".repeat(1000);
+  const { upstream, cache } = cacheWith(
+    { vulns: [big] },
+    {
+      limits: { entryBytes: 2048, totalBytes: 2048 },
+    },
+  );
+  const first = await cache.lookup("fixture@1.0.0");
+  const second = await cache.lookup("fixture@1.0.1");
+  assert.equal(first.cache.status, "miss");
+  assert.equal(second.cache.status, "miss");
+  assert.equal((await cache.lookup("fixture@1.0.1")).cache.status, "hit");
+  assert.equal((await cache.lookup("fixture@1.0.0")).cache.status, "miss");
+  assert.equal(upstream.requests.length, 3);
+});

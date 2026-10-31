@@ -54,7 +54,8 @@ export function createAdvisoryCache({
         limits[key] < 1 ||
         limits[key] > ADVISORY_CACHE_LIMITS[key],
     ) ||
-    limits.staleMs < limits.ttlMs
+    limits.staleMs < limits.ttlMs ||
+    limits.totalBytes < limits.entryBytes
   )
     throw new TypeError("Invalid advisory cache limits");
   const entries = new Map();
@@ -95,7 +96,7 @@ export function createAdvisoryCache({
       if (entries.size <= limits.entries && bytes <= limits.totalBytes) break;
       drop(key);
     }
-    return true;
+    return entries.has(claim.key);
   }
   function provenance(status, entry, now) {
     return {
