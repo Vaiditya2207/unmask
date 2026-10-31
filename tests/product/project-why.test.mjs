@@ -149,13 +149,18 @@ test("unmask why CLI prints paths, JSON and honest not-found errors", async (t) 
     codes.push(await main(["why", "c@2.0.0", "--lockfile", lockfile]));
     codes.push(await main(["why", "d", "--lockfile", lockfile, "--json"]));
     codes.push(await main(["why", "nope", "--lockfile", lockfile]));
+    codes.push(await main(["why", "missing", "--lockfile", lockfile]));
     codes.push(await main(["why", "c", "--max-paths", "0"]));
     codes.push(await main(["why"]));
   } finally {
     process.stdout.write = out;
     process.stderr.write = err;
   }
-  assert.deepEqual(codes, [0, 0, 2, 2, 2]);
+  assert.deepEqual(codes, [0, 0, 2, 2, 2, 2]);
+  assert.match(
+    stderr,
+    /package-not-locked: Declared by node_modules\/c \(peer\) but has no locked entry/,
+  );
   assert.match(
     stdout,
     /c@2\.0\.0 at node_modules\/@s\/b\/node_modules\/c \(transitive\): 1 path\(s\)\n {2}app \(root\) -> @s\/b@2\.0\.0 -> c@2\.0\.0/,

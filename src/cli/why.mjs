@@ -208,7 +208,7 @@ function formatText(result) {
       match.dev && "dev",
       match.optional && "optional",
       match.bundled && "bundled",
-      match.kind !== "registry" && match.kind,
+      !["registry", "bundled"].includes(match.kind) && match.kind,
     ].filter(Boolean);
     lines.push(
       `${match.name}@${match.version ?? "?"} at ${match.key} (${flags.join(", ")}): ${match.paths.length}${match.truncated ? "+" : ""} path(s)`,
@@ -235,6 +235,15 @@ export async function runWhy(argv) {
   const options = parseWhyArgs(argv);
   const lock = await readLockfile(options.lockfile);
   const result = explainWhy(lock, options.query, options);
+  if (!result.found && result.unresolvedEdges.length > 0) {
+    const from = result.unresolvedEdges
+      .map((edge) => `${edge.from || "the root"} (${edge.type})`)
+      .join(", ");
+    throw new LocalInputError(
+      "package-not-locked",
+      `Declared by ${from} but has no locked entry; npm would resolve it at install time, so it is unscreened.`,
+    );
+  }
   if (!result.found)
     throw new LocalInputError(
       "package-not-in-lockfile",
