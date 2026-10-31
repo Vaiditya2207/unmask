@@ -591,3 +591,135 @@ for (const mismatch of [
       /digest/,
     );
   });
+
+test("observed Cloud Run GHCR cache revision preserves the exact original repository and digest", () => {
+  const f = fixture();
+  f.configuration.service = f.service.metadata.name = "unmask";
+  f.context.repository = "Vaiditya2207/unmask";
+  f.context.workflowRef =
+    "Vaiditya2207/unmask/.github/workflows/release.yml@refs/heads/main";
+  f.release.image =
+    "ghcr.io/vaiditya2207/unmask@sha256:4b1f2927e4b9dac24cc1fdf0de54867a4f2ae560a6c1580e0e416d0fcfaea46e";
+  const observed = deployed(f);
+  observed.revision.metadata.name = "unmask-00005-qqs";
+  observed.after.status.latestReadyRevisionName =
+    observed.revision.metadata.name;
+  observed.after.status.traffic[0].revisionName =
+    observed.revision.metadata.name;
+  observed.revision.spec.containers[0].image = `cache.asia-docker.pkg.dev/${f.release.image}`;
+  observed.revision.status.imageDigest =
+    observed.revision.spec.containers[0].image;
+  assert.equal(
+    verifyCloudRunRevision(f.release, observed.revision, f.configuration),
+    "unmask-00005-qqs",
+  );
+  assert.equal(
+    verifyCloudRunDeployment({ ...f, ...observed }).image,
+    f.release.image,
+  );
+});
+
+for (const field of ["spec", "status"])
+  for (const [label, change] of [
+    [
+      "wrong repository",
+      (value) => value.replace("fixture/unmask", "other/unmask"),
+    ],
+    ["wrong digest", (value) => value.replace("c".repeat(64), "e".repeat(64))],
+    [
+      "wrong cache region",
+      (value) => value.replace("cache.asia-", "cache.us-"),
+    ],
+    [
+      "lookalike host",
+      (value) =>
+        value.replace(
+          "cache.asia-docker.pkg.dev/",
+          "cache.asia-docker.pkg.dev.evil.invalid/",
+        ),
+    ],
+    ["extra path", (value) => value.replace("/ghcr.io/", "/another/ghcr.io/")],
+    ["suffix path", (value) => value + "/extra"],
+  ])
+    test(`cache ${field} refuses ${label}`, () => {
+      const f = fixture();
+      const observed = deployed(f);
+      const image = `cache.asia-docker.pkg.dev/${f.release.image}`;
+      observed.revision.spec.containers[0].image =
+        field === "spec" ? change(image) : image;
+      observed.revision.status.imageDigest =
+        field === "status" ? change(image) : image;
+      assert.throws(
+        () =>
+          verifyCloudRunRevision(f.release, observed.revision, f.configuration),
+        /digest/,
+      );
+      assert.throws(
+        () => verifyCloudRunDeployment({ ...f, ...observed }),
+        /digest/,
+      );
+    });
+
+for (const representation of ["index", "resolved leaf"])
+  test(`cache ${representation} retains exact parent/leaf binding`, () => {
+    const f = fixture();
+    f.release.resolvedImageDigest = `ghcr.io/fixture/unmask@sha256:${"d".repeat(64)}`;
+    const observed = deployed(f);
+    observed.revision.spec.containers[0].image = `cache.asia-docker.pkg.dev/${representation === "index" ? f.release.image : f.release.resolvedImageDigest}`;
+    observed.revision.status.imageDigest = `cache.asia-docker.pkg.dev/${f.release.resolvedImageDigest}`;
+    assert.equal(
+      verifyCloudRunRevision(f.release, observed.revision, f.configuration),
+      observed.revision.metadata.name,
+    );
+    assert.equal(
+      verifyCloudRunDeployment({ ...f, ...observed }).resolvedImageDigest,
+      f.release.resolvedImageDigest,
+    );
+  });
+
+test("bare resolved status digest remains bound to the exact revision repository", () => {
+  const f = fixture();
+  const observed = deployed(f);
+  observed.revision.status.imageDigest = f.release.image.split("@")[1];
+  assert.equal(
+    verifyCloudRunRevision(f.release, observed.revision, f.configuration),
+    observed.revision.metadata.name,
+  );
+  assert.equal(
+    verifyCloudRunDeployment({ ...f, ...observed }).image,
+    f.release.image,
+  );
+});
+
+test("resolved digest cannot authorize a different repository", () => {
+  const f = fixture();
+  f.release.resolvedImageDigest = f.release.image.replace(
+    "fixture/unmask",
+    "other/unmask",
+  );
+  const observed = deployed(f);
+  observed.revision.status.imageDigest = f.release.resolvedImageDigest;
+  assert.throws(
+    () => verifyCloudRunRevision(f.release, observed.revision, f.configuration),
+    /digest/,
+  );
+  assert.throws(
+    () => verifyCloudRunDeployment({ ...f, ...observed }),
+    /digest/,
+  );
+});
+
+test("a malformed resolved reference cannot pass through a bare status digest", () => {
+  const f = fixture();
+  f.release.resolvedImageDigest = `${f.release.image}@sha256:${"d".repeat(64)}`;
+  const observed = deployed(f);
+  observed.revision.status.imageDigest = f.release.image.split("@")[1];
+  assert.throws(
+    () => verifyCloudRunRevision(f.release, observed.revision, f.configuration),
+    /digest/,
+  );
+  assert.throws(
+    () => verifyCloudRunDeployment({ ...f, ...observed }),
+    /digest/,
+  );
+});
