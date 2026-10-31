@@ -6,10 +6,15 @@ const MODELS = new Set([
   "gemma-4-31b-it",
   "gemini-3.5-flash",
   "gemini-3.5-flash-lite",
+  "gemini-3-flash-preview",
 ]);
 export const DEFAULT_MODEL_ROUTE = Object.freeze([
   Object.freeze({ modelId: "gemini-3.5-flash", thinkingLevel: "high" }),
-  Object.freeze({ modelId: "gemini-3.5-flash-lite", thinkingLevel: "minimal" }),
+  Object.freeze({
+    modelId: "gemini-3-flash-preview",
+    thinkingLevel: "minimal",
+  }),
+  Object.freeze({ modelId: "gemma-4-26b-a4b-it", thinkingLevel: "minimal" }),
 ]);
 const SCHEMA = "gemma-evidence-2";
 const RESPONSE_BYTES = 65536;
@@ -738,7 +743,7 @@ export function createGemmaClient(options = {}) {
   if (
     !Array.isArray(requestedRoute) ||
     !requestedRoute.length ||
-    requestedRoute.length > 2 ||
+    requestedRoute.length > 3 ||
     requestedRoute.some(
       (item) =>
         !exactKeys(item, ["modelId", "thinkingLevel"]) ||
@@ -761,7 +766,7 @@ export function createGemmaClient(options = {}) {
   const inputLimit = options.maxInputTokens ?? 4000;
   const outputLimit = options.maxOutputTokens ?? 1000;
   const attemptMs = options.attemptMs ?? 45000;
-  const totalMs = options.totalMs ?? 90000;
+  const totalMs = options.totalMs ?? 135000;
   if (
     !positive(inputLimit) ||
     inputLimit > 4000 ||
@@ -770,7 +775,7 @@ export function createGemmaClient(options = {}) {
     !positive(attemptMs) ||
     attemptMs > 45000 ||
     !positive(totalMs) ||
-    totalMs > 90000
+    totalMs > 135000
   )
     throw new TypeError("Invalid model resource limits");
   const route = selectedRoute.map((tier) => ({
@@ -785,7 +790,7 @@ export function createGemmaClient(options = {}) {
   const generationConfig = route[0].generationConfig;
   const routingPolicy = {
     version: "ordered-fallback-1",
-    maxGenerationAttempts: 2,
+    maxGenerationAttempts: Math.max(2, route.length),
     fallthrough: ["model-scoped-429", "transient-5xx", "timeout"],
     invalidOutputRetry: "same-tier",
   };
@@ -1016,7 +1021,11 @@ export function createGemmaClient(options = {}) {
       signal?.addEventListener("abort", onAbort, { once: true });
       if (signal?.aborted) onAbort();
       try {
-        for (let attempt = 0; attempt < 2; attempt++) {
+        for (
+          let attempt = 0;
+          attempt < routingPolicy.maxGenerationAttempts;
+          attempt++
+        ) {
           if (signal?.aborted) return unavailable("cancelled");
           const remaining = deadline - now();
           if (remaining <= 0) return unavailable("timeout");
@@ -1194,7 +1203,11 @@ export function createGemmaClient(options = {}) {
             clearTimeout(timer);
             controller.abort();
           }
-          if (attempt === 1 || !failed.retry) return unavailable(failed.reason);
+          if (
+            attempt === routingPolicy.maxGenerationAttempts - 1 ||
+            !failed.retry
+          )
+            return unavailable(failed.reason);
           nextTier =
             failed.fallback && tierIndex + 1 < route.length
               ? tierIndex + 1

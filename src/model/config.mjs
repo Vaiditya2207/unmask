@@ -58,11 +58,11 @@ export async function modelClientFromEnv(env = process.env) {
           localLimits: {
             generationsPerMinute: quota(
               "UNMASK_MODEL_GENERATIONS_PER_MINUTE",
-              "2",
+              "3",
             ),
             inputTokensPerMinute: quota(
               "UNMASK_MODEL_INPUT_TOKENS_PER_MINUTE",
-              "8000",
+              "12000",
             ),
             generationsPerDay: quota("UNMASK_MODEL_GENERATIONS_PER_DAY", "100"),
           },
