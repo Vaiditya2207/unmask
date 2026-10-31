@@ -1,6 +1,13 @@
 import { parse } from "acorn";
 import { createHash } from "node:crypto";
 import { validateReport } from "./report.mjs";
+import {
+  BEHAVIOR_LIMITS,
+  javascriptSignal,
+  manifestScriptSpans,
+  scriptSignals,
+  summaryFor,
+} from "./behavior-signals.mjs";
 
 export const SYNTAX_LIMITS = Object.freeze({
   fileBytes: 2097152,
@@ -144,7 +151,82 @@ export function inspectJavaScript(artifact, source, overrides = {}) {
   const literals = new Map(),
     candidates = [],
     evidence = new Map();
-  let sourceLiteralTruncated = false;
+  let sourceLiteralTruncated = false,
+    syntaxCount = 0;
+  const hookTargets = new Map();
+  const behaviorUse = { review: 0, HIGH: 0, perFileRule: new Map() };
+  const admitBehavior = (priority, path, ruleId) => {
+    const key = `${path}\0${ruleId}`;
+    const used = behaviorUse.perFileRule.get(key) || 0;
+    const tier = priority === "HIGH" ? "HIGH" : "review";
+    const cap =
+      tier === "HIGH" ? BEHAVIOR_LIMITS.highCues : BEHAVIOR_LIMITS.reviewCues;
+    if (
+      used >= 0 &&
+      behaviorUse[tier] < cap &&
+      (tier === "HIGH" || used < BEHAVIOR_LIMITS.reviewCuesPerFileRule)
+    ) {
+      behaviorUse[tier]++;
+      behaviorUse.perFileRule.set(key, used + 1);
+      return true;
+    }
+    if (used !== -1) {
+      behaviorUse.perFileRule.set(key, -1);
+      result.annotations.push({
+        type: "behavior-not-inspected",
+        side: "artifact",
+        path,
+        ruleId,
+        reason: "behavior-cue-cap",
+      });
+    }
+    return false;
+  };
+  const manifest = (artifact?.entries || []).find(
+    (entry) => entry.type === "file" && entry.path === "package.json",
+  );
+  let behaviorManifest = { status: "not-assessed", reason: "not-retained" };
+  if (Buffer.isBuffer(manifest?.content))
+    try {
+      const text = new TextDecoder("utf-8", {
+        fatal: true,
+        ignoreBOM: true,
+      }).decode(manifest.content);
+      const positions = offsets(text);
+      const parsed = manifestScriptSpans(text);
+      behaviorManifest = parsed.reason
+        ? { status: parsed.status, reason: parsed.reason }
+        : { status: parsed.status };
+      for (const item of parsed.hooks) {
+        const assessed = scriptSignals(item.script);
+        if (assessed.status !== "assessed")
+          result.annotations.push({
+            type: "behavior-not-inspected",
+            side: "artifact",
+            path: manifest.path,
+            hook: item.hook,
+            reason: assessed.reason,
+          });
+        for (const target of assessed.targets || [])
+          hookTargets.set(target, [
+            ...new Set([...(hookTargets.get(target) || []), item.hook]),
+          ]);
+        for (const { ruleId, priority, ...signal } of assessed.signals)
+          if (admitBehavior(priority, manifest.path, ruleId))
+            candidates.push({
+              behavior: { ruleId, priority, hook: item.hook, ...signal },
+              evidence: evidenceFor(
+                "artifact",
+                artifact,
+                manifest,
+                item,
+                positions,
+              ),
+            });
+      }
+    } catch {
+      behaviorManifest = { status: "not-assessed", reason: "invalid-utf8" };
+    }
   for (const [side, inventory] of [
     ["artifact", artifact],
     ["source", source],
@@ -236,20 +318,39 @@ export function inspectJavaScript(artifact, source, overrides = {}) {
           continue;
         }
         const kind = capability(node);
-        if (!kind) continue;
-        if (candidates.length >= limits.cues) {
+        const signal = javascriptSignal(node);
+        if (!kind && !signal) continue;
+        if (kind && syntaxCount >= limits.cues) {
           skip("syntax-cue-cap");
           break;
         }
-        candidates.push({
-          kind,
-          evidence: evidenceFor(side, inventory, entry, node, positions),
-          literal:
-            node.arguments?.[0]?.type === "Literal" &&
-            typeof node.arguments[0].value === "string"
-              ? node.arguments[0].value
-              : null,
-        });
+        const hooks = hookTargets.get(entry.path);
+        syntaxCount += kind ? 1 : 0;
+        if (kind)
+          candidates.push({
+            kind,
+            hooks,
+            evidence: evidenceFor(side, inventory, entry, node, positions),
+            literal:
+              node.arguments?.[0]?.type === "Literal" &&
+              typeof node.arguments[0].value === "string"
+                ? node.arguments[0].value
+                : null,
+          });
+        if (signal && admitBehavior("review", entry.path, signal.ruleId)) {
+          const { ruleId, at, ...detail } = signal;
+          candidates.push({
+            behavior: { ruleId, priority: "review", ...detail },
+            hooks,
+            evidence: evidenceFor(
+              side,
+              inventory,
+              entry,
+              at || node,
+              positions,
+            ),
+          });
+        }
       }
     }
   }
@@ -265,6 +366,23 @@ export function inspectJavaScript(artifact, source, overrides = {}) {
   for (const candidate of candidates) {
     const ids = [candidate.evidence.id];
     evidence.set(candidate.evidence.id, candidate.evidence);
+    const hookTarget = candidate.hooks
+      ? { installHookTarget: candidate.hooks }
+      : {};
+    if (candidate.behavior) {
+      const { ruleId, priority, ...signal } = candidate.behavior;
+      result.cues.push({
+        module: "behavior",
+        ruleId,
+        priority,
+        summary: summaryFor(ruleId),
+        confidence: "suspicion-not-proof",
+        signal,
+        ...hookTarget,
+        evidenceIds: ids,
+      });
+      continue;
+    }
     const match = candidate.literal !== null && literals.get(candidate.literal);
     if (match) {
       evidence.set(match.id, match);
@@ -291,10 +409,18 @@ export function inspectJavaScript(artifact, source, overrides = {}) {
                 ? "not-assessed"
                 : "not-found-in-inspected-source"
               : "source-unavailable",
+      ...hookTarget,
       evidenceIds: ids,
     });
   }
   result.evidence = [...evidence.values()];
+  result.annotations.push({
+    type: "behavior-scope",
+    manifest: behaviorManifest,
+    limits: { ...BEHAVIOR_LIMITS },
+    limitation:
+      "Behavior cues are static text and syntax suspicions, not proof of execution or intent. Install hooks and package code were not run; aliases, computed names and runtime-constructed paths are not resolved.",
+  });
   result.annotations.push({
     type: "syntax-scope",
     parser: "acorn@8.19.0",
