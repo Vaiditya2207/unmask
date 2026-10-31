@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { buildPackageDetails } from "../core/package-details.mjs";
+import { attachVulnerabilityCheck } from "./enrichment.mjs";
 import { createQueue, resolveLimits, systemClock } from "./queue.mjs";
 import { createReportStore } from "./store.mjs";
 import { renderReport } from "../viewer/render.mjs";
@@ -100,6 +101,7 @@ export function createCacheKeyPrefix(versionInfo, limits) {
 
 export function createApp({
   runAnalysis,
+  enrichJob,
   versionInfo,
   limits: overrides,
   clock = systemClock,
@@ -115,6 +117,8 @@ export function createApp({
     throw new TypeError(
       "versionInfo requires version, commit and tarballSha256 strings",
     );
+  if (enrichJob !== undefined && typeof enrichJob !== "function")
+    throw new TypeError("enrichJob must be a function");
   const limits = resolveLimits(overrides);
   const version = Object.fromEntries(
     ["version", "commit", "tarballSha256"].map((key) => [
@@ -129,7 +133,14 @@ export function createApp({
     clock,
   });
   const keyPrefix = createCacheKeyPrefix(versionInfo, limits);
-  const queue = createQueue({ runAnalysis, store, limits, clock, keyPrefix });
+  const queue = createQueue({
+    runAnalysis,
+    enrichJob,
+    store,
+    limits,
+    clock,
+    keyPrefix,
+  });
   const server = createServer(
     { maxHeaderSize: 8192, headersTimeout: 10000, requestTimeout: 15000 },
     (req, res) => {
@@ -271,7 +282,10 @@ export function createApp({
             return json(
               200,
               match[2] === ".details.json"
-                ? buildPackageDetails(job.report)
+                ? attachVulnerabilityCheck(
+                    buildPackageDetails(job.report),
+                    job.vulnerabilityCheck,
+                  )
                 : job.report,
               {
                 "content-disposition":

@@ -1,4 +1,8 @@
 import { randomBytes } from "node:crypto";
+import {
+  boundedVulnerabilityCheck,
+  unavailableVulnerabilityCheck,
+} from "./enrichment.mjs";
 
 export const DEFAULT_LIMITS = Object.freeze({
   maxBodyBytes: 4096,
@@ -28,6 +32,7 @@ export function resolveLimits(overrides = {}) {
 
 export function createQueue({
   runAnalysis,
+  enrichJob,
   store,
   limits,
   clock = systemClock,
@@ -39,7 +44,20 @@ export function createQueue({
   let admissions = [];
   function persist(job) {
     if (!store.put(job)) {
-      const { report, ...small } = job;
+      if (
+        job.report &&
+        job.vulnerabilityCheck &&
+        store.put({
+          ...job,
+          vulnerabilityCheck: unavailableVulnerabilityCheck(
+            job.nameAtExactVersion,
+            clock,
+            "storage-byte-cap",
+          ),
+        })
+      )
+        return;
+      const { report, vulnerabilityCheck, ...small } = job;
       store.put({ ...small, status: "incomplete", reason: "report-too-large" });
     }
   }
@@ -61,12 +79,26 @@ export function createQueue({
     job.status = "running";
     job.startedAt = clock.now();
     const controller = new AbortController();
+    let coreReport;
     const timer = clock.setTimeout(() => {
-      job.status = "incomplete";
-      job.reason = "execution-timeout";
       job.finishedAt = clock.now();
+      if (coreReport) {
+        job.status = coreReport.policy.exitCode === 2 ? "incomplete" : "done";
+        persist({
+          ...publicJob(job),
+          report: coreReport,
+          vulnerabilityCheck: unavailableVulnerabilityCheck(
+            job.nameAtExactVersion,
+            clock,
+            "aborted",
+          ),
+        });
+      } else {
+        job.status = "incomplete";
+        job.reason = "execution-timeout";
+        persist(job);
+      }
       controller.abort();
-      persist(job);
     }, limits.executionMs);
     timer?.unref?.();
     job.cancel = () => {
@@ -77,7 +109,7 @@ export function createQueue({
       .then(() =>
         runAnalysis(job.nameAtExactVersion, { signal: controller.signal }),
       )
-      .then((report) => {
+      .then(async (report) => {
         if (job.status !== "running" || closed) return;
         if (
           !report ||
@@ -86,9 +118,56 @@ export function createQueue({
           ![0, 2, 3].includes(report.policy?.exitCode)
         )
           throw new TypeError("Invalid report");
+        coreReport = report;
+        let vulnerabilityCheck;
+        if (enrichJob) {
+          let abort;
+          const interrupted = new Promise((resolve) => {
+            abort = () =>
+              resolve(
+                unavailableVulnerabilityCheck(
+                  job.nameAtExactVersion,
+                  clock,
+                  "aborted",
+                ),
+              );
+            controller.signal.addEventListener("abort", abort, { once: true });
+            if (controller.signal.aborted) abort();
+          });
+          try {
+            const value = await Promise.race([
+              Promise.resolve().then(() =>
+                enrichJob(job.nameAtExactVersion, {
+                  signal: controller.signal,
+                }),
+              ),
+              interrupted,
+            ]);
+            vulnerabilityCheck = boundedVulnerabilityCheck(
+              value,
+              job.nameAtExactVersion,
+              clock,
+            );
+          } catch {
+            vulnerabilityCheck = unavailableVulnerabilityCheck(
+              job.nameAtExactVersion,
+              clock,
+              "lookup-failed",
+            );
+          } finally {
+            controller.signal.removeEventListener("abort", abort);
+          }
+        }
+        if (job.status !== "running" || closed) return;
         const status = report.policy.exitCode === 2 ? "incomplete" : "done";
         const finishedAt = clock.now();
-        persist({ ...publicJob(job), status, report, finishedAt });
+        persist({
+          ...publicJob(job),
+          status,
+          report,
+          finishedAt,
+          ...(vulnerabilityCheck ? { vulnerabilityCheck } : {}),
+        });
         job.status = status;
         job.finishedAt = finishedAt;
       })
