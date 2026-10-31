@@ -171,6 +171,14 @@ test("per-command help shows usage or unavailability and rejects unknown names",
     const out = capture();
     assert.equal(await main(["help", item.name], { stdout: out }), 0);
     if (!item.available) assert.match(out.text(), /Not included in this build/);
+    else assert.match(out.text(), /\nUsage:\n {2}unmask /);
+    const direct = capture();
+    assert.equal(
+      await main([item.name, "--help"], { stdout: direct }),
+      0,
+      `${item.name} --help must reach help before the command dispatch`,
+    );
+    assert.equal(direct.text(), out.text());
   }
   for (const args of [
     ["help", "nope"],
