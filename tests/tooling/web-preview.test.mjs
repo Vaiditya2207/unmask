@@ -861,6 +861,39 @@ test("real GitHub wrapper permits only exact SHA-bound package content for pinne
   assert.equal(calls.length, 2);
 });
 
+test("GitHub reads recover once from a closed socket but preserve access and validation failures", async () => {
+  const { githubAPI } = await import("../../scripts/web-preview.mjs");
+  let calls = 0;
+  const socketFailure = () =>
+    new TypeError("fetch failed", { cause: { code: "UND_ERR_SOCKET" } });
+  const api = githubAPI({
+    token: "synthetic",
+    fetchImpl: async () => {
+      if (++calls === 1) throw socketFailure();
+      return Response.json({ state: "open" });
+    },
+  });
+  assert.deepEqual(await api("/repos/Vaiditya2207/unmask/pulls/17"), {
+    state: "open",
+  });
+  assert.equal(calls, 2);
+  for (const failure of ["socket", "forbidden", "malformed"]) {
+    calls = 0;
+    const failing = githubAPI({
+      token: "synthetic",
+      fetchImpl: async () => {
+        calls++;
+        if (failure === "socket") throw socketFailure();
+        return failure === "forbidden"
+          ? new Response("denied", { status: 403 })
+          : new Response("malformed");
+      },
+    });
+    await assert.rejects(failing("/repos/Vaiditya2207/unmask/pulls/17"));
+    assert.equal(calls, failure === "socket" ? 2 : 1);
+  }
+});
+
 test("containerd Docker saves bind OCI index, amd64 manifest, config and layer digests", async (t) => {
   const { validateArtifact } = await import("../../scripts/web-preview.mjs");
   const { writeFile } = await import("node:fs/promises");
