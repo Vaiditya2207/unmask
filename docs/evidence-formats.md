@@ -124,7 +124,7 @@ Advisory snapshots are queried for the requested identity. When the identity con
 
 ## Partial advisory results
 
-An OSV snapshot has a `status`: `found`, `none-reported`, `incomplete`, `unavailable` or `not-assessed`. Only `found` and `none-reported` are complete. An `incomplete` snapshot can still carry the advisories it did retrieve, for example after a page cap. In the `conflict-partial` SARIF example (commit ff1afb0):
+An OSV snapshot has a `status`: `found`, `none-reported`, `incomplete`, `unavailable` or `not-assessed`. Only `found` and `none-reported` are complete. An `incomplete` snapshot can still carry the advisories it did retrieve, for example after reaching its page limit (reason `page-limit`). In the `conflict-partial` SARIF example (commit ff1afb0):
 
 - `GHSA-0000-0000-0001`, whose only `MAL-` identifier is an alias, is reported as `advisory/known-malware` (error) with `properties.malwareIdentifier: "MAL-0000-0001"`.
 - The withdrawn `MAL-0000-0002` is reported as `advisory/withdrawn` (note), and annotations do not raise the exit code for it.

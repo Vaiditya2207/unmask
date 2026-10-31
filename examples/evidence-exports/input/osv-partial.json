@@ -10,7 +10,7 @@
   "status": "incomplete",
   "complete": false,
   "reasons": [
-    "page-cap"
+    "page-limit"
   ],
   "advisories": [
     {
