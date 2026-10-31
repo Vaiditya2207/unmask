@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { guardDecisionResponse } from "./guard-decision.mjs";
 import { buildPackageDetails } from "../core/package-details.mjs";
 import { attachVulnerabilityCheck } from "./enrichment.mjs";
 import { createQueue, resolveLimits, systemClock } from "./queue.mjs";
@@ -249,6 +250,15 @@ export function createApp({
             location: `/r/${result.job.id}`,
             "x-unmask-reused": String(result.reused),
           });
+        }
+        const decisionMatch = /^\/r\/([a-f0-9]{32})\.decision\.json$/.exec(
+          path,
+        );
+        if (decisionMatch) {
+          if (req.method !== "GET")
+            return json(405, { error: "method-unavailable" }, { allow: "GET" });
+          const result = guardDecisionResponse(queue.get(decisionMatch[1]));
+          return json(result.status, result.body, result.headers);
         }
         if (req.method !== "GET")
           return error(

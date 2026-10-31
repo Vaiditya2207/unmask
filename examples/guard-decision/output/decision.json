@@ -1,0 +1,52 @@
+{
+  "decisionVersion": "1",
+  "policyVersion": "guard-1",
+  "profile": "balanced",
+  "package": {
+    "ecosystem": "npm",
+    "name": "synthetic-example",
+    "version": "1.2.3"
+  },
+  "decision": "block",
+  "permitted": false,
+  "enforcement": "enforce",
+  "reasons": [
+    {
+      "code": "report-unavailable"
+    },
+    {
+      "code": "artifact-assessment-incomplete"
+    },
+    {
+      "code": "source-assessment-incomplete"
+    },
+    {
+      "code": "advisory-assessment-incomplete"
+    },
+    {
+      "code": "known-malware",
+      "advisoryId": "MAL-2026-1234",
+      "aliases": []
+    }
+  ],
+  "knownMalware": [
+    {
+      "id": "MAL-2026-1234",
+      "aliases": []
+    }
+  ],
+  "policyExitCode": null,
+  "assessment": {
+    "complete": false,
+    "artifactComplete": false,
+    "sourceComplete": false,
+    "advisoriesComplete": false,
+    "modelStatus": "unavailable",
+    "modelComplete": false
+  },
+  "limitations": [
+    "Allow means this bounded static assessment found no policy blocker; it is not a safety guarantee.",
+    "Assessment completeness covers the recorded artifact, source comparison and exact-version OSV lookup; model availability is reported separately and AI signals cannot permit or block installation.",
+    "Package execution, transitive dependencies, freshness after this check and future registry changes are not assessed."
+  ]
+}
