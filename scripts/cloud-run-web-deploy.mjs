@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -70,6 +71,7 @@ function fingerprint(service) {
       "serving.knative.dev/lastModifier",
     ])
       delete annotations[key];
+  delete copy.annotations["run.googleapis.com/urls"];
   if (copy.template?.metadata?.labels)
     delete copy.template.metadata.labels["client.knative.dev/nonce"];
   for (const c of copy.template?.spec?.containers ?? []) delete c.image;
@@ -326,6 +328,54 @@ export async function deployWeb({
     throw new Error(
       "Resolved GAR digest is not the exact locally built and pushed web image",
     );
+  const raw = command("docker", [
+    "buildx",
+    "imagetools",
+    "inspect",
+    "--raw",
+    image,
+  ]);
+  const manifestBytes = [raw, raw.replace(/\n$/, "")].find(
+    (value) =>
+      `sha256:${createHash("sha256").update(value).digest("hex")}` === digest,
+  );
+  if (manifestBytes === undefined)
+    throw new Error("Pushed web manifest bytes do not match the GAR digest");
+  let manifest;
+  try {
+    manifest = JSON.parse(manifestBytes);
+  } catch {
+    throw new Error("Pushed web manifest is not valid JSON");
+  }
+  const imageTypes = [
+    "application/vnd.oci.image.manifest.v1+json",
+    "application/vnd.docker.distribution.manifest.v2+json",
+  ];
+  const indexTypes = [
+    "application/vnd.oci.image.index.v1+json",
+    "application/vnd.docker.distribution.manifest.list.v2+json",
+  ];
+  let resolvedDigest = digest;
+  if (manifest.schemaVersion !== 2)
+    throw new Error("Unsupported web manifest schema");
+  if (indexTypes.includes(manifest.mediaType)) {
+    const children = Array.isArray(manifest.manifests)
+      ? manifest.manifests.filter(
+          (item) =>
+            item.platform?.os === "linux" &&
+            item.platform?.architecture === "amd64",
+        )
+      : [];
+    if (
+      children.length !== 1 ||
+      !imageTypes.includes(children[0].mediaType) ||
+      !digestPattern.test(children[0].digest ?? "")
+    )
+      throw new Error("Web index must bind exactly one Linux AMD64 image");
+    resolvedDigest = children[0].digest;
+  } else if (!imageTypes.includes(manifest.mediaType))
+    throw new Error("Unsupported web manifest media type");
+  const resolvedImageDigest = `${repository}@${resolvedDigest}`;
   const suffix = ["--project", project, "--region", region, "--format=json"];
   const describe = () =>
     json(["run", "services", "describe", serviceName, ...suffix]);
@@ -398,7 +448,7 @@ export async function deployWeb({
         !isReady(revision) ||
         revision.metadata?.name !== revisionName ||
         revision.spec?.containers?.[0]?.image !== image ||
-        revision.status.imageDigest?.split("@").at(-1) !== digest
+        revision.status.imageDigest?.split("@").at(-1) !== resolvedDigest
       )
         return false;
       assertRuntime(revision.spec);
@@ -507,6 +557,7 @@ export async function deployWeb({
     commit: input.commit,
     version: input.version,
     image,
+    resolvedImageDigest,
     revision: revisionName,
     url: publicURL,
     status: "verified",

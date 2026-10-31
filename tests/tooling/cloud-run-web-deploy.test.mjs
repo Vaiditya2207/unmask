@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import {
@@ -8,7 +9,13 @@ import {
 } from "../../scripts/cloud-run-web-deploy.mjs";
 
 const sha = "a".repeat(40);
-const digest = `sha256:${"d".repeat(64)}`;
+const manifest = JSON.stringify({
+  schemaVersion: 2,
+  mediaType: "application/vnd.oci.image.manifest.v1+json",
+  config: { digest: `sha256:${"d".repeat(64)}`, size: 2 },
+  layers: [],
+});
+const digest = `sha256:${createHash("sha256").update(manifest).digest("hex")}`;
 const image = `asia-south1-docker.pkg.dev/unmask-513319/unmask/web@${digest}`;
 const origin = "https://unmask-web-386156642190.asia-south1.run.app";
 const tag = `web-${sha.slice(0, 12)}-123`;
@@ -93,6 +100,7 @@ function fixture() {
       calls.push({ command, args });
       if (command === "git") return args[0] === "status" ? "" : sha;
       if (command === "docker") {
+        if (args.includes("imagetools")) return manifest + "\n";
         if (args.includes("inspect"))
           return JSON.stringify([
             {
@@ -538,3 +546,139 @@ test("malformed Docker inspection output is sanitized before any push", async ()
   );
   assert.ok(!f.calls.some((c) => c.args.includes("push")));
 });
+
+test("controller URL annotation changes during candidate tagging do not imply runtime drift", async () => {
+  const f = fixture(),
+    original = f.execute;
+  f.current.metadata.annotations["run.googleapis.com/urls"] = JSON.stringify([
+    origin,
+  ]);
+  const result = await run(f, {
+    execute: (binary, args) => {
+      const text = original(binary, args);
+      if (args.includes("update")) {
+        f.current.metadata.annotations["run.googleapis.com/urls"] =
+          JSON.stringify([origin, candidate]);
+        return JSON.stringify(f.current);
+      }
+      if (args.includes("update-traffic")) {
+        f.current.metadata.annotations["run.googleapis.com/urls"] =
+          JSON.stringify([origin]);
+        return JSON.stringify(f.current);
+      }
+      return text;
+    },
+  });
+  assert.equal(result.status, "verified");
+});
+
+test("real runtime annotation drift still prevents candidate promotion", async () => {
+  const f = fixture();
+  await assert.rejects(
+    run(f, {
+      smoke: async () => {
+        f.current.metadata.annotations["run.googleapis.com/ingress"] =
+          "internal";
+        return {};
+      },
+    }),
+  );
+  assert.ok(!f.calls.some((c) => c.args.includes("update-traffic")));
+});
+
+test("an OCI index pins its root image and verifies the exact Linux AMD64 serving leaf", async () => {
+  const f = fixture(),
+    original = f.execute;
+  const leaf = `sha256:${"e".repeat(64)}`;
+  const raw = JSON.stringify({
+    schemaVersion: 2,
+    mediaType: "application/vnd.oci.image.index.v1+json",
+    manifests: [
+      {
+        mediaType: "application/vnd.oci.image.manifest.v1+json",
+        platform: { os: "linux", architecture: "amd64" },
+        digest: leaf,
+      },
+      {
+        platform: { os: "unknown", architecture: "unknown" },
+        digest: `sha256:${"b".repeat(64)}`,
+      },
+    ],
+  });
+  const indexDigest = `sha256:${createHash("sha256").update(raw).digest("hex")}`;
+  const indexImage = image.replace(digest, indexDigest);
+  const result = await run(f, {
+    execute: (binary, args) => {
+      if (binary === "docker" && args.includes("imagetools")) return raw + "\n";
+      const text = original(binary, args);
+      if (binary === "docker" && args.includes("inspect")) {
+        const value = JSON.parse(text);
+        value[0].RepoDigests = [indexImage];
+        return JSON.stringify(value);
+      }
+      if (args.includes("artifacts"))
+        return JSON.stringify({ image_summary: { digest: indexDigest } });
+      if (args.includes("update")) {
+        f.current.spec.template.spec.containers[0].image = indexImage;
+        return JSON.stringify(f.current);
+      }
+      if (args.includes("revisions")) {
+        const revision = JSON.parse(text);
+        revision.status.imageDigest = image.replace(digest, leaf);
+        return JSON.stringify(revision);
+      }
+      return text;
+    },
+  });
+  assert.equal(result.image, indexImage);
+  assert.equal(result.resolvedImageDigest, image.replace(digest, leaf));
+});
+
+for (const kind of ["digest-mismatch", "ambiguous-amd64", "missing-amd64"]) {
+  test(`untrusted ${kind} manifest cannot reach Cloud Run mutation`, async () => {
+    const f = fixture(),
+      original = f.execute;
+    const descriptor = {
+      mediaType: "application/vnd.oci.image.manifest.v1+json",
+      platform: {
+        os: "linux",
+        architecture: kind === "missing-amd64" ? "arm64" : "amd64",
+      },
+      digest: `sha256:${"e".repeat(64)}`,
+    };
+    const raw =
+      kind === "digest-mismatch"
+        ? manifest
+        : JSON.stringify({
+            schemaVersion: 2,
+            mediaType: "application/vnd.oci.image.index.v1+json",
+            manifests:
+              kind === "ambiguous-amd64"
+                ? [
+                    descriptor,
+                    { ...descriptor, digest: `sha256:${"f".repeat(64)}` },
+                  ]
+                : [descriptor],
+          });
+    const indexDigest = `sha256:${createHash("sha256").update(raw).digest("hex")}`;
+    const indexImage = image.replace(digest, indexDigest);
+    await assert.rejects(
+      run(f, {
+        execute: (binary, args) => {
+          if (binary === "docker" && args.includes("imagetools"))
+            return kind === "digest-mismatch" ? raw + "tampered" : raw;
+          const text = original(binary, args);
+          if (binary === "docker" && args.includes("inspect")) {
+            const value = JSON.parse(text);
+            value[0].RepoDigests = [indexImage];
+            return JSON.stringify(value);
+          }
+          if (args.includes("artifacts"))
+            return JSON.stringify({ image_summary: { digest: indexDigest } });
+          return text;
+        },
+      }),
+    );
+    assert.ok(!f.calls.some((c) => c.args.includes("update")));
+  });
+}
