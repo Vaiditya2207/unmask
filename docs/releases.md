@@ -1,187 +1,208 @@
 # CI, releases and manual deployment
 
-The repository currently has **tooling tests, not an analyzer or server**.
-`release.config.json` keeps publishing disabled, npm remains private at `0.0.0`,
-and the release workflow skips publication. A green Repository checks job means
-formatting, release-policy tests and npm archive checks passed. It does not mean
-the website, package analysis, model integration or deployment works.
+The repository now contains a CLI, HTTP server and website. Publication remains
+closed: `private: true`, version `0.0.0` and `release.config.json.enabled: false`
+are intentional gates. Passing local tests does not establish a working image,
+hosted model or deployment. No release, registry package or image was published
+while implementing this flow. The Docker adapter is runtime-unverified because
+no Docker daemon was available.
 
-## Checks on every branch and PR
+## Local distribution checks
 
-Use the exact Node version in `.nvmrc` (24.22.2):
+Use Node 24.22.2 from `.nvmrc` and the checked-in lockfile:
 
 ```bash
 npm ci --ignore-scripts
 npm run check
+npm run build
 npm test
-npm run check:package
-npm run release:readiness
+node scripts/check-package.mjs --build
+node scripts/release-readiness.mjs --report
 ```
 
-The last command intentionally exits nonzero for the scaffold. CI prints its blockers and skips product publishing without claiming product
-readiness. Once publishing is enabled, incomplete prerequisites fail checks and
-the configured product tests/build become required. Read-only PR and branch CI
-also builds the configured Linux AMD64 image locally, then passes that exact
-image and the real npm tarball to `test:release`. It checks the original image ID
-and archive digest again after smoke. Build or smoke failure fails the required
-Repository checks job; there is no registry login, push or secret access in this
-path. Product smoke must therefore work without fork secrets or fail closed. Tests exercise actual
-release planning, collision refusal, failed checks, archive digests, packaging
-exclusions and the disabled publishing entrypoints. Packaging tests run real
-`npm pack --ignore-scripts` and inspect the resulting tar archive. They do not
-publish anything or execute a packed package. Candidate-orchestration tests
-use actual npm tarballs with simulated Docker/smoke process adapters, covering
-build/smoke failure propagation and changed archive/image identity. Those tests
-do not establish a working Dockerfile or product runtime.
+`check-package.mjs` requires declared `bin` entrypoints by default. Missing or
+stale `dist/` fails; `--build` explicitly rebuilds before packing. The build copies
+all supported product modules, removes previous output and records each module's
+size and SHA-256. Its source hash includes every product module, package metadata,
+the lockfile, build script and Node pin. Unsupported source formats fail closed
+instead of being omitted. Adding TypeScript or assets requires updating this
+build contract first.
 
-PR and branch checks have only `contents: read`, use commit-pinned actions, and
-install with `npm ci --ignore-scripts`. There is no `pull_request_target` or PR
-secret access. Configure GitHub branch protection separately to require
-`Repository checks`; workflow files do not establish repository protection.
+Packing verifies actual output bytes against the source inventory and build
+manifest, then checks those same bytes inside the real `npm pack --ignore-scripts`
+archive. The package allowlist admits built distribution files and public metadata,
+not source, tests, scripts or research. Dirty local builds are diagnostic and use
+`commit: unknown`; release candidates require a clean checkout, full expected SHA
+and matching build commit. Changing source, package or lock bytes invalidates an
+existing build.
 
-## Initial artifact tooling coverage
+The distribution test installs the real archive outside the checkout and runs its
+CLI on inert local archives. The release smoke additionally verifies a planted
+lifecycle-script difference produces the expected review finding and exit code 3.
+Target package lifecycle scripts are never run. These checks do not call a model.
 
-The standalone tooling slice adds `node scripts/check-toolchain.mjs` to PR and
-push checks. It requires the running Node version, `.nvmrc`, package engines and
-lock engines to agree; direct dependencies must use exact numeric versions and
-match the lock. Registry origins and SHA-512 lock integrity records are checked
-without reading credentials. `npm ci --ignore-scripts` verifies downloaded bytes
-against that lock. Shared checks also syntax-check every tooling module and have
-no npm, model or deployment secret references.
+## Checks on branches and PRs
 
-Build, freshness and isolated-context helpers are tested using temporary inert
-package fixtures and actual `npm pack --ignore-scripts` archives. They reject
-missing declared CLI builds, stale source/package/lock bytes, changed output,
-wrong or dirty release SHA and replaced archive/context/image identity. Contexts
-contain only the exact tarball, package metadata, matching lock, Dockerfile,
-ignore file and digest manifest, with no source or independent `dist/` copy.
-The fixture process adapters simulate Docker and smoke outcomes; no application,
-container image or live runtime acceptance is claimed by these tooling tests.
+Repository checks install locked dependencies without lifecycle scripts, check
+formatting, explicitly build before artifact tests, run product/tooling tests and
+inspect the packed distribution. With publishing disabled, readiness prints its
+blockers and product publication remains skipped. Configure branch protection
+separately to require `Repository checks`.
 
-There is still no actual product build or Dockerfile in this initial slice.
-Scaffold package checks continue to work without fabricated product entrypoints.
-Build and image smoke remain conditional on configured readiness. Later product
-integration must wire its real build, exact-context Dockerfile and real installed
-CLI/HTTP smoke before opening the gate. The full candidate adapter and runtime
-smoke remain a separate implementation. Keep all publishing gates disabled.
+Once configured readiness is true, PR and push checks also build the candidate's
+Linux AMD64 image and run `test:release` against its exact tarball and image. These
+jobs have only `contents: read`, commit-pinned actions and no registry login, push
+or secrets. There is no `pull_request_target`. Build or smoke failure fails the
+checks before a main publication attempt. Smoke therefore needs to work without
+fork secrets. Docker orchestration tests use fake process adapters; HTTP contract
+tests use a recorded transport. Neither establishes live image acceptance.
 
-## Prerequisites to open the release gate
+## Exact artifact image and smoke contract
 
-These are future product implementation requirements, not supplied application
-code. Complete them in reviewed changes before setting `enabled: true`:
+Candidate construction first verifies a fresh build at the clean expected SHA,
+then packs the actual product. It stages six files in a private temporary context:
+`artifact.tgz`, its extracted `package.json`, the matching root `package-lock.json`,
+`Dockerfile`, `.dockerignore` and digest-bound `candidate.json`. Repository source,
+separate `dist/`, credentials and unrelated files are absent. Context contents and
+hashes are checked before and after image construction and cleaned on failure.
 
-- Obtain the authorized npm name/account/scope. Set `approvedPackageName` to that
-  exact package name, supply public npm `publishConfig`, `bin.unmask`, a stable
-  positive version and `private: false`. Keep the lockfile identity/version in
-  sync. Merely removing `private` does not authorize publication.
-- Implement real CLI, HTTP server and website source. List at least three
-  distinct real source files in `sourceFiles`. Set `cli`, `server` and `web` to
-  the actual nonempty built files under `dist/`. All three must be present in
-  the npm archive; this foundation uses a single built distribution.
-- Add meaningful product tests under `productTestDirectory`, with `.test` or
-  `.spec` filenames. Add actual `build`, `test:product` and `test:release`
-  commands. No no-op commands or generated placeholder applications qualify.
-- Supply a real Dockerfile named by `dockerfile`. It must consume the **exact
-  CI-produced npm tarball** and its matching lockfile, rather than independently
-  rebuilding or copying a separate `dist/` tree. Install locked production
-  dependencies with `npm ci --omit=dev --ignore-scripts`, run as a non-root user,
-  and serve the website/API on `0.0.0.0:$PORT`. Include the npm tarball SHA-256 in
-  an image label. The server's `/version` response must expose the release
-  version, full source commit and that same tarball hash; smoke checks must
-  compare them with the release manifest.
-- The actual Dockerfile, server label and `/version` implementation belong to the
-  app PR. This initial tooling slice supplies no Dockerfile or server. Its
-  `.dockerignore` allows only the isolated exact-archive context; repository
-  source and separate `dist/` are excluded. The candidate helper stages those
-  inputs, but the main release image builder and real installed CLI/HTTP smoke
-  must be integrated from the separate product candidate before enabling the
-  gate. Current fixture adapter tests establish tooling behavior only.
-- Implement `test:release` to install and exercise `RELEASE_PACKAGE` in an isolated
-  temporary directory, start `RELEASE_IMAGE`, and test the real website and API
-  through the normal HTTP entrypoint. Verify persisted analysis and a follow-up
-  request if state matters. Clean up containers and temporary files on failure.
-  The image must use the intended hosted Google Gemma API configuration; no
-  local Ollama or substituted model path is configured here. Model credentials
-  and provider-backed test isolation need a separate authorized setup.
-- Enable GitHub release immutability in repository settings. Publication checks
-  `GET /repos/{owner}/{repo}/immutable-releases` before any tag/image mutation.
-  That endpoint requires Administration read, which `GITHUB_TOKEN` may lack.
-  If needed, configure a separately authorized read-only
-  `RELEASE_SETTINGS_TOKEN`; it is used only for that settings check. The normal
-  workflow token needs Contents write and Packages write in the publication job.
-  No credential was requested or configured by this change.
+The Dockerfile uses the pinned Node 24.22.2 bookworm-slim image digest, validates
+the supplied archive and lock digests, extracts that archive and runs
+`npm ci --omit=dev --ignore-scripts`. It never independently rebuilds product
+source. The image runs as `node` on `0.0.0.0:8080`. Image labels bind version,
+commit, tarball SHA-256 and lock SHA-256. `/version` must return the same version,
+commit and `tarballSha256`; health alone is insufficient.
 
-## Versioned release contract
+Wire `test:release` to `node scripts/smoke-candidate.mjs`. Both candidate and
+release workflows supply:
 
-A version-changing push to `main` runs the same repository checks before the
-release gate. Release runs use `queue: max` without cancellation so a later
-documentation-only push does not replace a waiting version bump. GitHub permits
-up to 100 pending runs; excess runs are canceled. Queue order follows when runs
-start waiting and is not a guarantee of commit order. A later version published
-first makes an older candidate fail the monotonic-version check rather than
-publishing out of order. Monitor canceled or failed candidates and choose a new
-version when recovery is needed. Ordinary branch pushes only run checks. An unchanged version on
-main does not publish again. A version-changing push with an already used tag
-or release fails rather than overwriting it; even a rerun of the same candidate
-refuses an existing version. The candidate must also be greater than every
-existing stable version in tags and releases; comparison uses BigInt numeric
-segments, not lexical ordering or floating-point numbers. Prerelease and
-unrelated tags do not count as stable versions. Choose a new version after a partially failed
-publication. No automatic rollback deletes tags, releases, assets or images.
+- `RELEASE_PACKAGE` and `RELEASE_LOCKFILE`: exact tested archive and matching lock.
+- `RELEASE_PACKAGE_SHA256` and `RELEASE_LOCKFILE_SHA256`: raw 64-character hex hashes.
+- `RELEASE_VERSION` and `RELEASE_COMMIT`: expected stable version and full SHA.
+- `RELEASE_IMAGE`: locally loaded exact image, or `RELEASE_CANDIDATE_URL`: an
+  already running authorized candidate origin.
+- `RELEASE_SMOKE_MODE=live-public` and `RELEASE_SMOKE_PACKAGE=is-number@7.0.0`:
+  an explicit, exact public reference for the representative core check.
 
-When enabled, the workflow runs product tests and builds the actual application,
-checks built entrypoints and packs the npm tarball. It builds a Linux AMD64 image
-locally, then runs `test:release` with that exact image and tarball. Publication
-requires successful checks and smoke, the same checkout SHA, the original archive
-digest and the same local image ID, architecture and revision label.
+The smoke installs locked production dependencies offline in an isolated directory,
+runs the inert CLI lifecycle check, and requires HTTP verification as well. When
+an image is supplied, it runs a temporary read-only container with bounded `/tmp`,
+a loopback port and `UNMASK_MODEL=off`, then removes it on success or failure.
+It compares `/version`, uses the normal form POST, polls persisted report JSON,
+checks the submitted package identity, verifies rendered HTML and repeats the JSON
+request to check persistence. Candidate orchestration rechecks the original archive,
+clean build and local image ID afterward. No replacement source build qualifies.
 
-Before publishing, the tooling inventories GitHub tags/releases, confirms release
-immutability, and refuses existing GHCR version/SHA tags. It creates the Git tag
-without force, pushes version and full-SHA image tags, and checks both registry
-digests agree. GHCR tags themselves are mutable registry references; deployment
-must use the recorded digest. GitHub immutability locks the published release's
-assets and Git tag. A failure after reserving a tag or pushing an image can leave
-partial artifacts; recover by reviewing the failed run and using a new version.
-Do not overwrite or delete artifacts to make a retry pass.
+`recorded` transport is available for explicit diagnostic tests and is labeled as
+such. Only an authorized `live-public` run of the exact candidate provides the
+representative core runtime evidence. Both modes report model acceptance as
+`not-tested`; hosted Google Gemma quota, credentials, countTokens support and
+meaningful inference acceptance require a separate authorized test. No model key
+is needed or exposed by these core checks.
 
-The workflow attaches the npm tarball and `release-manifest.json` to a draft,
-checks GitHub's uploaded asset digest/size, verifies the Git tag still points to
-the candidate, then publishes and confirms immutability. The manifest binds:
+## Opening the publication gate
 
-- The stable version, Git tag, full source SHA and workflow URL.
-- The npm package name, tarball filename, byte size and SHA-256 digest.
-- The GHCR image digest/reference and `linux/amd64` platform.
+Before enabling publication, configure the authorized public npm identity and
+`publishConfig`, a positive stable version, matching lock identity and actual
+CLI/server/website source and output paths. Configure meaningful `build`,
+`test:product` and `test:release` commands. Keep these settings disabled until
+reviewed product and runtime prerequisites are satisfied.
 
-**An attached npm tarball is not an npm registry publication.** This foundation
-contains no `npm publish` command, and the manifest keeps
-`package.registryPublished: false`. A completed GitHub artifact release would
-satisfy the GitHub distribution step while npm registry acceptance remains unmet.
-Registry trusted publishing, ownership and provenance setup remain pending the
-authorized npm account/scope. No live release, GHCR image or npm package has been
-published to validate these adapters.
+The main workflow requires checks, product build, exact image smoke and a clean
+matching SHA before publishing. It inventories GitHub stable tags/releases and
+rejects any candidate less than or equal to the maximum existing stable version,
+using BigInt segments. Exact collisions also fail. Prerelease and unrelated tags
+are excluded. Unchanged-version pushes do not publish. Never overwrite a version
+or delete partial artifacts to make a rerun pass; review failures and use a new
+version.
+
+Release runs use `queue: max` without cancellation. GitHub permits up to 100
+pending runs, and queue order follows when runs start waiting. A later version
+published first causes an older candidate to fail the monotonic version gate.
+Preparation checks release immutability and GHCR tag availability before npm
+publication. Both are checked again immediately before GitHub/GHCR mutations.
+Existing version and full-SHA image tags are refused. The immutability endpoint requires
+authorized Administration-read `RELEASE_SETTINGS_TOKEN`; the publication job's
+normal token has Contents write and Packages write. No token was retrieved or
+configured by this change.
+
+The workflow reserves the Git tag, pushes version and full-SHA image tags,
+requires both registry digests to agree, uploads the archive and manifest to a
+draft release, checks uploaded digest/size and tag SHA, and publishes while
+confirming immutability. Failures can leave partial reserved artifacts. Deployment
+uses a digest because GHCR tags remain mutable references.
+
+`release-manifest.json` binds stable version, tag, commit, workflow URL, package
+name/archive size/archive digest/lock digest/source hash, and Linux AMD64 image
+digest. Attaching a tarball to GitHub does not publish it to npm. When
+`npmPublishEnabled` is false the manifest reports `package.registryPublished: false`.
+
+With `npmPublishEnabled: true`, the main-push workflow injects the existing
+`NPM_TOKEN` secret only into the npm publication step after exact candidate smoke.
+It publishes the prepared archive with `--ignore-scripts --access public` to the
+public npm registry, without rebuilding or repacking. The single configured npm
+gate is sufficient; the automatic route needs no additional repository variable.
+PR/shared checks receive no npm credential. No token value belongs in source,
+arguments, logs or release receipts.
+
+Before marking npm publication successful, the adapter checks the public version's
+identity and SHA-512 integrity, downloads its canonical public-registry tarball
+without authentication, and compares its size and SHA-256 with the tested archive.
+An identical existing version is verified without publishing it again; conflicting
+bytes fail. An uncertain command result is resolved by bounded read-only lookups,
+not repeated publication commands. The saved non-secret receipt binds version,
+commit and archive hashes. GitHub publication verifies that receipt and public
+bytes again before reporting `registryPublished: true`. A successful publish
+command alone is insufficient.
+
+First publication requires write access to the `@xagents_in` namespace and a
+publish-capable granular token with bypass 2FA enabled. A stage-only token cannot
+perform this direct route; staging would require a separate maintainer approval
+and is not silently substituted. The user's reported secret presence does not
+establish its permissions, validity or npm ownership. A missing or rejected token
+fails publication without exposing provider output. Bootstrap token publication
+does not claim trusted-publisher provenance.
+
+Trusted publishing can be configured after the package exists. npm's current
+[trust prerequisites](https://docs.npmjs.com/cli/v11/commands/npm-trust/#prerequisites)
+require package write access, account 2FA and npm CLI 11.15.0 or newer for trust
+configuration; a bypass-2FA token cannot perform that governance operation.
+The [publishing workflow](https://docs.npmjs.com/trusted-publishers/) itself needs
+npm CLI 11.5.1 or newer, Node 22.14.0 or newer, a supported hosted runner,
+`id-token: write`, and exact repository/workflow configuration. New trust must
+complete its first successful publication within two days. Configure direct
+`npm publish` permission when automatic direct releases are intended. See npm's
+[current authentication rules](https://docs.npmjs.com/requiring-2fa-for-package-publishing-and-settings-modification/).
+
+The existing GitHub immutability check requires Administration read, which the
+workflow's ordinary Contents/Packages token does not grant. Configure the authorized
+`RELEASE_SETTINGS_TOKEN` and enable repository release immutability before the first
+release. GHCR initially creates a private package; public image visibility and
+anonymous digest pull remain operator prerequisites for the public-image deployment.
+Publication across npm, Git tags, GHCR and GitHub assets is not atomic. A later
+failure may leave partial artifacts. Review the failed run, preserve existing
+artifacts and use the documented recovery rules. Keep named reviewer protections.
+
+This local change used synthetic transport/process adapters and real inert npm
+archives. No credential was retrieved, token authentication attempted, registry
+package published, image pushed or server deployed while preparing it. Real npm
+installation and the exact deployed image's normal HTTP flow remain release-time
+acceptance checks. Deterministic functionality can ship while hosted Gemma quality
+remains explicitly unverified.
 
 ## Deploy a selected release in DigitalOcean App Platform
 
-The deployment portal is the existing App Platform dashboard; this project adds
-no custom portal and creates no DigitalOcean resources. An operator selects a
-published GitHub release number and reads its manifest. In the app's dashboard, open
-**Settings → App Spec → Edit** and set `image.digest` to that release's GHCR digest and **omit
-`image.tag`**. Save/apply the spec through the dashboard for an authorized
-manual deployment. To roll back, select a previously verified release and apply
-its recorded digest through the same App Spec editor. Do not deploy from the
-source branch or a floating `latest` tag. GHCR publication does not auto-deploy
-App Platform.
+The deployment portal is the existing App Platform dashboard. This change creates
+no resources or custom portal and does not auto-deploy branch pushes or GHCR
+publication. Select a verified GitHub release and its manifest. In
+**Settings → App Spec → Edit**, set its recorded `image.digest` and omit
+`image.tag`. Roll back by selecting a previously verified release's digest through
+the same editor. Do not deploy a source branch or floating `latest` tag.
 
-For the initial deployment, manually make the GHCR image public and verify
-anonymous pull access. That visibility setting is an operator prerequisite;
-this foundation does not change package visibility or provision pull credentials.
-
-Once the real server's port and health endpoint exist, configure a Web Service
-with that port, HTTP health check and the required hosted model secret reference.
-Use a **single app instance** while report storage is in memory: a request routed
-to a second instance could otherwise return a report 404. Scaling requires shared
-report storage or an explicit routing design in a later app change.
-For an app spec, the source fields will have this shape:
+Make the initial GHCR image public manually and verify anonymous pull access.
+Configure the Web Service port, `/healthz` and any separately authorized model
+secret references. Use one app instance while reports are held in memory; scaling
+requires shared report storage or an explicit routing design to avoid report 404s.
 
 ```yaml
 image:
@@ -191,15 +212,12 @@ image:
   digest: sha256:<digest-from-release-manifest>
 ```
 
-This excerpt is a contract, not a deployable app spec. Account/project, budget,
-region, instance size, registry visibility/pull access, actual server entrypoint,
-port, health path and model-secret availability remain unconfigured. Private
-registry access is outside the initial public-image deployment contract and
-requires a separately authorized setup. App Platform supports Linux AMD64
-container images and recommends digests. After a separately authorized deployment,
-verify the serving digest and `/version` identity against the chosen manifest,
-then perform the normal website/API smoke test. Health alone is not release acceptance.
-Temporal is not involved in this foundation.
+This excerpt is a contract, not a deployable app spec. Account, budget, region,
+instance size, visibility/pull access and runtime configuration remain operator
+prerequisites. After a separately authorized deployment, verify the serving digest
+and `/version`, then repeat the normal website/API smoke against that exact
+release. Temporal is not involved. Local tests, recorded HTTP tests and source
+inspection do not establish deployment or model acceptance.
 
 ## Official references
 

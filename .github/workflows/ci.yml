@@ -31,6 +31,8 @@ jobs:
           for script in scripts/*.mjs; do node --check "$script"; done
       - name: Check formatting
         run: npm run check
+      - name: Build actual product before artifact checks
+        run: npm run build
       - name: Test release policy and actual npm packaging
         run: npm test
       - name: Report product release readiness
