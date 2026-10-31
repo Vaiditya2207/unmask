@@ -2120,3 +2120,53 @@ test("local limits are snapshotted so caller mutations cannot contradict the rou
   assert.equal(model.configuration.localLimits.generationsPerMinute, 2);
   assert.equal(model.configHash, before);
 });
+
+test("only an explicit model-bound minute quota window permits tier fallthrough", async () => {
+  for (const [window, allowed] of [
+    ["Hour", false],
+    ["", false],
+    ["Minute", true],
+  ]) {
+    const body = scopedQuota("gemini-3.5-flash");
+    body.error.details[0].violations[0].quotaId = `GenerateRequestsPer${window}PerProjectPerModel`;
+    const seen = [];
+    const result = await routedClient(async (url) => {
+      seen.push(url);
+      if (url.endsWith(":countTokens"))
+        return new Response('{"totalTokens":100}');
+      if (url.includes("gemini-3.5-flash:"))
+        return new Response(JSON.stringify(body), {
+          status: 429,
+          headers: { "Retry-After": "0" },
+        });
+      return output({ hypotheses: [hypothesis()] });
+    }).explain(report(), { allowLocal: true });
+    assert.equal(result.status, allowed ? "complete" : "unavailable", window);
+    assert.equal(result.attempts, allowed ? 2 : 1, window);
+    assert.equal(seen.length, allowed ? 4 : 2, window);
+  }
+  for (const window of ["Hour", ""]) {
+    const body = scopedQuota("gemini-3.5-flash");
+    body.error.details.push({
+      "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+      reason: "RATE_LIMIT_EXCEEDED",
+      metadata: {
+        model: "gemini-3.5-flash",
+        quota_limit: `GenerateRequestsPer${window}PerProjectPerModel`,
+      },
+    });
+    let calls = 0;
+    const result = await routedClient(async (url) => {
+      calls++;
+      return url.endsWith(":countTokens")
+        ? new Response('{"totalTokens":100}')
+        : new Response(JSON.stringify(body), {
+            status: 429,
+            headers: { "Retry-After": "0" },
+          });
+    }).explain(report(), { allowLocal: true });
+    assert.equal(result.reason, "quota");
+    assert.equal(result.attempts, 1);
+    assert.equal(calls, 2);
+  }
+});
