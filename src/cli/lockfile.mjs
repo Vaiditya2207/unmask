@@ -54,8 +54,7 @@ export function isNpmRegistryTarball(resolved, name, version) {
       !url.password &&
       !url.search &&
       !url.hash &&
-      decodeURIComponent(url.pathname) ===
-        `/${name}/-/${name.split("/").pop()}-${version}.tgz`
+      url.pathname === `/${name}/-/${name.split("/").pop()}-${version}.tgz`
     );
   } catch {
     return false;
@@ -67,6 +66,8 @@ function classify(key, raw) {
   if (raw.link === true) return { kind: "link", reason: "workspace-or-link" };
   if (!key.includes("node_modules/"))
     return { kind: "workspace", reason: "workspace-or-link" };
+  if (raw.inBundle === true)
+    return { kind: "bundled", reason: "bundled-dependency" };
   const name = raw.name ?? nameFromKey(key);
   if (!isPackageName(name)) return { kind: "invalid", reason: "invalid-name" };
   if (typeof raw.version !== "string")
@@ -85,14 +86,30 @@ function classify(key, raw) {
 
 function edges(raw) {
   const result = [];
+  const peerMeta = isObject(raw.peerDependenciesMeta)
+    ? raw.peerDependenciesMeta
+    : {};
   for (const [field, type] of EDGE_TYPES) {
     const value = raw[field];
     if (value === undefined) continue;
     if (!isObject(value)) throw invalid(`Lockfile ${field} must be an object.`);
     for (const [name, range] of Object.entries(value)) {
-      if (!isPackageName(name) || typeof range !== "string")
+      // Legacy or unusual names stay as edges; only their own entries are classified invalid.
+      if (
+        typeof range !== "string" ||
+        !name ||
+        name.length > 214 ||
+        /[\0-\x1f\x7f\\]/.test(name)
+      )
         throw invalid(`Lockfile ${field} contains an invalid entry.`);
-      result.push({ name, range, type });
+      result.push({
+        name,
+        range,
+        type:
+          type === "peer" && peerMeta[name]?.optional === true
+            ? "peer-optional"
+            : type,
+      });
     }
   }
   return result;
@@ -113,6 +130,9 @@ export function parseLockfile(text, limits = LOCKFILE_LIMITS) {
       "lockfile-unsupported",
       "Only npm lockfileVersion 2 or 3 (with a packages map) is supported.",
     );
+  // npm writes an empty packages map for a project with no dependencies.
+  if (isObject(data.packages) && Object.keys(data.packages).length === 0)
+    data.packages = { "": {} };
   if (!isObject(data.packages) || !isObject(data.packages[""]))
     throw invalid("Lockfile packages map with a root entry is required.");
   const keys = Object.keys(data.packages);
@@ -120,10 +140,29 @@ export function parseLockfile(text, limits = LOCKFILE_LIMITS) {
     throw invalid("Lockfile exceeds the entry limit.");
   const entries = new Map();
   for (const key of keys) {
-    const raw = data.packages[key];
-    if (!isObject(raw) || key.length > 4096 || key.startsWith("/"))
-      throw invalid("Lockfile contains an invalid package entry.");
-    const { kind, reason } = classify(key, raw);
+    const value = data.packages[key];
+    const badKey =
+      key.length > 4096 ||
+      (key !== "" &&
+        key
+          .split("/")
+          .some(
+            (part) => ["", ".", ".."].includes(part) || part.includes("\\"),
+          ));
+    // Malformed entries are kept as invalid so the rest of the graph still parses.
+    const raw = isObject(value) && !badKey ? value : {};
+    const { kind, reason } = badKey
+      ? { kind: "invalid", reason: "invalid-location" }
+      : !isObject(value)
+        ? { kind: "invalid", reason: "invalid-entry" }
+        : classify(key, raw);
+    let entryEdges = [];
+    let edgesValid = true;
+    try {
+      entryEdges = kind === "link" ? [] : edges(raw);
+    } catch {
+      edgesValid = false;
+    }
     entries.set(key, {
       key,
       name:
@@ -145,9 +184,16 @@ export function parseLockfile(text, limits = LOCKFILE_LIMITS) {
           raw.name ?? nameFromKey(key),
           raw.version,
         ) &&
-        /^sha512-[A-Za-z0-9+/]+={0,2}$/.test(raw.integrity ?? ""),
-      edges: kind === "link" ? [] : edges(raw),
+        /^sha512-[A-Za-z0-9+/]{86}==$/.test(raw.integrity ?? ""),
+      edges: entryEdges,
+      edgesValid,
     });
+  }
+  // npm omits name on workspace entries; the linking node_modules key carries it.
+  for (const entry of entries.values()) {
+    const target = entry.kind === "link" && entries.get(entry.resolved ?? "");
+    if (target?.kind === "workspace" && target.name === target.key)
+      target.name = nameFromKey(entry.key);
   }
   return { lockfileVersion: data.lockfileVersion, entries };
 }
@@ -201,13 +247,52 @@ export function resolveEdge(lock, fromKey, name) {
   return null;
 }
 
+function scanEdges(lock, omitDev) {
+  const missing = [];
+  const omitted = { optional: 0, peerOptional: 0, devEdges: 0 };
+  for (const entry of lock.entries.values()) {
+    if (entry.kind === "link" || (omitDev && entry.dev)) continue;
+    const project = ["root", "workspace"].includes(entry.kind);
+    for (const edge of entry.edges) {
+      if (edge.type === "dev" && !project) continue;
+      const found = resolveEdge(lock, entry.key, edge.name);
+      if (edge.type === "dev" && omitDev) omitted.devEdges++;
+      else if (found) continue;
+      else if (edge.type === "optional") omitted.optional++;
+      else if (edge.type === "peer-optional") omitted.peerOptional++;
+      else missing.push({ from: entry.key, name: edge.name, type: edge.type });
+    }
+  }
+  return { missing, omitted };
+}
+
+export function unresolvedEdges(lock, { omitDev = false } = {}) {
+  return scanEdges(lock, omitDev).missing;
+}
+
 export function exactTargets(lock, { omitDev = false } = {}) {
   const unique = new Map();
   const skipped = {};
   let considered = 0;
+  const { missing: unresolved, omitted } = scanEdges(lock, omitDev);
+  omitted.devEntries = 0;
+  if (unresolved.length) skipped["unresolved-dependency"] = unresolved.length;
+  const badEdges = [...lock.entries.values()].filter(
+    (entry) => !entry.edgesValid && !(omitDev && entry.dev),
+  ).length;
+  if (badEdges) skipped["invalid-dependencies"] = badEdges;
   for (const entry of lock.entries.values()) {
+    if (omitDev && entry.dev) {
+      if (!["root", "workspace", "link"].includes(entry.kind))
+        omitted.devEntries++;
+      continue;
+    }
+    // A link whose target entry is absent means unlocked local code.
+    if (entry.kind === "link" && !lock.entries.has(entry.resolved ?? "")) {
+      skipped["dangling-link"] = (skipped["dangling-link"] ?? 0) + 1;
+      continue;
+    }
     if (["root", "workspace", "link"].includes(entry.kind)) continue;
-    if (omitDev && entry.dev) continue;
     considered++;
     if (entry.kind !== "registry") {
       skipped[entry.reason] = (skipped[entry.reason] ?? 0) + 1;
@@ -221,11 +306,16 @@ export function exactTargets(lock, { omitDev = false } = {}) {
       locations: [],
       bound: true,
       integrity: [],
+      aliases: [],
     };
     target.locations.push(entry.key);
+    const alias = nameFromKey(entry.key);
+    if (alias !== entry.name && !target.aliases.includes(alias))
+      target.aliases.push(alias);
     target.bound &&= entry.bound;
     if (entry.integrity && !target.integrity.includes(entry.integrity))
       target.integrity.push(entry.integrity);
+    if (target.integrity.length > 1) target.bound = false;
     unique.set(spec, target);
   }
   return {
@@ -234,5 +324,7 @@ export function exactTargets(lock, { omitDev = false } = {}) {
       a.spec < b.spec ? -1 : a.spec > b.spec ? 1 : 0,
     ),
     skipped,
+    omitted,
+    unresolved: unresolved.slice(0, 100),
   };
 }
