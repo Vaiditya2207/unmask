@@ -254,7 +254,7 @@ once installed) prints the same list, and `unmask help COMMAND` shows its usage.
 | Command       | What it does                                                                   |
 | ------------- | ------------------------------------------------------------------------------ |
 | `check`       | Check one exact version through the hosted service, or a local tarball offline |
-| `install`     | Explain the guarded install path and require an exact lockfile plan            |
+| `install`     | Refuse mutable npm install and explain the lockfile-first ci path              |
 | `ci`          | Screen the exact lockfile plan before invoking npm ci                          |
 | `enable`      | Print explicit reversible shell integration                                    |
 | `disable`     | Print how to remove the shell integration                                      |

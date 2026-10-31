@@ -170,9 +170,9 @@ test("compare refuses unrelated names, same versions and ranges before any reque
   } finally {
     process.stderr.write = original;
   }
-  assert.match(stderr[0], /^unrelated-packages: /);
-  assert.match(stderr[1], /^same-version: /);
-  assert.match(stderr[3], /^usage: /);
+  assert.match(stderr[0], /^unmask error unrelated-packages: /);
+  assert.match(stderr[1], /^unmask error same-version: /);
+  assert.match(stderr[3], /^unmask error usage: /);
 });
 
 test("compare escapes control, ANSI and bidi text from untrusted keys and paths", async (t) => {

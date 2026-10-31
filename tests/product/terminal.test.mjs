@@ -593,3 +593,55 @@ test("advisory-only results with contradictory, mismatched or unbounded fields a
     );
   }
 });
+
+test("resolved scan advisory-only output labels the exact checked version rather than the mutable selector", async () => {
+  const runtime = advisoryOnlyRuntime(
+    advisoryResult("found", [{ id: "MAL-FIXTURE" }]),
+  );
+  const hosted = runtime.fetchImpl;
+  runtime.fetchImpl = (url, options) =>
+    url.startsWith("https://registry.npmjs.org/")
+      ? Response.json({ name: "ua-parser-js", version: "0.7.29" })
+      : hosted(url, options);
+  assert.equal(await main(["scan", "ua-parser-js@latest"], runtime), 2);
+  assert.match(runtime.stdout.text, /^UNMASK ua-parser-js@0\.7\.29$/m);
+  assert.doesNotMatch(runtime.stdout.text, /^UNMASK ua-parser-js@latest$/m);
+});
+
+test("compare failure labels advisory-only evidence for its failing second version", async (t) => {
+  const f = await fixture(t);
+  const completed = await analyzeLocal({
+    tarballPath: f.tarballPath,
+    sourceArchivePath: f.sourceArchivePath,
+    sourceRoot: "root",
+    commit: "d".repeat(40),
+    claim: f.manifest,
+  });
+  const result = advisoryResult("found", [{ id: "MAL-FIXTURE" }], "fixture");
+  const runtime = advisoryOnlyRuntime(result);
+  const firstId = "a".repeat(32),
+    secondId = "b".repeat(32);
+  runtime.fetchImpl = async (url, options) => {
+    if (url.endsWith("/check")) {
+      const id =
+        options.body.get("package") === "fixture@1.0.0" ? firstId : secondId;
+      return new Response(null, {
+        status: 303,
+        headers: { location: `/r/${id}` },
+      });
+    }
+    return url.includes(firstId)
+      ? Response.json(completed)
+      : Response.json({
+          id: secondId,
+          status: "failed",
+          advisoryResult: result,
+        });
+  };
+  assert.equal(
+    await main(["compare", "fixture@1.0.0", "fixture@0.7.29"], runtime),
+    2,
+  );
+  assert.match(runtime.stdout.text, /^UNMASK fixture@0\.7\.29$/m);
+  assert.doesNotMatch(runtime.stdout.text, /^UNMASK fixture@1\.0\.0$/m);
+});

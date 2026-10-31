@@ -260,9 +260,13 @@ export async function main(argv = process.argv.slice(2), runtime = {}) {
     progress?.stop();
     if (error instanceof LocalInputError && error.advisoryResult)
       stdout.write(
-        renderAdvisoryOnly(error.advisoryResult, argv[1], {
-          style: terminalStyle(stdout, env),
-        }),
+        renderAdvisoryOnly(
+          error.advisoryResult,
+          `${error.advisoryResult.package.name}@${error.advisoryResult.package.version}`,
+          {
+            style: terminalStyle(stdout, env),
+          },
+        ),
       );
     if (error instanceof LocalInputError) {
       stderr.write(renderError(error.code, error.message, errorStyle));

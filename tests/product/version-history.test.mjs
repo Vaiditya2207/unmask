@@ -116,15 +116,15 @@ test("history rejects bad input and reports registry failures without guessing",
     }),
   );
   assert.equal(missing.code, 2);
-  assert.match(missing.errors[0], /^registry-not-found: /);
+  assert.match(missing.errors[0], /^unmask error registry-not-found: /);
   const other = await quiet(() =>
     main(["history", "fixture"], { fetchImpl: registry(packument).fetchImpl }),
   );
-  assert.match(other.errors[0], /^registry-identity-mismatch: /);
+  assert.match(other.errors[0], /^unmask error registry-identity-mismatch: /);
   const broken = await quiet(() =>
     main(["history", "fixture"], { fetchImpl: registry("{").fetchImpl }),
   );
-  assert.match(broken.errors[0], /^registry-invalid: /);
+  assert.match(broken.errors[0], /^unmask error registry-invalid: /);
 });
 
 test("history keeps full exact version identity for guidance and JSON", async () => {
