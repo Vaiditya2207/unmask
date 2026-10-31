@@ -165,6 +165,7 @@ test("risk signals classify lifecycle, dependency, executable, network and secre
     [{ ruleId: "behavior-install-remote-shell" }, "lifecycle"],
     [{ ruleId: "behavior-encoded-dynamic-code" }, "executable"],
     [{ ruleId: "behavior-process-remote-shell" }, "executable"],
+    [{ ruleId: "behavior-recursive-overwrite" }, "executable"],
     [{ ruleId: "behavior-sensitive-environment-read" }, "secret-access"],
     [{ ruleId: "behavior-unknown-future-rule" }, null],
   ];

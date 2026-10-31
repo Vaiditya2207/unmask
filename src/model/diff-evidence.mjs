@@ -45,6 +45,7 @@ const RULE_SIGNALS = new Map([
   ["behavior-encoded-process-execution", "executable"],
   ["behavior-encoded-module-load", "executable"],
   ["behavior-process-remote-shell", "executable"],
+  ["behavior-recursive-overwrite", "executable"],
   ["behavior-credential-path-reference", "secret-access"],
   ["behavior-sensitive-environment-read", "secret-access"],
   ["behavior-environment-enumeration", "secret-access"],
