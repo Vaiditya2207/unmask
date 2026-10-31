@@ -98,6 +98,15 @@ export async function startServer({
             enrichment(spec, {
               signal: AbortSignal.any([signal, shutdown.signal]),
             }),
+    advisoryLookup:
+      enrichment === undefined
+        ? undefined
+        : (spec, { signal } = {}) =>
+            enrichment(spec, {
+              signal: signal
+                ? AbortSignal.any([signal, shutdown.signal])
+                : shutdown.signal,
+            }),
     versionInfo: {
       ...(versionInfo || (await loadVersionInfo())),
       modelConfigDigest:
