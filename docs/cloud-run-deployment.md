@@ -32,17 +32,26 @@ format, so do not assume a legacy name-based `sub` string.
 
 ## Production configuration and job
 
-The committed `deployment.config.json` supplies these confirmed, non-secret
-production settings. Equivalent environment variables are supported for explicit
-configuration:
+The committed [deployment.config.json](../deployment.config.json) supplies these
+confirmed, non-secret production settings. No additional GitHub GCP variables are
+required. Equivalent environment variables support explicit configuration:
 
 | Variable                         | Purpose                                                       |
 | -------------------------------- | ------------------------------------------------------------- |
 | `GCP_PROJECT_ID`                 | Confirmed deployment project ID                               |
 | `GCP_REGION`                     | Mumbai region, `asia-south1`                                  |
 | `GCP_SERVICE_ACCOUNT`            | Dedicated deployment SA email, distinct from runtime identity |
+| `GCP_RUNTIME_SERVICE_ACCOUNT`    | Exact intended API runtime SA email                           |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | Full WIF provider resource name                               |
-| `GCP_CLOUD_RUN_SERVICE`          | Fixed workflow value `unmask`, confirmed by root              |
+| `GCP_CLOUD_RUN_SERVICE`          | API service name, `unmask`                                    |
+| `CLOUD_RUN_SMOKE_PACKAGE`        | Exact model-eligible public package, currently `zod@4.6.7`    |
+| `CLOUD_RUN_MODEL_EXPECTATIONS`   | JSON object containing the approved `routes` array            |
+
+Setting any of `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_SERVICE_ACCOUNT`,
+`GCP_RUNTIME_SERVICE_ACCOUNT` or `GCP_WORKLOAD_IDENTITY_PROVIDER` disables the
+entire committed configuration fallback. In that mode, supply all eight variables
+listed above, including the runtime identity, smoke package and model expectations.
+Validation rejects an incomplete explicit configuration before authentication.
 
 The service name is `unmask`. The committed smoke package is `zod@4.6.7` and
 `modelExpectation` contains the approved `{ "routes": [...] }` record. A normal
@@ -69,10 +78,10 @@ ports, commands, volumes and other runtime configuration. The policy requires
 instance-based CPU, min/max one instance, one vCPU and 2Gi memory for async jobs.
 
 The active `deploy` job is in `release.yml`, requires completed GitHub and npm
-publication, runs in environment `production`, and receives
-`id-token: write` only within the deployment job. It checks out the exact release commit, installs locked tooling
-without lifecycle scripts, validates references, authenticates through WIF and
-runs the cloud runner. Google auth is pinned to
+publication, and runs in environment `production`. Only `deploy` and `deploy-web`
+receive `id-token: write`; publication and PR checks do not. The API job checks
+out the exact release commit, installs locked tooling without lifecycle scripts,
+validates references, authenticates through WIF and runs the cloud runner. Google auth is pinned to
 `7c6bc770dae815cd3e89ee6cdf493a5fab2cc093`; setup-gcloud is pinned to
 `aa5489c8933f4cc7a4f7d45035b3b1440c9c10db`. Cloud SDK is fixed at `591.0.0`,
 verified in Google's public rapid-channel component manifest.

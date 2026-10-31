@@ -1,11 +1,12 @@
 # CI, releases and automatic deployment
 
-The repository contains a CLI, HTTP server and website. Version `0.1.0` is
-configured with `private: false`, public npm access, and enabled release/npm
-publication gates. This configuration is not proof of npm publication, public
-Cloud Run access, image acceptance or useful model output. Root must verify the
+The repository contains a CLI, HTTP server and website. The current source
+candidate is `0.1.1`, configured with `private: false`, public npm access, and
+enabled release/npm publication gates. Release `0.1.0` was published and verified;
+its dated runtime observations remain in the [deployment evidence](README.md).
+Release `0.1.1` and its deployment acceptance are pending. Root must verify the
 final exact artifact and deployed normal route before merging/releasing. Local
-tests alone do not establish those results.
+tests alone do not establish those results or general model usefulness.
 
 ## Local distribution checks
 
@@ -198,8 +199,9 @@ The user-authorized deployment target is Cloud Run service `unmask` in project
 `unmask-513319`, Mumbai `asia-south1`. The `deploy` job depends on completed
 `publish` in this same workflow. It requires an immutable GitHub release and
 verified npm publication, consumes the exact tested image digest and source
-commit, and uses the protected `production` environment with WIF. Only that job
-receives `id-token: write`; no service-account JSON key is used.
+commit, and uses the protected `production` environment with WIF. Only the
+`deploy` and `deploy-web` jobs receive `id-token: write`; publication and PR
+checks do not. No service-account JSON key is used.
 
 Root bootstraps the service and supplies the confirmed project/region/deployment
 SA/WIF references, exact smoke package and approved model-route expectations.
@@ -212,9 +214,9 @@ release was published successfully.
 
 See [Cloud Run deployment contract](cloud-run-deployment.md) for variable names,
 WIF constraints, runtime settings, receipts and remaining live verification gaps.
-No cloud authentication, deployment or model request was executed by the local
-workflow implementation. Temporal is not involved. Frontend hosting changes are
-owned separately.
+The `deploy-web` job follows successful API verification and deploys the website
+from the same release commit. The dated runtime evidence is separate from the
+pending `0.1.1` deployment. Temporal is not involved.
 
 ## Official references
 
