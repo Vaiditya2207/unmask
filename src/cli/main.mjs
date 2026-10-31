@@ -10,6 +10,7 @@ import { addConfiguredModel } from "../core/online.mjs";
 import { modelClientFromEnv } from "../model/config.mjs";
 import { checkHosted } from "./hosted.mjs";
 import { runAudit } from "./audit.mjs";
+import { runWhy } from "./why.mjs";
 
 const names = {
   "--tarball": "tarballPath",
@@ -34,7 +35,7 @@ function parse(argv) {
   if (argv[0] !== "check")
     throw new LocalInputError(
       "usage",
-      "Use check name@version, audit, or an explicit local tarball with --offline",
+      "Use check name@version, audit, why name, or an explicit local tarball with --offline",
     );
   const options = {};
   let start = 1;
@@ -164,6 +165,7 @@ async function configuredModel(allowModel, runtime) {
 export async function main(argv = process.argv.slice(2), runtime = {}) {
   try {
     if (argv[0] === "audit") return await runAudit(argv.slice(1), runtime);
+    if (argv[0] === "why") return await runWhy(argv.slice(1));
     const { out, offline, allowModel, registrySpec, ...options } = parse(argv);
     let report;
     if (registrySpec)
