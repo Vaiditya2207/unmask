@@ -18,6 +18,7 @@ import { cacheCommand } from "./cache.mjs";
 import { infoCommand } from "./info.mjs";
 import { runAudit } from "./audit.mjs";
 import { runWhy } from "./why.mjs";
+import { preflightMain } from "./preflight.mjs";
 
 const names = {
   "--tarball": "tarballPath",
@@ -170,6 +171,7 @@ async function configuredModel(allowModel, runtime) {
 }
 
 export async function main(argv = process.argv.slice(2), runtime = {}) {
+  if (argv[0] === "preflight") return preflightMain(argv.slice(1), runtime);
   try {
     if (argv[0] === "scan") return await runScan(argv.slice(1), runtime);
     if (argv[0] === "batch") return await runBatch(argv.slice(1), runtime);
