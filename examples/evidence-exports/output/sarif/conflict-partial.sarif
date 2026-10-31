@@ -120,7 +120,7 @@
               },
               "level": "warning",
               "message": {
-                "text": "OSV advisory check is incomplete (page-cap); missing advisories do not mean none exist."
+                "text": "OSV advisory check is incomplete (page-limit); missing advisories do not mean none exist."
               }
             },
             {

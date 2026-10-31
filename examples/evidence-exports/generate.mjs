@@ -98,7 +98,7 @@ write(
           withdrawn: "2026-10-01T00:00:00Z",
         },
       ],
-      ["page-cap"],
+      ["page-limit"],
     ),
     null,
     2,

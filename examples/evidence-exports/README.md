@@ -36,10 +36,10 @@ Both artifacts contain a bundled `node_modules/inner` and a nested `node_modules
 
 SARIF, annotations and GitHub step summaries for `conflict` (`output/sarif/`) were generated with `--p08` pointing at commit `ff1afb0b15e4408889b3f2474f3a832f6f907bd0` (branch `feat/automation-outputs-extras`, on top of SARIF commit `d7e344e9c799184f031675391f7e699f96ac07b0`). Those commits are not part of this branch. The advisory inputs are synthetic:
 
-| File               | Contents                                                                                                                                                       |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `osv-partial.json` | status `incomplete` (reason `page-cap`); one advisory whose only `MAL-` identifier is an alias; one withdrawn `MAL-` advisory; bound to the requested identity |
-| `osv-none.json`    | status `none-reported`, bound to the requested identity                                                                                                        |
+| File               | Contents                                                                                                                                                                                        |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `osv-partial.json` | status `incomplete` (reason `page-limit`, as the real lookup records it); one advisory whose only `MAL-` identifier is an alias; one withdrawn `MAL-` advisory; bound to the requested identity |
+| `osv-none.json`    | status `none-reported`, bound to the requested identity                                                                                                                                         |
 
 `output/commands.log` records each command's exit status, plus the HTTP status and content type of each export download.
 
