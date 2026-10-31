@@ -361,3 +361,95 @@ test("section and response byte caps bound large UTF-8 declarations without modi
       assert.equal(item.value, dependencies[item.name]);
   assert.equal(JSON.stringify(report), before);
 });
+
+test("details preserve recorded behavior suspicion cues with exact evidence and limits", () => {
+  const report = fixture();
+  const beforeEntrypoints = buildPackageDetails(report).entrypoints;
+  const evidenceId = report.files.find(
+    (file) => file.path === "types/index.d.ts",
+  ).evidenceIds[0];
+  const index = report.cues.length;
+  report.cues.push({
+    module: "behavior",
+    ruleId: "behavior-install-remote-shell",
+    priority: "HIGH",
+    confidence: "suspicion-not-proof",
+    summary: "Static suspicion; no execution observed.",
+    evidenceIds: [evidenceId],
+    signal: { tools: ["curl"], interpreter: "sh" },
+  });
+  const annotationIndex = report.annotations.length;
+  report.annotations.push(
+    {
+      ruleId: "behavior-credential-path-reference",
+      priority: "review",
+      confidence: "suspicion-not-proof",
+      evidenceIds: [evidenceId],
+      summary: "Inert recorded path reference.",
+    },
+    {
+      type: "behavior-scope",
+      limits: { reviewCues: 128 },
+      limitation: "Static observations only; not executed.",
+    },
+  );
+  const snapshot = JSON.stringify(report);
+  const details = buildPackageDetails(report);
+  const high = details.capabilities.observations.items.find(
+    (item) => item.ruleId === "behavior-install-remote-shell",
+  );
+  assert.ok(high, "recorded behavior cue is reachable in hosted details");
+  assert.equal(high.priority, "HIGH");
+  assert.equal(high.confidence, "suspicion-not-proof");
+  assert.equal(high.cueRef, `/cues/${index}`);
+  assert.deepEqual(high.evidenceIds, [evidenceId]);
+  assert.equal(high.locations[0].evidenceId, evidenceId);
+  assert.equal(high.locations[0].path, "types/index.d.ts");
+  assert.equal(
+    details.capabilities.observations.items.find(
+      (item) => item.ruleId === "behavior-credential-path-reference",
+    ).cueRef,
+    `/annotations/${annotationIndex}`,
+  );
+  assert.ok(
+    details.coverage.observations.items.some(
+      (item) =>
+        item.type === "behavior-scope" && item.limits.reviewCues === 128,
+    ),
+  );
+  assert.deepEqual(
+    details.entrypoints,
+    beforeEntrypoints,
+    "behavior references do not masquerade as syntax inspection",
+  );
+  assert.equal(details.scope.targetExecution, "not-performed");
+  assert.equal(details.scope.safetyVerdict, "not-provided");
+  assert.equal(JSON.stringify(report), snapshot);
+});
+
+test("behavior details use existing item caps and expose exact omitted observations", () => {
+  const report = fixture();
+  for (let index = 0; index < 12; index++)
+    report.cues.push({
+      module: "behavior",
+      ruleId: "behavior-sensitive-environment-read",
+      priority: "review",
+      confidence: "suspicion-not-proof",
+      evidenceIds: [report.evidence[0].id],
+      summary: `Inert recorded cue ${index}`,
+    });
+  const details = buildPackageDetails(report, { maxItems: 2 });
+  const group = details.capabilities.groups.items.find(
+    (group) => group.ruleId === "behavior-sensitive-environment-read",
+  );
+  assert.ok(group);
+  assert.equal(group.observations, 12);
+  assert.equal(details.capabilities.observations.total, 13);
+  assert.equal(details.capabilities.observations.returned, 2);
+  assert.equal(details.capabilities.observations.omitted, 11);
+  assert.equal(
+    details.capabilities.observations.omissionReasons["item-cap"],
+    11,
+  );
+  assert.ok(Buffer.byteLength(JSON.stringify(details)) <= 2097152);
+});
