@@ -2624,3 +2624,51 @@ test("committed release expectations bind final default route, thinking and poli
     })),
   );
 });
+
+test("supplemental unknown and authentication ErrorInfo prevents quota fallback", async () => {
+  for (const reason of ["UNKNOWN_QUOTA_SCOPE", "API_KEY_INVALID"]) {
+    const body = scopedQuota("gemini-3-flash-preview", { daily: true });
+    body.error.details.push({
+      "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+      reason,
+      metadata: {
+        model: "gemini-3-flash-preview",
+        quota_limit: "GenerateRequestsPerDayPerProjectPerModel",
+      },
+    });
+    let calls = 0;
+    const model = createGemmaClient({
+      apiKey: "synthetic-key",
+      localLimits: {
+        generationsPerMinute: 3,
+        inputTokensPerMinute: 12000,
+        generationsPerDay: 100,
+      },
+      fetchImpl: async (url) => {
+        calls++;
+        return url.endsWith(":countTokens")
+          ? Response.json({ totalTokens: 100 })
+          : Response.json(body, { status: 429 });
+      },
+    });
+    const result = await model.explain(report(), { allowLocal: true });
+    assert.equal(result.status, "unavailable");
+    assert.equal(result.attempts, 1);
+    assert.equal(calls, 2);
+    assert.equal(result.attemptLog[0].failureScope, "unknown");
+  }
+});
+
+test("route validation rejects duplicate models even with different thinking levels", () => {
+  assert.throws(
+    () =>
+      createGemmaClient({
+        apiKey: "synthetic-key",
+        route: [
+          { modelId: "gemini-3-flash-preview", thinkingLevel: "minimal" },
+          { modelId: "gemini-3-flash-preview", thinkingLevel: "high" },
+        ],
+      }),
+    /Invalid model route/u,
+  );
+});

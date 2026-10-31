@@ -688,6 +688,9 @@ function quotaScope(body, modelId) {
     const window = bindingWindow(binding, binding + reason);
     if (
       !metadata ||
+      !["", "ratelimitexceeded", "quotaexceeded", "resourceexhausted"].includes(
+        reason,
+      ) ||
       ![modelId, `models/${modelId}`].includes(metadata.model) ||
       !binding.includes("permodel") ||
       !window ||
@@ -761,6 +764,11 @@ export function createGemmaClient(options = {}) {
     )
   )
     throw new TypeError("Invalid model route");
+  if (
+    new Set(requestedRoute.map((item) => item.modelId)).size !==
+    requestedRoute.length
+  )
+    throw new TypeError("Invalid model route: duplicate model");
   if (
     options.route !== undefined &&
     options.modelId !== undefined &&
