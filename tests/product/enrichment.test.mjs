@@ -72,6 +72,8 @@ test("contradictory complete results never become a complete vulnerability asses
     { status: "none-reported" },
     { advisories: [] },
     { complete: false },
+    { pagesFetched: 0 },
+    { reasons: ["response-byte-cap"] },
     { queriedAt: "not-a-time" },
   ]) {
     const value = { ...exactBytes(1000), ...change };

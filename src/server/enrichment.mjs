@@ -54,6 +54,8 @@ export function boundedVulnerabilityCheck(value, spec, clock) {
         snapshot.advisories.length !== 0) ||
       !Number.isSafeInteger(snapshot.pagesFetched) ||
       snapshot.pagesFetched < 0 ||
+      (snapshot.complete &&
+        (snapshot.pagesFetched === 0 || snapshot.reasons.length !== 0)) ||
       typeof snapshot.queriedAt !== "string" ||
       !Number.isFinite(Date.parse(snapshot.queriedAt)) ||
       !snapshot.limits ||
