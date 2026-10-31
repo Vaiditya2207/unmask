@@ -2359,3 +2359,51 @@ test("an input envelope too small for one complete group sends no provider reque
   assert.deepEqual(section.omittedEvidenceIds, ["e1"]);
   assert.equal(section.omittedEvidenceGroups[0].reason, "group-budget");
 });
+
+test("Gemini output budget and JSON mode are explicit and identity bound", async () => {
+  const requests = [];
+  const model = createGemmaClient({
+    apiKey: "synthetic-key",
+    localLimits: {
+      generationsPerMinute: 3,
+      inputTokensPerMinute: 12000,
+      generationsPerDay: 100,
+    },
+    fetchImpl: async (url, options) => {
+      const body = JSON.parse(options.body);
+      requests.push({ url, body });
+      return url.endsWith(":countTokens")
+        ? new Response('{"totalTokens":100}')
+        : output({ hypotheses: [hypothesis()] });
+    },
+  });
+  assert.deepEqual(
+    model.configuration.route.map(({ generationConfig: config }) => [
+      config.maxOutputTokens,
+      config.responseMimeType,
+    ]),
+    [
+      [4096, "application/json"],
+      [4096, "application/json"],
+      [1000, undefined],
+    ],
+  );
+  const result = await model.explain(report(), { allowLocal: true });
+  assert.equal(result.status, "complete");
+  assert.equal(result.generationConfig.maxOutputTokens, 4096);
+  assert.equal(result.generationConfig.responseMimeType, "application/json");
+  assert.match(
+    JSON.parse(requests[0].body.contents[0].parts[0].text).task,
+    /JSON only/u,
+  );
+  assert.deepEqual(requests[1].body.generationConfig, result.generationConfig);
+  assert.notEqual(
+    model.configHash,
+    createGemmaClient({ apiKey: "synthetic-key", maxOutputTokens: 1000 })
+      .configHash,
+  );
+  assert.throws(
+    () => createGemmaClient({ apiKey: "synthetic-key", maxOutputTokens: 4097 }),
+    /resource limits/u,
+  );
+});
