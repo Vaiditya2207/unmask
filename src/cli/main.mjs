@@ -10,6 +10,7 @@ import { addConfiguredModel } from "../core/online.mjs";
 import { modelClientFromEnv } from "../model/config.mjs";
 import { checkHosted } from "./hosted.mjs";
 import { sarifCommand } from "./sarif.mjs";
+import { annotationsCommand } from "./annotations.mjs";
 
 const names = {
   "--tarball": "tarballPath",
@@ -164,6 +165,8 @@ async function configuredModel(allowModel, runtime) {
 export async function main(argv = process.argv.slice(2), runtime = {}) {
   try {
     if (argv[0] === "sarif") return await sarifCommand(argv.slice(1));
+    if (argv[0] === "annotations")
+      return await annotationsCommand(argv.slice(1));
     const { out, offline, allowModel, registrySpec, ...options } = parse(argv);
     let report;
     if (registrySpec)
