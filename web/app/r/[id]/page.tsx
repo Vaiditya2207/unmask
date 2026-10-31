@@ -8,6 +8,8 @@ import { AutoRefresh } from "@/components/report/AutoRefresh";
 import { sampleReport } from "@/lib/sample-report.ts";
 import { fetchJob, type Job } from "@/lib/analyzer.ts";
 import { formatUtc } from "@/lib/report.ts";
+import { PackageDetailsView } from "@/components/report/PackageDetailsView";
+import { fetchPackageDetails, evidenceAnchors } from "@/lib/package-details.ts";
 
 type Params = Promise<{ id: string }>;
 
@@ -85,7 +87,22 @@ export default async function ReportPage({ params }: { params: Params }) {
     );
   const result = await fetchJob(id);
   if (!result.ok) notFound();
-  if (result.kind === "report")
+  if (result.kind === "report") {
+    const details =
+      result.schemaVersion === "1" ? await fetchPackageDetails(id) : null;
+    if (details)
+      return (
+        <div className="app">
+          <ViewerBar />
+          <PackageDetailsView
+            details={details}
+            id={id}
+            analyzer={result.analyzer}
+            anchors={evidenceAnchors({ evidence: result.evidence })}
+            rawModel={result.modelMetadata}
+          />
+        </div>
+      );
     return (
       <div className="app">
         <ViewerBar />
@@ -101,9 +118,9 @@ export default async function ReportPage({ params }: { params: Params }) {
           </div>
           <section className="card status-card">
             <p className="status-text-lg">
-              The analyzer finished this check. Its report opens in the
-              analyzer&rsquo;s own viewer for now; this page does not render
-              schema {result.schemaVersion} reports yet.
+              The package breakdown is unavailable from this analyzer. Its
+              schema {result.schemaVersion} report remains available in the
+              evidence viewer; opening it does not start another check.
             </p>
             <p className="status-links">
               <a className="btn" href={`${result.analyzer}/r/${id}`}>
@@ -115,6 +132,7 @@ export default async function ReportPage({ params }: { params: Params }) {
         </main>
       </div>
     );
+  }
   const { job } = result;
   return (
     <div className="app">
