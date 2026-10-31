@@ -23,9 +23,13 @@
       "id": "guard",
       "status": "unknown",
       "message": "Active shell guard integration cannot be verified from a child process.",
-      "action": "Use unmask enable to inspect explicit shell setup, then verify it in the invoking shell. Direct unmask install remains explicit."
+      "action": "In a build with guard commands, use unmask enable for explicit setup, then run type npm in the invoking shell to verify interception."
     }
   ],
+  "node": {
+    "version": "24.22.2",
+    "required": "24.22.2"
+  },
   "service": {
     "origin": "https://unmask-386156642190.asia-south1.run.app"
   },

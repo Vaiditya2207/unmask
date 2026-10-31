@@ -171,3 +171,69 @@ test("doctor aborts an unresponsive service and sanitizes redirect responses", a
     assert.doesNotMatch(rt.output.join(""), /DO_NOT_PRINT/);
   }
 });
+
+test("doctor uses an available guard inspector without exposing settings or messages", async (t) => {
+  const rt = runtime(await fixture(t));
+  rt.configInspector = async (project) => {
+    assert.equal(project, rt.cwd);
+    return {
+      status: "ok",
+      settings: { profile: "strict", sensitive: "DO_NOT_PRINT" },
+      message: "DO_NOT_PRINT",
+    };
+  };
+  assert.equal(await main(["doctor", "--offline", "--json"], rt), 0);
+  const result = JSON.parse(rt.output.join(""));
+  assert.equal(result.checks.find((item) => item.id === "config").status, "ok");
+  assert.equal(result.node.version, "24.22.2");
+  assert.doesNotMatch(rt.output.join(""), /DO_NOT_PRINT/);
+});
+
+for (const status of ["invalid", "default"]) {
+  test(`doctor maps guard inspector ${status} to actionable diagnostic status`, async (t) => {
+    const rt = runtime(await fixture(t));
+    rt.configInspector = async () => ({ status, message: "DO_NOT_PRINT" });
+    assert.equal(
+      await main(["doctor", "--offline", "--json"], rt),
+      status === "invalid" ? 1 : 0,
+    );
+    const result = JSON.parse(rt.output.join(""));
+    assert.equal(
+      result.checks.find((item) => item.id === "config").status,
+      status === "invalid" ? "error" : "warning",
+    );
+    assert.doesNotMatch(rt.output.join(""), /DO_NOT_PRINT/);
+  });
+}
+
+test("doctor text output includes observed Node and service versions", async (t) => {
+  const rt = runtime(await fixture(t));
+  rt.fetchImpl = async () =>
+    new Response(
+      JSON.stringify({
+        version: "0.1.2",
+        commit: "a".repeat(40),
+        tarballSha256: "b".repeat(64),
+      }),
+      { headers: { "content-type": "application/json" } },
+    );
+  assert.equal(await main(["doctor"], rt), 0);
+  assert.match(rt.output.join(""), /Node 24\.22\.2/);
+  assert.match(rt.output.join(""), /Service 0\.1\.2/);
+  assert.match(rt.output.join(""), /type npm/);
+});
+
+test("standalone doctor labels recognized fallback config as only partially validated", async (t) => {
+  const { writeFile } = await import("node:fs/promises");
+  const rt = runtime(await fixture(t));
+  await writeFile(
+    path.join(rt.cwd, ".unmask.json"),
+    '{"schemaVersion":1,"profile":"strict"}',
+  );
+  assert.equal(await main(["doctor", "--offline", "--json"], rt), 0);
+  assert.equal(
+    JSON.parse(rt.output.join("")).checks.find((item) => item.id === "config")
+      .status,
+    "unknown",
+  );
+});

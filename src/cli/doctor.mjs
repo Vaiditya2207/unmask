@@ -104,7 +104,7 @@ async function serviceJson(
     } catch {}
   }
 }
-async function projectConfig(cwd) {
+async function fallbackConfig(cwd) {
   const filename = path.join(cwd, ".unmask.json");
   let handle;
   try {
@@ -161,6 +161,52 @@ async function projectConfig(cwd) {
     await handle?.close();
   }
 }
+async function projectConfig(cwd, inspector) {
+  try {
+    if (!inspector) {
+      try {
+        inspector = (await import("../core/guard-config.mjs"))
+          .inspectGuardConfig;
+      } catch (error) {
+        if (
+          error.code === "ERR_MODULE_NOT_FOUND" &&
+          error.url ===
+            new URL("../core/guard-config.mjs", import.meta.url).href
+        )
+          return fallbackConfig(cwd);
+        throw error;
+      }
+    }
+    const result = await inspector(cwd);
+    if (result?.status === "default")
+      return {
+        id: "config",
+        status: "warning",
+        message:
+          "No explicit project guard configuration; default policy applies.",
+        action:
+          "Use unmask config to explicitly inspect and choose a project guard policy.",
+      };
+    if (result?.status !== "ok") throw new Error();
+    return {
+      id: "config",
+      status: "ok",
+      message:
+        "Project guard configuration passed the installed guard schema validator.",
+      action:
+        "Run unmask config show to inspect the policy before enabling an install guard.",
+    };
+  } catch {
+    return {
+      id: "config",
+      status: "error",
+      message:
+        "Project guard configuration failed the installed guard schema validator.",
+      action:
+        "Inspect .unmask.json locally with unmask config; do not store credentials in it.",
+    };
+  }
+}
 export async function inspectDoctor({
   cwd = process.cwd(),
   nodeVersion = process.version,
@@ -168,6 +214,7 @@ export async function inspectDoctor({
   serverUrl = DEFAULT_SERVER_URL,
   fetchImpl,
   signal,
+  configInspector,
 } = {}) {
   const origin = serviceOrigin(serverUrl);
   const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(nodeVersion);
@@ -187,11 +234,15 @@ export async function inspectDoctor({
       action:
         "Use the repository-pinned Node 24.22.2 for reproducible results.",
     },
-    await projectConfig(cwd),
+    await projectConfig(cwd, configInspector),
   ];
   const result = {
     schemaVersion: "1",
     checks,
+    node: {
+      version: match ? match.slice(1).join(".") : null,
+      required: "24.22.2",
+    },
     service: { origin },
     limitations: [
       "Diagnostics do not assess package safety or make a model request.",
@@ -249,7 +300,7 @@ export async function inspectDoctor({
     message:
       "Active shell guard integration cannot be verified from a child process.",
     action:
-      "Use unmask enable to inspect explicit shell setup, then verify it in the invoking shell. Direct unmask install remains explicit.",
+      "In a build with guard commands, use unmask enable for explicit setup, then run type npm in the invoking shell to verify interception.",
   });
   return result;
 }
@@ -262,12 +313,13 @@ export async function doctorCommand(argv, runtime = {}) {
     serverUrl: options["--server-url"],
     fetchImpl: runtime.fetchImpl,
     signal: runtime.signal,
+    configInspector: runtime.configInspector,
   });
   const stdout = runtime.stdout ?? process.stdout;
   stdout.write(
     options["--json"]
       ? JSON.stringify(result, null, 2) + "\n"
-      : "UNMASK doctor\n" +
+      : `UNMASK doctor\nNode ${result.node.version ?? "unknown"}; required ${result.node.required}\nService ${result.service.version ?? "unverified"} at ${result.service.origin}\n` +
           result.checks
             .map(
               (check) =>
