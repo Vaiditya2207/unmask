@@ -453,6 +453,7 @@ function advisoryResult(status, advisories, name = "ua-parser-js") {
       package: pkg,
       status,
       complete: true,
+      queriedAt: new Date(0).toISOString(),
       reasons: [],
       advisories,
       pagesFetched: 1,
@@ -553,6 +554,26 @@ test("advisory-only results with contradictory, mismatched or unbounded fields a
     },
     "safety verdict provided": (r) => {
       r.safetyVerdict = "safe";
+    },
+    "complete lookup with failure reasons": (r) => {
+      r.vulnerabilityCheck.reasons = ["lookup-failed"];
+    },
+    "complete lookup without fetched pages": (r) => {
+      r.vulnerabilityCheck.pagesFetched = 0;
+    },
+    "incomplete lookup without reasons": (r) => {
+      r.vulnerabilityCheck.status = "incomplete";
+      r.vulnerabilityCheck.complete = false;
+      r.assessment = "advisory-lookup-incomplete";
+    },
+    "unknown result schema": (r) => {
+      r.schemaVersion = "99";
+    },
+    "unknown lookup schema": (r) => {
+      r.vulnerabilityCheck.schemaVersion = "99";
+    },
+    "invalid query time": (r) => {
+      r.vulnerabilityCheck.queriedAt = "not-a-time";
     },
   };
   for (const [name, mutate] of Object.entries(cases)) {

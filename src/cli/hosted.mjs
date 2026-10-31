@@ -390,7 +390,8 @@ function advisoryOnly(result, claim) {
     item.version === claim.version;
   const complete = ["found", "none-reported"].includes(check?.status);
   if (
-    result?.kind !== "advisory-only" ||
+    result?.schemaVersion !== "1" ||
+    result.kind !== "advisory-only" ||
     result.safetyVerdict !== "not-provided" ||
     result.artifactVerification?.status !== "not-performed" ||
     result.sourceComparison?.status !== "not-performed" ||
@@ -398,7 +399,15 @@ function advisoryOnly(result, claim) {
     !bounded(result.notice, 1024) ||
     !exact(result.package) ||
     !exact(check?.package) ||
+    check.schemaVersion !== "1" ||
     check.source !== "OSV" ||
+    !bounded(check.queriedAt, 64) ||
+    !Number.isFinite(Date.parse(check.queriedAt)) ||
+    !Number.isSafeInteger(check.pagesFetched) ||
+    check.pagesFetched < 0 ||
+    check.pagesFetched > 100 ||
+    (complete && (check.pagesFetched === 0 || check.reasons.length !== 0)) ||
+    (!complete && check.reasons.length === 0) ||
     !Object.hasOwn(ADVISORY_ASSESSMENTS, check.status) ||
     result.assessment !== ADVISORY_ASSESSMENTS[check.status] ||
     check.complete !== complete ||
