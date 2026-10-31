@@ -210,19 +210,25 @@
       "family": "Libre Franklin",
       "file": "librefranklin-OFL.txt",
       "sourceURL": "https://raw.githubusercontent.com/google/fonts/main/ofl/librefranklin/OFL.txt",
-      "sha256": "2710268527181a27b8e938617551bae29e714e6525247be6679bf897a9942a60"
+      "sha256": "365244a702782e2c11b874bd27197d7b647527c0e96643fefaf115f03da4583d",
+      "sourceSha256": "2710268527181a27b8e938617551bae29e714e6525247be6679bf897a9942a60",
+      "textNormalization": "LF line endings; trailing whitespace removed"
     },
     {
       "family": "Source Serif 4",
       "file": "sourceserif4-OFL.txt",
       "sourceURL": "https://raw.githubusercontent.com/google/fonts/main/ofl/sourceserif4/OFL.txt",
-      "sha256": "5f94c3fd3a23131a417ab5a0c8452de57e70c3cfb9f604d88241f7065ebf9fd9"
+      "sha256": "0fd8b796c1c6220a559a5682cfd00d1c8488b428369f7cb70deb671888cef85f",
+      "sourceSha256": "5f94c3fd3a23131a417ab5a0c8452de57e70c3cfb9f604d88241f7065ebf9fd9",
+      "textNormalization": "LF line endings; trailing whitespace removed"
     },
     {
       "family": "JetBrains Mono",
       "file": "jetbrainsmono-OFL.txt",
       "sourceURL": "https://raw.githubusercontent.com/google/fonts/main/ofl/jetbrainsmono/OFL.txt",
-      "sha256": "b2fe5e8987594e9ffd1d2ca52a2f5d73eb8335243893c5d6254b5ad69269591d"
+      "sha256": "b2fe5e8987594e9ffd1d2ca52a2f5d73eb8335243893c5d6254b5ad69269591d",
+      "sourceSha256": "b2fe5e8987594e9ffd1d2ca52a2f5d73eb8335243893c5d6254b5ad69269591d",
+      "textNormalization": "LF line endings; trailing whitespace removed"
     }
   ],
   "faces": [
