@@ -13,6 +13,11 @@ import { runScan } from "./scan.mjs";
 import { runBatch } from "./batch.mjs";
 import { infoCommand } from "./info.mjs";
 import { filesCommand } from "./files.mjs";
+import { runInstallGuard } from "./install-guard.mjs";
+import { runShellIntegration } from "./shell-integration.mjs";
+import { runAudit } from "./audit.mjs";
+import { runConfig } from "./config.mjs";
+import { runExceptions } from "./exceptions.mjs";
 
 const names = {
   "--tarball": "tarballPath",
@@ -37,7 +42,7 @@ function parse(argv) {
   if (argv[0] !== "check")
     throw new LocalInputError(
       "usage",
-      "Use check name@version or an explicit local tarball with --offline",
+      "Use check name@version, audit, or an explicit local tarball with --offline",
     );
   const options = {};
   let start = 1;
@@ -165,11 +170,18 @@ async function configuredModel(allowModel, runtime) {
 }
 
 export async function main(argv = process.argv.slice(2), runtime = {}) {
+  if (argv[0] === "install" || argv[0] === "ci")
+    return runInstallGuard(argv[0], argv.slice(1), runtime);
+  if (argv[0] === "enable" || argv[0] === "disable")
+    return runShellIntegration(argv[0], argv.slice(1), runtime);
+  if (argv[0] === "config") return runConfig(argv.slice(1), runtime);
+  if (argv[0] === "exceptions") return runExceptions(argv.slice(1), runtime);
   try {
     if (argv[0] === "scan") return await runScan(argv.slice(1), runtime);
     if (argv[0] === "batch") return await runBatch(argv.slice(1), runtime);
     if (argv[0] === "files") return await filesCommand(argv.slice(1), runtime);
     if (argv[0] === "info") return await infoCommand(argv.slice(1), runtime);
+    if (argv[0] === "audit") return await runAudit(argv.slice(1), runtime);
     const { out, offline, allowModel, registrySpec, ...options } = parse(argv);
     let report;
     if (registrySpec)

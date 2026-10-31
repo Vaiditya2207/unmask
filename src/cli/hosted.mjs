@@ -3,7 +3,8 @@ import { parsePackageSpec } from "../core/acquire.mjs";
 import { LocalInputError } from "../core/pipeline.mjs";
 import { validateReport } from "../core/report.mjs";
 
-const DEFAULT_SERVER_URL = "https://unmask-386156642190.asia-south1.run.app";
+export const DEFAULT_SERVER_URL =
+  "https://unmask-386156642190.asia-south1.run.app";
 const defaults = Object.freeze({
   totalTimeoutMs: 600000,
   requestTimeoutMs: 15000,
@@ -11,7 +12,7 @@ const defaults = Object.freeze({
   pollMs: 3000,
 });
 const failure = (code, message) => new LocalInputError(code, message);
-function serverOrigin(value) {
+export function serverOrigin(value) {
   if (!value)
     throw failure(
       "hosted-configuration",
