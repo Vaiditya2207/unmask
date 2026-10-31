@@ -130,6 +130,9 @@ export function parseLockfile(text, limits = LOCKFILE_LIMITS) {
       "lockfile-unsupported",
       "Only npm lockfileVersion 2 or 3 (with a packages map) is supported.",
     );
+  // npm writes an empty packages map for a project with no dependencies.
+  if (isObject(data.packages) && Object.keys(data.packages).length === 0)
+    data.packages = { "": {} };
   if (!isObject(data.packages) || !isObject(data.packages[""]))
     throw invalid("Lockfile packages map with a root entry is required.");
   const keys = Object.keys(data.packages);
@@ -185,6 +188,12 @@ export function parseLockfile(text, limits = LOCKFILE_LIMITS) {
       edges: entryEdges,
       edgesValid,
     });
+  }
+  // npm omits name on workspace entries; the linking node_modules key carries it.
+  for (const entry of entries.values()) {
+    const target = entry.kind === "link" && entries.get(entry.resolved ?? "");
+    if (target?.kind === "workspace" && target.name === target.key)
+      target.name = nameFromKey(entry.key);
   }
   return { lockfileVersion: data.lockfileVersion, entries };
 }
