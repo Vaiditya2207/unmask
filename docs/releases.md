@@ -55,12 +55,20 @@ code. Complete them in reviewed changes before setting `enabled: true`:
 - Add meaningful product tests under `productTestDirectory`, with `.test` or
   `.spec` filenames. Add actual `build`, `test:product` and `test:release`
   commands. No no-op commands or generated placeholder applications qualify.
-- Supply a real Dockerfile named by `dockerfile`. It must consume the already
-  built `dist/` distribution and locked production dependencies, avoid package
-  lifecycle execution, run as a non-root user, and serve the website/API on
-  `0.0.0.0:$PORT`. This change supplies no Dockerfile or server. `.dockerignore`
-  admits only the built distribution, package metadata, license and Dockerfile.
-  Update that allowlist deliberately if the actual Dockerfile name changes.
+- Supply a real Dockerfile named by `dockerfile`. It must consume the **exact
+  CI-produced npm tarball** and its matching lockfile, rather than independently
+  rebuilding or copying a separate `dist/` tree. Install locked production
+  dependencies with `npm ci --omit=dev --ignore-scripts`, run as a non-root user,
+  and serve the website/API on `0.0.0.0:$PORT`. Include the npm tarball SHA-256 in
+  an image label. The server's `/version` response must expose the release
+  version, full source commit and that same tarball hash; smoke checks must
+  compare them with the release manifest.
+- The actual Dockerfile, tarball build-context wiring, label and `/version`
+  implementation belong to the app PR. This foundation supplies no Dockerfile
+  or server. Its current `.dockerignore` admits the built distribution, package
+  metadata, license and Dockerfile, and does **not** yet admit the exact tarball.
+  The app PR must update that allowlist and candidate/release build inputs before
+  enabling the gate; the foundation does not yet enforce this artifact contract.
 - Implement `test:release` to install and exercise `RELEASE_PACKAGE` in an isolated
   temporary directory, start `RELEASE_IMAGE`, and test the real website and API
   through the normal HTTP entrypoint. Verify persisted analysis and a follow-up
@@ -118,20 +126,34 @@ the candidate, then publishes and confirms immutability. The manifest binds:
 - The GHCR image digest/reference and `linux/amd64` platform.
 
 **An attached npm tarball is not an npm registry publication.** This foundation
-contains no `npm publish` command. Registry trusted publishing, ownership and
-provenance setup remain pending the authorized npm account/scope. No live
-release, GHCR image or npm package has been published to validate these adapters.
+contains no `npm publish` command, and the manifest keeps
+`package.registryPublished: false`. A completed GitHub artifact release would
+satisfy the GitHub distribution step while npm registry acceptance remains unmet.
+Registry trusted publishing, ownership and provenance setup remain pending the
+authorized npm account/scope. No live release, GHCR image or npm package has been
+published to validate these adapters.
 
 ## Deploy a selected release in DigitalOcean App Platform
 
 The deployment portal is the existing App Platform dashboard; this project adds
 no custom portal and creates no DigitalOcean resources. An operator selects a
-published GitHub release number, reads its manifest, then selects that release's
-GHCR image **by digest** in the dashboard. Do not deploy from the source branch
-or a floating `latest` tag. GHCR publication does not auto-deploy App Platform.
+published GitHub release number and reads its manifest. In the app's dashboard, open
+**Settings → App Spec → Edit** and set `image.digest` to that release's GHCR digest and **omit
+`image.tag`**. Save/apply the spec through the dashboard for an authorized
+manual deployment. To roll back, select a previously verified release and apply
+its recorded digest through the same App Spec editor. Do not deploy from the
+source branch or a floating `latest` tag. GHCR publication does not auto-deploy
+App Platform.
+
+For the initial deployment, manually make the GHCR image public and verify
+anonymous pull access. That visibility setting is an operator prerequisite;
+this foundation does not change package visibility or provision pull credentials.
 
 Once the real server's port and health endpoint exist, configure a Web Service
 with that port, HTTP health check and the required hosted model secret reference.
+Use a **single app instance** while report storage is in memory: a request routed
+to a second instance could otherwise return a report 404. Scaling requires shared
+report storage or an explicit routing design in a later app change.
 For an app spec, the source fields will have this shape:
 
 ```yaml
@@ -144,11 +166,12 @@ image:
 
 This excerpt is a contract, not a deployable app spec. Account/project, budget,
 region, instance size, registry visibility/pull access, actual server entrypoint,
-port, health path and model-secret availability remain unconfigured. For private
-GHCR images, provision read-only pull credentials in the dashboard; never commit
-them. App Platform supports Linux AMD64 container images and recommends digests.
-After a separately authorized deployment, verify the serving digest and perform
-the normal website/API smoke test. Health alone is not release acceptance.
+port, health path and model-secret availability remain unconfigured. Private
+registry access is outside the initial public-image deployment contract and
+requires a separately authorized setup. App Platform supports Linux AMD64
+container images and recommends digests. After a separately authorized deployment,
+verify the serving digest and `/version` identity against the chosen manifest,
+then perform the normal website/API smoke test. Health alone is not release acceptance.
 Temporal is not involved in this foundation.
 
 ## Official references
@@ -159,4 +182,5 @@ Temporal is not involved in this foundation.
 - [GitHub immutability settings endpoint](https://docs.github.com/en/rest/repos/repos#check-if-immutable-releases-are-enabled-for-a-repository)
 - [GitHub release assets](https://docs.github.com/en/rest/releases/assets)
 - [npm pack and ignore-scripts](https://docs.npmjs.com/cli/v12/commands/npm-pack/)
+- [DigitalOcean dashboard App Spec editing](https://docs.digitalocean.com/products/app-platform/how-to/update-app-spec/)
 - [DigitalOcean container image deployment](https://docs.digitalocean.com/products/app-platform/how-to/deploy-from-container-images/)
