@@ -434,3 +434,53 @@ test("deployment promotes a provider-canonicalized leaf only after verifying its
   assert.equal(result.resolvedImageDigest, resolved);
   assert.ok(f.calls.some((call) => call.args.includes("unmask-new=100")));
 });
+
+test("deployment promotes the exact GHCR image through the observed Asia cache representation", async () => {
+  const f = fixture();
+  const cache = `cache.asia-docker.pkg.dev/${f.env.RELEASE_IMAGE_DIGEST}`;
+  f.revision.spec.containers[0].image = cache;
+  f.revision.status.imageDigest = cache;
+  const result = await run(f);
+  assert.equal(result.image, f.env.RELEASE_IMAGE_DIGEST);
+  assert.equal(result.resolvedImageDigest, f.env.RELEASE_IMAGE_DIGEST);
+  assert.equal(f.traffic, "unmask-new");
+});
+
+test("failed smoke restores and verifies the exact cached previous revision", async () => {
+  const f = fixture();
+  f.previousRevision.spec.containers[0].image = `cache.asia-docker.pkg.dev/${f.previousRevision.spec.containers[0].image}`;
+  f.previousRevision.status.imageDigest =
+    f.previousRevision.spec.containers[0].image;
+  const cache = `cache.asia-docker.pkg.dev/${f.env.RELEASE_IMAGE_DIGEST}`;
+  f.revision.spec.containers[0].image = cache;
+  f.revision.status.imageDigest = cache;
+  await assert.rejects(
+    run(f, {
+      smoke: async () => {
+        throw new Error("model-smoke-failed");
+      },
+    }),
+    /restored.*verified/i,
+  );
+  assert.equal(f.traffic, "unmask-old");
+});
+
+test("cached rollback still rejects a different repository with the same digest", async () => {
+  const f = fixture();
+  f.previousRevision.spec.containers[0].image = `cache.asia-docker.pkg.dev/${f.previousRevision.spec.containers[0].image}`;
+  f.previousRevision.status.imageDigest =
+    f.previousRevision.spec.containers[0].image;
+  await assert.rejects(
+    run(f, {
+      smoke: async () => {
+        f.previousRevision.status.imageDigest =
+          f.previousRevision.status.imageDigest.replace(
+            "fixture/unmask",
+            "other/unmask",
+          );
+        throw new Error("model-smoke-failed");
+      },
+    }),
+    /rollback.*not.*verified|rollback.*failed/i,
+  );
+});
