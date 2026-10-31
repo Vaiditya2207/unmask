@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1",
+  "root": "<CACHE_ROOT>",
+  "exists": true,
+  "limitations": [
+    "Only explicitly imported local report snapshots are managed; input blobs and hosted caches are untouched.",
+    "Cached reports can be stale and are not a new analysis or safety guarantee."
+  ],
+  "entries": [
+    {
+      "id": "08f8e75c77f5cb2ca1357a90fa6a3db26949ce8a0a596cae42e636f57784f6eb",
+      "cachedAt": "2026-01-15T00:00:00.000Z",
+      "ageSeconds": 0,
+      "sizeBytes": 1473,
+      "scope": {
+        "artifactSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "package": "fixture@1.0.0"
+      },
+      "modelStatus": "disabled"
+    }
+  ]
+}

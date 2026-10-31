@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "1",
+  "checks": [
+    {
+      "id": "node",
+      "status": "ok",
+      "message": "Node matches the exact 24.22.2 package engine pin.",
+      "action": "Use the repository-pinned Node 24.22.2 for reproducible results."
+    },
+    {
+      "id": "config",
+      "status": "warning",
+      "message": "No project guard configuration found.",
+      "action": "Use unmask config to explicitly configure a guard policy."
+    },
+    {
+      "id": "service",
+      "status": "skipped",
+      "message": "Hosted diagnostics skipped explicitly.",
+      "action": "Run doctor without --offline to check the service."
+    },
+    {
+      "id": "guard",
+      "status": "unknown",
+      "message": "Active shell guard integration cannot be verified from a child process.",
+      "action": "In a build with guard commands, use unmask enable for explicit setup, then run type npm in the invoking shell to verify interception."
+    }
+  ],
+  "node": {
+    "version": "24.22.2",
+    "required": "24.22.2"
+  },
+  "service": {
+    "origin": "https://unmask-386156642190.asia-south1.run.app"
+  },
+  "limitations": [
+    "Diagnostics do not assess package safety or make a model request.",
+    "Only the nonsecret UNMASK_SERVER_URL environment value is consulted; shell startup files are not read and active shell guard interception is unverified."
+  ]
+}

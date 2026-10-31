@@ -28,6 +28,13 @@ import { runBatch } from "./batch.mjs";
 import { runInstallGuard } from "./install-guard.mjs";
 import { runShellIntegration } from "./shell-integration.mjs";
 import { runAudit } from "./audit.mjs";
+import { runWhy } from "./why.mjs";
+import { preflightMain } from "./preflight.mjs";
+import { watchMain } from "./watch.mjs";
+import { runCompare } from "./compare.mjs";
+import { runHistory } from "./history.mjs";
+import { doctorCommand } from "./doctor.mjs";
+import { cacheCommand } from "./cache.mjs";
 
 const names = {
   "--tarball": "tarballPath",
@@ -52,7 +59,7 @@ function parse(argv) {
   if (argv[0] !== "check")
     throw new LocalInputError(
       "usage",
-      "Use check name@version, audit, or an explicit local tarball with --offline",
+      "Use check name@version, audit, why name, or an explicit local tarball with --offline",
     );
   const options = {};
   let start = 1;
@@ -199,6 +206,15 @@ export async function main(argv = process.argv.slice(2), runtime = {}) {
     if (argv[0] === "files") return await filesCommand(argv.slice(1), runtime);
     if (argv[0] === "info") return await infoCommand(argv.slice(1), runtime);
     if (argv[0] === "audit") return await runAudit(argv.slice(1), runtime);
+    if (argv[0] === "preflight")
+      return await preflightMain(argv.slice(1), runtime);
+    if (argv[0] === "watch") return await watchMain(argv.slice(1), runtime);
+    if (argv[0] === "why") return await runWhy(argv.slice(1));
+    if (argv[0] === "compare") return await runCompare(argv.slice(1), runtime);
+    if (argv[0] === "history") return await runHistory(argv.slice(1), runtime);
+    if (argv[0] === "doctor")
+      return await doctorCommand(argv.slice(1), runtime);
+    if (argv[0] === "cache") return await cacheCommand(argv.slice(1), runtime);
     const { out, offline, allowModel, registrySpec, ...options } = parse(argv);
     progress = createProgress(stderr, { env, subject: registrySpec });
     let report, details;
