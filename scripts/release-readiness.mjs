@@ -7,6 +7,7 @@ import {
   realpathSync,
 } from "node:fs";
 import path from "node:path";
+import { verifyBuild } from "./build.mjs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -35,7 +36,7 @@ export function localFile(root, relative) {
   );
 }
 
-export function readiness(root, { built = false } = {}) {
+export function readiness(root, { built = false, expectedSha } = {}) {
   const pkg = JSON.parse(readFileSync(path.join(root, "package.json")));
   const config = JSON.parse(
     readFileSync(path.join(root, "release.config.json")),
@@ -110,6 +111,16 @@ export function readiness(root, { built = false } = {}) {
       reasons.push(
         `Missing ${built ? "built " : ""}${entry} entrypoint under dist/`,
       );
+  }
+  if (built) {
+    try {
+      verifyBuild(root, {
+        expectedSha,
+        requireClean: expectedSha !== undefined,
+      });
+    } catch (error) {
+      reasons.push(error.message);
+    }
   }
   if (typeof pkg.bin?.unmask !== "string" || pkg.bin.unmask !== config.cli)
     reasons.push("npm bin.unmask must identify the CLI entrypoint");

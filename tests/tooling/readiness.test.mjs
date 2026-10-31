@@ -1,8 +1,15 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  rmSync,
+  readFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
+import { buildProduct } from "../../scripts/build.mjs";
 import { readiness } from "../../scripts/release-readiness.mjs";
 
 function fixture(t) {
@@ -16,7 +23,7 @@ function fixture(t) {
       registry: "https://registry.npmjs.org/",
       access: "public",
     },
-    bin: { unmask: "dist/cli.js" },
+    bin: { unmask: "dist/cli/main.mjs" },
     scripts: {
       build: "node build.mjs",
       "test:product": "node --test tests/product/*.test.mjs",
@@ -26,13 +33,23 @@ function fixture(t) {
   const config = {
     enabled: true,
     approvedPackageName: pkg.name,
-    sourceFiles: ["src/cli.js", "src/server.js", "src/web.js"],
-    cli: "dist/cli.js",
-    server: "dist/server.js",
-    web: "dist/web/index.html",
+    sourceFiles: [
+      "src/cli/main.mjs",
+      "src/server/main.mjs",
+      "src/viewer/shell.mjs",
+    ],
+    cli: "dist/cli/main.mjs",
+    server: "dist/server/main.mjs",
+    web: "dist/viewer/shell.mjs",
     dockerfile: "Dockerfile",
     productTestDirectory: "tests/product",
   };
+  mkdirSync(path.join(root, "scripts"), { recursive: true });
+  writeFileSync(
+    path.join(root, "scripts/build.mjs"),
+    readFileSync(new URL("../../scripts/build.mjs", import.meta.url)),
+  );
+  writeFileSync(path.join(root, ".nvmrc"), "24.22.2\n");
   const save = () => {
     writeFileSync(
       path.join(root, "package-lock.json"),
@@ -48,6 +65,7 @@ function fixture(t) {
       path.join(root, "release.config.json"),
       JSON.stringify(config),
     );
+    buildProduct(root);
   };
   for (const file of [
     ...config.sourceFiles,
