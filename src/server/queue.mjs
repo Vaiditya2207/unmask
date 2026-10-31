@@ -3,6 +3,7 @@ import {
   boundedVulnerabilityCheck,
   unavailableVulnerabilityCheck,
 } from "./enrichment.mjs";
+import { advisoryOnlyResult } from "./advisory-result.mjs";
 
 export const DEFAULT_LIMITS = Object.freeze({
   maxBodyBytes: 4096,
@@ -57,7 +58,22 @@ export function createQueue({
         })
       )
         return;
-      const { report, vulnerabilityCheck, ...small } = job;
+      if (
+        job.advisoryResult &&
+        store.put({
+          ...job,
+          advisoryResult: advisoryOnlyResult(
+            unavailableVulnerabilityCheck(
+              job.nameAtExactVersion,
+              clock,
+              "storage-byte-cap",
+            ),
+            { artifactReason: job.reason },
+          ),
+        })
+      )
+        return;
+      const { report, vulnerabilityCheck, advisoryResult, ...small } = job;
       store.put({ ...small, status: "incomplete", reason: "report-too-large" });
     }
   }
@@ -71,6 +87,38 @@ export function createQueue({
     delete job.queueTimer;
     persist(job);
   }
+  async function enrich(job, controller) {
+    let abort;
+    const interrupted = new Promise((resolve) => {
+      abort = () =>
+        resolve(
+          unavailableVulnerabilityCheck(
+            job.nameAtExactVersion,
+            clock,
+            "aborted",
+          ),
+        );
+      controller.signal.addEventListener("abort", abort, { once: true });
+      if (controller.signal.aborted) abort();
+    });
+    try {
+      const value = await Promise.race([
+        Promise.resolve().then(() =>
+          enrichJob(job.nameAtExactVersion, { signal: controller.signal }),
+        ),
+        interrupted,
+      ]);
+      return boundedVulnerabilityCheck(value, job.nameAtExactVersion, clock);
+    } catch {
+      return unavailableVulnerabilityCheck(
+        job.nameAtExactVersion,
+        clock,
+        "lookup-failed",
+      );
+    } finally {
+      controller.signal.removeEventListener("abort", abort);
+    }
+  }
   function begin(job) {
     active = job;
     waiting = undefined;
@@ -79,7 +127,7 @@ export function createQueue({
     job.status = "running";
     job.startedAt = clock.now();
     const controller = new AbortController();
-    let coreReport;
+    let coreReport, advisorySnapshot;
     const timer = clock.setTimeout(() => {
       job.finishedAt = clock.now();
       if (coreReport) {
@@ -87,16 +135,33 @@ export function createQueue({
         persist({
           ...publicJob(job),
           report: coreReport,
-          vulnerabilityCheck: unavailableVulnerabilityCheck(
-            job.nameAtExactVersion,
-            clock,
-            "aborted",
-          ),
+          vulnerabilityCheck:
+            advisorySnapshot ??
+            unavailableVulnerabilityCheck(
+              job.nameAtExactVersion,
+              clock,
+              "aborted",
+            ),
         });
       } else {
         job.status = "incomplete";
         job.reason = "execution-timeout";
-        persist(job);
+        persist(
+          enrichJob
+            ? {
+                ...publicJob(job),
+                advisoryResult: advisoryOnlyResult(
+                  advisorySnapshot ??
+                    unavailableVulnerabilityCheck(
+                      job.nameAtExactVersion,
+                      clock,
+                      "aborted",
+                    ),
+                  { artifactReason: job.reason },
+                ),
+              }
+            : job,
+        );
       }
       controller.abort();
     }, limits.executionMs);
@@ -105,10 +170,14 @@ export function createQueue({
       clock.clearTimeout(timer);
       controller.abort();
     };
-    Promise.resolve()
-      .then(() =>
-        runAnalysis(job.nameAtExactVersion, { signal: controller.signal }),
-      )
+    const analysis = Promise.resolve().then(() =>
+      runAnalysis(job.nameAtExactVersion, { signal: controller.signal }),
+    );
+    // The advisory lookup runs beside acquisition so a hung or failed artifact still keeps it.
+    const advisory = enrichJob
+      ? enrich(job, controller).then((check) => (advisorySnapshot = check))
+      : Promise.resolve(undefined);
+    analysis
       .then(async (report) => {
         if (job.status !== "running" || closed) return;
         if (
@@ -119,45 +188,7 @@ export function createQueue({
         )
           throw new TypeError("Invalid report");
         coreReport = report;
-        let vulnerabilityCheck;
-        if (enrichJob) {
-          let abort;
-          const interrupted = new Promise((resolve) => {
-            abort = () =>
-              resolve(
-                unavailableVulnerabilityCheck(
-                  job.nameAtExactVersion,
-                  clock,
-                  "aborted",
-                ),
-              );
-            controller.signal.addEventListener("abort", abort, { once: true });
-            if (controller.signal.aborted) abort();
-          });
-          try {
-            const value = await Promise.race([
-              Promise.resolve().then(() =>
-                enrichJob(job.nameAtExactVersion, {
-                  signal: controller.signal,
-                }),
-              ),
-              interrupted,
-            ]);
-            vulnerabilityCheck = boundedVulnerabilityCheck(
-              value,
-              job.nameAtExactVersion,
-              clock,
-            );
-          } catch {
-            vulnerabilityCheck = unavailableVulnerabilityCheck(
-              job.nameAtExactVersion,
-              clock,
-              "lookup-failed",
-            );
-          } finally {
-            controller.signal.removeEventListener("abort", abort);
-          }
-        }
+        const vulnerabilityCheck = await advisory;
         if (job.status !== "running" || closed) return;
         const status = report.policy.exitCode === 2 ? "incomplete" : "done";
         const finishedAt = clock.now();
@@ -171,13 +202,24 @@ export function createQueue({
         job.status = status;
         job.finishedAt = finishedAt;
       })
-      .catch(() => {
+      .catch(async () => {
+        if (job.status !== "running" || closed) return;
+        const vulnerabilityCheck = coreReport ? undefined : await advisory;
         if (job.status !== "running" || closed) return;
         job.status = "failed";
         job.reason = "analysis-failed";
         job.finishedAt = clock.now();
         delete job.report;
-        persist(publicJob(job));
+        persist({
+          ...publicJob(job),
+          ...(vulnerabilityCheck
+            ? {
+                advisoryResult: advisoryOnlyResult(vulnerabilityCheck, {
+                  artifactReason: job.reason,
+                }),
+              }
+            : {}),
+        });
       })
       .finally(() => {
         clock.clearTimeout(timer);

@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { buildPackageDetails } from "../core/package-details.mjs";
 import { attachVulnerabilityCheck } from "./enrichment.mjs";
+import { withAdvisoryResult } from "./advisory-result.mjs";
 import { createQueue, resolveLimits, systemClock } from "./queue.mjs";
 import { createReportStore } from "./store.mjs";
 import { renderReport } from "../viewer/render.mjs";
@@ -305,7 +306,7 @@ export function createApp({
           return send(200, renderCompleted(renderReport(job.report), job));
         return send(
           200,
-          renderStatus(job),
+          withAdvisoryResult(renderStatus(job), job),
           undefined,
           pending ? { "retry-after": "3" } : {},
         );
