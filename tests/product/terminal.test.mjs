@@ -387,7 +387,7 @@ test("errors clear progress, keep exit codes, color only on terminals and includ
   assert.equal(await main(["check"], usage), 2);
   assert.equal(
     usage.stderr.text,
-    "unmask error usage: Local tarball check requires --offline\nHint: Run unmask check name@exact-version, or see docs/cli.md.\n",
+    "unmask error usage: Local tarball check requires --offline\nHint: Run unmask --help for commands and usage.\n",
   );
 });
 

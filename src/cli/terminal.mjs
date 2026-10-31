@@ -344,7 +344,7 @@ export function createProgress(
 }
 
 const hints = {
-  usage: "Run unmask check name@exact-version, or see docs/cli.md.",
+  usage: "Run unmask --help for commands and usage.",
   "unknown-option": "See docs/cli.md for the supported check options.",
   "missing-value": "Each option needs a value, for example --out ./report.",
   "output-write-failed":
