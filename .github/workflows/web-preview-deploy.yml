@@ -1,0 +1,72 @@
+name: Web preview deploy
+
+on:
+  workflow_run:
+    workflows: [Web preview build]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-preview-mutations
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' && contains(fromJSON('["Vaiditya2207/unmask","Pranay0083/unmask","visheshrao17/unmask"]'), github.event.workflow_run.head_repository.full_name)
+    environment:
+      name: preview
+      url: ${{ steps.deploy.outputs.url }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      id-token: write
+    env:
+      PREVIEW_ENVIRONMENT: preview
+      PREVIEW_PLAN: ${{ runner.temp }}/preview-plan.json
+      PREVIEW_ARTIFACT: ${{ runner.temp }}/preview-image
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci --ignore-scripts
+      - name: Validate successful build and current open PR before downloading
+        id: prepare
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/web-preview.mjs prepare
+      - name: Download only the validated run artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          artifact-ids: ${{ steps.prepare.outputs.artifact_id }}
+          run-id: ${{ steps.prepare.outputs.run_id }}
+          repository: Vaiditya2207/unmask
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/preview-image
+      - name: Validate bounded regular files, checksums and image identity before authentication
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/web-preview.mjs verify
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          project_id: unmask-513319
+          service_account: unmask-preview-deploy@unmask-513319.iam.gserviceaccount.com
+          workload_identity_provider: projects/386156642190/locations/global/workloadIdentityPools/unmask-preview/providers/github
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+        with:
+          version: 591.0.0
+      - name: Push preview image, deploy tagged zero-traffic revision and observe exact website
+        id: deploy
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/web-preview.mjs deploy
