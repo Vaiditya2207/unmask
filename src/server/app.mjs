@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { buildPackageDetails } from "../core/package-details.mjs";
 import { attachVulnerabilityCheck } from "./enrichment.mjs";
+import { serveExport } from "./exports.mjs";
 import { createQueue, resolveLimits, systemClock } from "./queue.mjs";
 import { createReportStore } from "./store.mjs";
 import { renderReport } from "../viewer/render.mjs";
@@ -260,6 +261,7 @@ export function createApp({
         if (path === "/") return send(200, renderHome());
         if (path === "/healthz") return json(200, { status: "ok" });
         if (path === "/version") return json(200, version);
+        if (serveExport({ path, queue, versionInfo: version, send })) return;
         const match = /^\/r\/([a-f0-9]{32})(\.details\.json|\.json)?$/.exec(
           path,
         );

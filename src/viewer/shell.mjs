@@ -58,7 +58,7 @@ export function renderError({
 }
 export function renderCompleted(reportHtml, job) {
   const time = new Date(job.finishedAt).toISOString();
-  const navigation = `<nav class="summary" aria-label="Report actions"><a href="/">Check another release</a> | <a href="/r/${escape(job.id)}.json" download="unmask-report.json">Download report JSON</a><p>Cached analysis: <time datetime="${time}">${time}</time>. Eligible results may be reused for up to 30 minutes after completion. Capacity eviction or restart can remove them sooner. Viewing a result does not extend this period. Unavailable model explanations and other retryable failures need a new attempt.</p></nav>`;
+  const navigation = `<nav class="summary" aria-label="Report actions"><a href="/">Check another release</a> | <a href="/r/${escape(job.id)}.json" download="unmask-report.json">Download report JSON</a> | <a href="/r/${escape(job.id)}.cdx.json" download="unmask-sbom.cdx.json">Download CycloneDX SBOM</a><p>Cached analysis: <time datetime="${time}">${time}</time>. Eligible results may be reused for up to 30 minutes after completion. Capacity eviction or restart can remove them sooner. Viewing a result does not extend this period. Unavailable model explanations and other retryable failures need a new attempt.</p></nav>`;
   if (/<\/header\s*>/i.test(reportHtml))
     return reportHtml.replace(
       /<\/header\s*>/i,
