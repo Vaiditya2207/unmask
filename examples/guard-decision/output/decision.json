@@ -1,6 +1,6 @@
 {
   "decisionVersion": "1",
-  "policyVersion": "guard-1",
+  "policyVersion": "guard-2",
   "profile": "strict",
   "appliedPolicy": {
     "unknownDecision": "block",

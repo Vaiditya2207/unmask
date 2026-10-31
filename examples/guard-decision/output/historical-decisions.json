@@ -1,11 +1,11 @@
 [
   {
     "decisionVersion": "1",
-    "policyVersion": "guard-1",
-    "profile": "strict",
+    "policyVersion": "guard-2",
+    "profile": "balanced",
     "appliedPolicy": {
-      "unknownDecision": "block",
-      "blockSeverity": "medium",
+      "unknownDecision": "unknown",
+      "blockSeverity": "high",
       "enforcement": "enforce"
     },
     "package": {
@@ -33,9 +33,6 @@
         "aliases": [
           "CVE-2021-4229"
         ]
-      },
-      {
-        "code": "profile-unknown-blocked"
       }
     ],
     "knownMalware": [
@@ -64,11 +61,11 @@
   },
   {
     "decisionVersion": "1",
-    "policyVersion": "guard-1",
-    "profile": "strict",
+    "policyVersion": "guard-2",
+    "profile": "balanced",
     "appliedPolicy": {
-      "unknownDecision": "block",
-      "blockSeverity": "medium",
+      "unknownDecision": "unknown",
+      "blockSeverity": "high",
       "enforcement": "enforce"
     },
     "package": {
@@ -94,9 +91,6 @@
         "code": "known-malware",
         "advisoryId": "GHSA-mh6f-8j2x-4483",
         "aliases": []
-      },
-      {
-        "code": "profile-unknown-blocked"
       }
     ],
     "knownMalware": [
@@ -123,11 +117,11 @@
   },
   {
     "decisionVersion": "1",
-    "policyVersion": "guard-1",
-    "profile": "strict",
+    "policyVersion": "guard-2",
+    "profile": "balanced",
     "appliedPolicy": {
-      "unknownDecision": "block",
-      "blockSeverity": "medium",
+      "unknownDecision": "unknown",
+      "blockSeverity": "high",
       "enforcement": "enforce"
     },
     "package": {
@@ -155,9 +149,6 @@
         "aliases": [
           "CVE-2022-23812"
         ]
-      },
-      {
-        "code": "profile-unknown-blocked"
       }
     ],
     "knownMalware": [

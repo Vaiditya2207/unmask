@@ -251,13 +251,14 @@ export function createApp({
             "x-unmask-reused": String(result.reused),
           });
         }
-        const decisionMatch = /^\/r\/([a-f0-9]{32})\.decision\.json$/.exec(
-          path,
-        );
+        const decisionMatch =
+          /^\/r\/([a-f0-9]{32})\.decision\.json(\?[^#]*)?$/.exec(path);
         if (decisionMatch) {
           if (req.method !== "GET")
             return json(405, { error: "method-unavailable" }, { allow: "GET" });
-          const result = guardDecisionResponse(queue.get(decisionMatch[1]));
+          const result = guardDecisionResponse(queue.get(decisionMatch[1]), {
+            search: decisionMatch[2] ?? "",
+          });
           return json(result.status, result.body, result.headers);
         }
         if (req.method !== "GET")

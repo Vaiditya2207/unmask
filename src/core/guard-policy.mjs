@@ -1,12 +1,29 @@
 import { parsePackageSpec } from "./acquire.mjs";
 import { validateReport } from "./report.mjs";
 
-export const GUARD_POLICY_VERSION = "guard-1";
-const strictPolicy = Object.freeze({
-  unknownDecision: "block",
-  blockSeverity: "medium",
-  enforcement: "enforce",
+export const GUARD_POLICY_VERSION = "guard-2";
+export const GUARD_PROFILES = Object.freeze({
+  strict: Object.freeze({
+    unknownDecision: "block",
+    blockSeverity: "medium",
+    enforcement: "enforce",
+  }),
+  balanced: Object.freeze({
+    unknownDecision: "unknown",
+    blockSeverity: "high",
+    enforcement: "enforce",
+  }),
+  audit: Object.freeze({
+    unknownDecision: "unknown",
+    blockSeverity: "critical",
+    enforcement: "audit",
+  }),
 });
+export function getGuardProfile(profile = "strict") {
+  if (typeof profile !== "string" || !Object.hasOwn(GUARD_PROFILES, profile))
+    throw new TypeError("Unknown guard profile; use strict, balanced or audit");
+  return GUARD_PROFILES[profile];
+}
 const severityOrder = ["unknown", "low", "medium", "high", "critical"];
 function advisorySeverity(record, identity) {
   const values = [record.databaseSeverity];
@@ -92,12 +109,11 @@ export function classifyGuardAdvisory(record, packageIdentity) {
   };
 }
 
-export function evaluateGuardDecision({
-  nameAtExactVersion,
-  report,
-  vulnerabilityCheck,
-} = {}) {
-  const policy = strictPolicy;
+export function evaluateGuardDecision(
+  { nameAtExactVersion, report, vulnerabilityCheck } = {},
+  { profile = "strict" } = {},
+) {
+  const policy = getGuardProfile(profile);
   let identity;
   try {
     identity = parsePackageSpec(nameAtExactVersion);
@@ -203,7 +219,8 @@ export function evaluateGuardDecision({
   const advisorySeverityComplete = severities.every(
     (record) => record.severity !== "unknown",
   );
-  const unknownSeverityBlock = !advisorySeverityComplete;
+  const unknownSeverityBlock =
+    profile === "strict" && !advisorySeverityComplete;
   if (unknownSeverityBlock) reasons.push({ code: "advisory-severity-unknown" });
   const severityBlock = severities.some(
     (record) =>
@@ -241,20 +258,23 @@ export function evaluateGuardDecision({
     unknownSeverityBlock
       ? "block"
       : !complete
-        ? "block"
+        ? policy.unknownDecision
         : ordinary.length || aiReviewConcern
           ? "warn"
           : "allow";
-  if (!complete) reasons.push({ code: "profile-unknown-blocked" });
+  if (!complete && policy.unknownDecision === "block")
+    reasons.push({ code: "profile-unknown-blocked" });
   if (severityBlock)
     reasons.push({
       code: "profile-severity-blocked",
       threshold: policy.blockSeverity,
     });
+  if (policy.enforcement === "audit")
+    reasons.push({ code: "audit-no-enforcement" });
   return {
     decisionVersion: "1",
     policyVersion: GUARD_POLICY_VERSION,
-    profile: "strict",
+    profile,
     appliedPolicy: { ...policy },
     package: { ecosystem: "npm", ...identity },
     artifact: validReport
@@ -264,7 +284,8 @@ export function evaluateGuardDecision({
         }
       : null,
     decision,
-    permitted: ["allow", "warn"].includes(decision),
+    permitted:
+      policy.enforcement === "audit" || ["allow", "warn"].includes(decision),
     enforcement: policy.enforcement,
     reasons,
     knownMalware,

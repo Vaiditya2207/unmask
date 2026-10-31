@@ -164,15 +164,15 @@ test("malware advisory identity blocks even when analysis is absent or incomplet
   );
 });
 
-test("advisory outage blocks and cannot inherit deterministic exit-zero as permission", async (t) => {
+test("advisory outage is unknown and cannot inherit deterministic exit-zero as permission", async (t) => {
   const s = await start(t, {
     enrichJob: async () => {
       throw new Error("offline");
     },
   });
   await complete(s);
-  const result = await (await s.get(".decision.json")).json();
-  assert.equal(result.decision, "block");
+  const result = await (await s.get(".decision.json?profile=balanced")).json();
+  assert.equal(result.decision, "unknown");
   assert.equal(result.permitted, false);
   assert.equal(result.assessment.advisoriesComplete, false);
   assert.equal(result.policyExitCode, 0);
@@ -202,21 +202,21 @@ test("AI prose and advisory summaries cannot invent a malware classification", a
       ]),
   });
   await complete(s);
-  const result = await (await s.get(".decision.json")).json();
-  assert.equal(result.decision, "block");
-  assert.equal(result.permitted, false);
+  const result = await (await s.get(".decision.json?profile=balanced")).json();
+  assert.equal(result.decision, "warn");
+  assert.equal(result.permitted, true);
   assert.deepEqual(result.knownMalware, []);
 });
 
-test("pending and failed checks deny permission", async (t) => {
+test("pending and failed checks expose unknown rather than permission", async (t) => {
   let resolve;
   const pending = new Promise((r) => {
     resolve = r;
   });
   const s = await start(t, { runAnalysis: () => pending });
-  const response = await s.get(".decision.json");
+  const response = await s.get(".decision.json?profile=balanced");
   assert.equal(response.status, 202);
-  assert.equal((await response.json()).decision, "block");
+  assert.equal((await response.json()).decision, "unknown");
   resolve(reportFixture());
   await complete(s);
   const failed = await start(t, {
@@ -225,8 +225,10 @@ test("pending and failed checks deny permission", async (t) => {
     },
   });
   await complete(failed);
-  const result = await (await failed.get(".decision.json")).json();
-  assert.equal(result.decision, "block");
+  const result = await (
+    await failed.get(".decision.json?profile=balanced")
+  ).json();
+  assert.equal(result.decision, "unknown");
   assert.equal(result.permitted, false);
   assert.doesNotMatch(JSON.stringify(result), /private internals/);
 });
@@ -274,8 +276,8 @@ test("guard refuses mismatched report/advisory identities and malformed complete
       vulnerabilityCheck: advisories(),
     };
     edit(input);
-    const result = evaluateGuardDecision(input, { profile: "strict" });
-    assert.equal(result.decision, "block");
+    const result = evaluateGuardDecision(input, { profile: "balanced" });
+    assert.equal(result.decision, "unknown");
     assert.equal(result.permitted, false);
     assert.equal(result.assessment.complete, false);
   }
@@ -338,6 +340,34 @@ test("deterministic integrity mismatch blocks with evidence while keeping existi
   assert.equal(report.policy.exitCode, 3);
 });
 
+test("profiles apply explicit unknown handling and audit never hides the assessed blocker", async (t) => {
+  const s = await start(t, {
+    enrichJob: async () => {
+      throw new Error("offline");
+    },
+  });
+  await complete(s);
+  const strict = await (await s.get(".decision.json?profile=strict")).json();
+  assert.equal(strict.profile, "strict");
+  assert.equal(strict.decision, "block");
+  assert.equal(strict.permitted, false);
+  assert.equal(strict.assessment.complete, false);
+  const audit = await (await s.get(".decision.json?profile=audit")).json();
+  assert.equal(audit.decision, "unknown");
+  assert.equal(audit.permitted, true);
+  assert.equal(audit.enforcement, "audit");
+  const flagged = await start(t, {
+    enrichJob: async () => advisories([malware()]),
+  });
+  await complete(flagged);
+  const observed = await (
+    await flagged.get(".decision.json?profile=audit")
+  ).json();
+  assert.equal(observed.decision, "block");
+  assert.equal(observed.permitted, true);
+  assert.equal(observed.knownMalware[0].id, "MAL-2026-1234");
+});
+
 test("severity policy distinguishes declared critical/high, unknown and unrelated affected packages", async () => {
   const { evaluateGuardDecision } =
     await import("../../src/core/guard-policy.mjs");
@@ -350,7 +380,10 @@ test("severity policy distinguishes declared critical/high, unknown and unrelate
     const check = advisories([
       { id: "GHSA-synthetic-0001", aliases: [], databaseSeverity: severity },
     ]);
-    for (const [profile, want] of [["strict", strict]]) {
+    for (const [profile, want] of [
+      ["strict", strict],
+      ["balanced", balanced],
+    ]) {
       const result = evaluateGuardDecision(
         {
           nameAtExactVersion: spec,
@@ -397,10 +430,32 @@ test("severity policy distinguishes declared critical/high, unknown and unrelate
   );
 });
 
+test("profile input rejects invalid/repeated/extra query parameters without silently weakening policy", async (t) => {
+  const s = await start(t);
+  await complete(s);
+  for (const suffix of [
+    "?profile=loose",
+    "?profile=",
+    "?profile=strict&profile=audit",
+    "?profile=strict&unknown=x",
+  ]) {
+    const response = await s.get(".decision.json" + suffix);
+    assert.equal(response.status, 400, suffix);
+    assert.equal((await response.json()).error, "invalid-guard-profile");
+  }
+  const { evaluateGuardDecision } =
+    await import("../../src/core/guard-policy.mjs");
+  assert.throws(
+    () =>
+      evaluateGuardDecision({ nameAtExactVersion: spec }, { profile: "loose" }),
+    /profile/,
+  );
+});
+
 test("AI conclusions never override profile malware blockers or promote unknown to permission", async () => {
   const { evaluateGuardDecision } =
     await import("../../src/core/guard-policy.mjs");
-  for (const profile of ["strict"]) {
+  for (const profile of ["strict", "balanced"]) {
     const input = reportFixture();
     input.model = {
       status: "complete",
@@ -444,11 +499,12 @@ test("AI conclusions never override profile malware blockers or promote unknown 
 });
 
 test("omitted profile defaults to strict for both core and HTTP, blocking missing assessment", async (t) => {
-  const { evaluateGuardDecision } =
+  const { evaluateGuardDecision, getGuardProfile } =
     await import("../../src/core/guard-policy.mjs");
   const result = evaluateGuardDecision({ nameAtExactVersion: spec });
   assert.equal(result.profile, "strict");
   assert.equal(result.decision, "block");
+  assert.equal(getGuardProfile().unknownDecision, "block");
   const s = await start(t, { enrichJob: undefined });
   await complete(s);
   const response = await (await s.get()).json();
@@ -520,7 +576,7 @@ test("verified historical GHSA malware identities block without MAL aliases or s
     };
     const result = evaluateGuardDecision(
       { nameAtExactVersion, vulnerabilityCheck: check },
-      { profile: "strict" },
+      { profile: "balanced" },
     );
     assert.equal(result.decision, "block");
     assert.deepEqual(result.knownMalware, [{ id, aliases: [] }]);
@@ -610,7 +666,7 @@ test("shared advisory classifier works without inventing artifact or source cove
   );
 });
 
-test("deterministic lifecycle findings block before installation", async () => {
+test("all deterministic lifecycle findings block enforcing profiles and remain visible in audit", async () => {
   const { evaluateGuardDecision } =
     await import("../../src/core/guard-policy.mjs");
   const report = reportFixture({
@@ -618,7 +674,7 @@ test("deterministic lifecycle findings block before installation", async () => {
   });
   assert.equal(report.policy.exitCode, 3);
   assert.equal(report.policy.findings[0].ruleId, "lifecycle-source-absent");
-  for (const profile of ["strict"]) {
+  for (const profile of ["strict", "balanced", "audit"]) {
     const result = evaluateGuardDecision(
       { nameAtExactVersion: spec, report, vulnerabilityCheck: advisories() },
       { profile },
@@ -647,6 +703,10 @@ test("unrated active advisory cannot permit installation under strict", async ()
       (reason) => reason.code === "advisory-severity-unknown",
     ),
     true,
+  );
+  assert.equal(
+    evaluateGuardDecision(input, { profile: "balanced" }).decision,
+    "warn",
   );
 });
 

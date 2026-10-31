@@ -4,7 +4,8 @@ Guard decisions are additive. Existing schema-1 reports, deterministic policy
 findings and exit codes are unchanged. No findings never means safe.
 
 Start a check with the existing `POST /check` form (`package=name@exact-version`),
-then read `GET /r/<32-hex-report-id>.decision.json`. The fixed policy is strict. GET reads the stored result;
+then read `GET /r/<32-hex-report-id>.decision.json?profile=strict`. The default
+profile is strict; balanced and audit are explicit choices. GET reads the stored result;
 it never starts analysis, advisory lookups or model calls. Pending checks return
 202 and `Retry-After: 3`; terminal results return 200, including failed checks.
 Expired, unknown or evicted reports return 404 JSON. Other methods return 405.
@@ -13,11 +14,14 @@ The equivalent pure JavaScript entrypoint is:
 
 ```js
 import { evaluateGuardDecision } from "../src/core/guard-policy.mjs";
-const decision = evaluateGuardDecision({
-  nameAtExactVersion: "example@1.2.3",
-  report,
-  vulnerabilityCheck,
-});
+const decision = evaluateGuardDecision(
+  {
+    nameAtExactVersion: "example@1.2.3",
+    report,
+    vulnerabilityCheck,
+  },
+  { profile: "strict" },
+);
 ```
 
 `nameAtExactVersion` is required and must be an exact npm identity. `report` is an
@@ -31,12 +35,12 @@ The JSON object contains:
 | Field                                   | Contract                                                                                                                                     |
 | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `decisionVersion`                       | `"1"`                                                                                                                                        |
-| `policyVersion`                         | `"guard-1"`; independent of the existing report policy version                                                                               |
-| `profile`                               | `strict` (fixed)                                                                                                                             |
+| `policyVersion`                         | `"guard-2"`; independent of the existing report policy version                                                                               |
+| `profile`                               | `strict` (default), `balanced`, or `audit`                                                                                                   |
 | `package`                               | `{ecosystem:"npm",name,version}` matching the requested exact identity                                                                       |
 | `decision`                              | `allow`, `warn`, `block`, or `unknown`                                                                                                       |
-| `permitted`                             | True for allow/warn; false for block/unknown                                                                                                 |
-| `enforcement`                           | `enforce`                                                                                                                                    |
+| `permitted`                             | True for allow/warn in enforcing profiles; always true in explicit audit mode                                                                |
+| `enforcement`                           | `enforce` or `audit`                                                                                                                         |
 | `reasons`                               | Array with machine-readable `code`; deterministic findings include `ruleId` and bounded `evidenceIds`; advisory reasons include `advisoryId` |
 | `knownMalware`                          | Active advisory identities `{id,aliases}` with a MAL ID/alias or the sourced historical table match; withdrawn records excluded              |
 | `policyExitCode`                        | Original report exit code, or null when report is absent/invalid/mismatched                                                                  |
@@ -46,7 +50,8 @@ The JSON object contains:
 
 Precedence: known malware or any deterministic report policy finding
 blocks, even if another check is incomplete. Otherwise incomplete required
-assessment blocks. Medium/moderate, high and critical advisory severity block. Active vulnerabilities below the threshold or an
+assessment blocks under strict and gives unknown under balanced/audit. High/critical advisory severity blocks under strict/balanced; medium/moderate
+severity also blocks under strict. Active vulnerabilities below the threshold or an
 AI review concern produce warn; remaining complete assessments allow.
 
 `assessment.complete` covers the artifact inventory, source comparison and
@@ -67,23 +72,39 @@ See [synthetic example](../examples/guard-decision/README.md). Hosted runtime an
 release integration remain unverified until the final candidate is exercised
 through the normal deployed service route.
 
-## Fixed strict policy
+## Policy profiles
 
-This API uses a single fixed strict policy. Policy profile selection is a separate
-feature and is not available on this branch. Unknown required evidence, unrated
-active advisories and medium/moderate or higher severity deny installation. All
-deterministic report policy findings block. AI review concerns alone may warn.
+`getGuardProfile(profile = "strict")` returns an immutable policy descriptor;
+`GUARD_PROFILES` exports the immutable profile map. Unknown names throw rather
+than fall back. HTTP rejects empty, repeated or unknown profile values and extra
+query keys with 400 JSON `invalid-guard-profile`.
+
+| Profile          | Incomplete required assessment | Advisory block threshold     | Installation permission         |
+| ---------------- | ------------------------------ | ---------------------------- | ------------------------------- |
+| strict (default) | block                          | medium/moderate or higher    | allow/warn only                 |
+| balanced         | unknown                        | high or critical             | allow/warn only; unknown denies |
+| audit            | unknown                        | critical (reported decision) | always true; never enforces     |
+
+`appliedPolicy` reports `unknownDecision`, `blockSeverity` and `enforcement` so
+consumers can audit the actual settings. Audit retains malware identity and
+blocker reasons, adding `audit-no-enforcement`; it never relabels a blocker safe.
+Consumers wanting protection must use an enforcing profile and honor both
+`decision` and `permitted`. Merely receiving HTTP 200 is not permission.
 
 Severity is the highest supported OSV-declared label from `databaseSeverity`
 or an affected npm package entry matching the requested package name. Supported
 labels are low, medium/moderate, high and critical, case insensitive. Missing or
 unsupported labels remain unknown; strict denies installation with an
-`advisory-severity-unknown` reason. CVSS
+`advisory-severity-unknown` reason, while balanced/audit may warn. CVSS
 vectors are not parsed or turned into invented numeric scores. A critical label
 on an unrelated affected package does not elevate the requested package.
 Profile severity blockers survive incomplete artifact/source checks. Withdrawn
 advisories never become active blockers. Unknown severity differs from an
-incomplete lookup: the latter fails closed under the fixed strict policy.
+incomplete lookup: the latter fails closed under strict/balanced.
+
+AI review concerns may warn in any profile; AI reassurance cannot remove a
+blocker or turn incomplete evidence into permission. Availability remains
+separately visible and does not change deterministic report exit semantics.
 
 ## Historical malware identity table
 
@@ -133,5 +154,6 @@ active ordinary advisory has a supported declared severity. This can be false
 while the exact-version advisory lookup itself is complete. Strict denies this
 unknown severity; it does not silently treat an unrated advisory as low severity.
 All deterministic report findings, including lifecycle-source-absent and
-lifecycle-implicit-gyp, produce block decisions with permitted:false. Original deterministic report
+lifecycle-implicit-gyp, produce block decisions in enforcing profiles; audit
+preserves the block decision with permitted:true. Original deterministic report
 exit values remain untouched.
