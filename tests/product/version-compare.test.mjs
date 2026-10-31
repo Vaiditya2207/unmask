@@ -9,7 +9,11 @@ import { test } from "node:test";
 import tar from "tar-stream";
 import { analyzeLocal } from "../../src/core/pipeline.mjs";
 import { main } from "../../src/cli/main.mjs";
-import { compareReports } from "../../src/cli/compare.mjs";
+import {
+  aggregateExit,
+  compareReports,
+  renderComparison,
+} from "../../src/cli/compare.mjs";
 
 async function archive(prefix, files) {
   const pack = tar.pack(),
@@ -169,4 +173,64 @@ test("compare refuses unrelated names, same versions and ranges before any reque
   assert.match(stderr[0], /^unrelated-packages: /);
   assert.match(stderr[1], /^same-version: /);
   assert.match(stderr[3], /^usage: /);
+});
+
+test("compare escapes control, ANSI and bidi text from untrusted keys and paths", async (t) => {
+  const hostile = "\u001b[2J‮evil\nfake";
+  const before = await report(
+    t,
+    { name: "fixture", version: "1.0.0" },
+    { "index.js": "inert" },
+  );
+  const after = await report(
+    t,
+    {
+      name: "fixture",
+      version: "1.1.0",
+      scripts: { [hostile]: "inert" },
+      dependencies: { [hostile]: "1.0.0\u009b" },
+    },
+    { "index.js": "inert", [`x${hostile}.js`]: "inert" },
+  );
+  const result = compareReports(before, after);
+  assert.ok(result.files.added.some((file) => file.path.includes("\u001b")));
+  const text = renderComparison(result);
+  assert.doesNotMatch(text, /[\u0000-\u0009\u000b-\u001f\u007f-\u009f‪-‮⁦-⁩]/u);
+  assert.match(text, /\\u001b\[2J\\u202eevil\\u000afake/);
+  assert.equal(text.split("\n").filter((line) => line === "fake").length, 0);
+  const stdout = capture();
+  await main(["compare", "fixture@1.0.0", "fixture@1.1.0", "--json"], {
+    checkHosted: async (spec) => (spec.endsWith("1.0.0") ? before : after),
+    stdout,
+  });
+  assert.doesNotMatch(stdout.text(), /[\u007f-\u009f‪-‮]/u);
+  assert.equal(
+    JSON.parse(stdout.text()).scripts[0].key,
+    hostile,
+    "JSON escaping must preserve the original data",
+  );
+});
+
+test("compare exit aggregates both sides so an incomplete old version is not hidden", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "unmask-compare-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const tarballPath = path.join(root, "broken.tgz");
+  await writeFile(tarballPath, "broken gzip");
+  const broken = await analyzeLocal({
+    tarballPath,
+    claim: { name: "fixture", version: "1.0.0" },
+  });
+  const clean = await report(t, { name: "fixture", version: "1.1.0" });
+  assert.equal(broken.policy.exitCode, 2);
+  assert.equal(clean.policy.exitCode, 0);
+  const stdout = capture();
+  const code = await main(["compare", "fixture@1.0.0", "fixture@1.1.0"], {
+    checkHosted: async (spec) => (spec.endsWith("1.0.0") ? broken : clean),
+    stdout,
+  });
+  assert.equal(code, 2);
+  assert.match(stdout.text(), /Aggregate exit 2/);
+  assert.match(stdout.text(), /old 1\.0\.0: package manifest is unavailable/);
+  assert.equal(aggregateExit(clean, { policy: { exitCode: 3 } }), 3);
+  assert.equal(aggregateExit(clean, clean), 0);
 });

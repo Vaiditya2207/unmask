@@ -107,6 +107,10 @@ function side(report) {
     manifestStatus: report.manifests.artifact.status,
   };
 }
+export function aggregateExit(...reports) {
+  const codes = reports.map((report) => report.policy.exitCode);
+  return codes.includes(2) ? 2 : codes.includes(3) ? 3 : 0;
+}
 export function compareReports(older, newer) {
   const a = manifestOf(older);
   const b = manifestOf(newer);
@@ -151,8 +155,17 @@ export function compareReports(older, newer) {
     dependencies,
     files: diffFiles(older, newer),
     caveats,
+    exitCode: aggregateExit(older, newer),
   };
 }
+const UNSAFE =
+  /[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/gu;
+const JSON_UNSAFE = /[\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/gu;
+const escapeUnsafe = (text, pattern = UNSAFE) =>
+  text.replace(
+    pattern,
+    (char) => "\\u" + char.charCodeAt(0).toString(16).padStart(4, "0"),
+  );
 const display = (value) => JSON.stringify(value).slice(0, 200);
 function listed(lines, items, format) {
   for (const item of items.slice(0, MAX_LISTED)) lines.push(format(item));
@@ -172,6 +185,7 @@ function mapLines(lines, title, changes) {
 export function renderComparison(result) {
   const lines = [
     `Compare ${result.package} ${result.old.version} -> ${result.new.version}`,
+    `Aggregate exit ${result.exitCode}: 2 if either side is incomplete or failed, else 3 if either side has findings, else 0`,
   ];
   for (const label of ["old", "new"]) {
     const item = result[label];
@@ -195,7 +209,7 @@ export function renderComparison(result) {
   );
   lines.push("Caveats:");
   for (const caveat of result.caveats) lines.push(`  ! ${caveat}`);
-  return lines.join("\n") + "\n";
+  return lines.map((line) => escapeUnsafe(line)).join("\n") + "\n";
 }
 export async function runCompare(argv, runtime = {}) {
   const { specs, json } = parseCompareArgs(argv);
@@ -210,7 +224,9 @@ export async function runCompare(argv, runtime = {}) {
   const newer = await check(specs[1], options);
   const result = compareReports(older, newer);
   (runtime.stdout ?? process.stdout).write(
-    json ? JSON.stringify(result, null, 2) + "\n" : renderComparison(result),
+    json
+      ? escapeUnsafe(JSON.stringify(result, null, 2), JSON_UNSAFE) + "\n"
+      : renderComparison(result),
   );
-  return newer.policy.exitCode;
+  return result.exitCode;
 }
