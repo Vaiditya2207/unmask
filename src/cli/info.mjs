@@ -6,12 +6,25 @@ export function terminalText(value, max = 2048) {
   const text =
     typeof value === "string" ? value : (JSON.stringify(value) ?? "unknown");
   const escaped = text.replace(
-    /[\x00-\x1f\x7f-\x9f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]/g,
+    /[\x00-\x1f\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2060\u2066-\u2069\ufeff]/g,
     (char) => "\\u" + char.charCodeAt(0).toString(16).padStart(4, "0"),
   );
   return escaped.length > max
     ? escaped.slice(0, max) + "… [truncated]"
     : escaped;
+}
+
+export function aiLines(model) {
+  const lines = [
+    `AI: ${terminalText(model.status)}${model.reason ? " (" + terminalText(model.reason) + ")" : ""}`,
+  ];
+  if (
+    model.status === "complete" &&
+    typeof model.summary === "string" &&
+    model.summary.trim()
+  )
+    lines.push(`AI summary: ${terminalText(model.summary)}`);
+  return lines;
 }
 
 export function exactPackage(spec) {
@@ -94,7 +107,7 @@ export function renderInfo({ details, report, reportUrl }) {
       `  ${advisories.length - 100} advisory records omitted from terminal output.`,
     );
   lines.push(
-    `AI: ${text(report.model.status)}${report.model.reason ? " (" + text(report.model.reason) + ")" : ""}`,
+    ...aiLines(report.model),
     `Inventory complete: ${details.inventory.complete === true}; coverage complete: ${report.coverage.complete === true}`,
     "This is not a safety verdict. No findings never means safe; missing or omitted facts remain unassessed.",
     `Report: ${text(reportUrl)}`,

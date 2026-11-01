@@ -1,0 +1,326 @@
+[
+  {
+    "schemaVersion": "1",
+    "source": "OSV",
+    "package": {
+      "name": "ua-parser-js",
+      "version": "0.7.29",
+      "ecosystem": "npm"
+    },
+    "queriedAt": "2026-10-31T22:19:00.355Z",
+    "status": "found",
+    "complete": true,
+    "reasons": [],
+    "advisories": [
+      {
+        "id": "GHSA-pjwm-rvh2-c87w",
+        "aliases": [
+          "CVE-2021-4229"
+        ],
+        "severitySource": "OSV-declaration",
+        "severity": [
+          {
+            "type": "CVSS_V3",
+            "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H"
+          }
+        ],
+        "references": [
+          {
+            "type": "WEB",
+            "url": "https://github.com/faisalman/ua-parser-js/issues/536"
+          },
+          {
+            "type": "WEB",
+            "url": "https://github.com/faisalman/ua-parser-js/issues/536#issuecomment-949772496"
+          },
+          {
+            "type": "PACKAGE",
+            "url": "https://github.com/faisalman/ua-parser-js"
+          },
+          {
+            "type": "WEB",
+            "url": "https://www.npmjs.com/package/ua-parser-js"
+          }
+        ],
+        "affected": [
+          {
+            "package": {
+              "name": "ua-parser-js",
+              "ecosystem": "npm",
+              "purl": "pkg:npm/ua-parser-js"
+            },
+            "ranges": [
+              {
+                "type": "SEMVER",
+                "events": [
+                  {
+                    "introduced": "0.7.29"
+                  },
+                  {
+                    "fixed": "0.7.30"
+                  }
+                ]
+              }
+            ],
+            "versions": [
+              "0.7.29"
+            ],
+            "severity": []
+          },
+          {
+            "package": {
+              "name": "ua-parser-js",
+              "ecosystem": "npm",
+              "purl": "pkg:npm/ua-parser-js"
+            },
+            "ranges": [
+              {
+                "type": "SEMVER",
+                "events": [
+                  {
+                    "introduced": "0.8.0"
+                  },
+                  {
+                    "fixed": "0.8.1"
+                  }
+                ]
+              }
+            ],
+            "versions": [
+              "0.8.0"
+            ],
+            "severity": []
+          },
+          {
+            "package": {
+              "name": "ua-parser-js",
+              "ecosystem": "npm",
+              "purl": "pkg:npm/ua-parser-js"
+            },
+            "ranges": [
+              {
+                "type": "SEMVER",
+                "events": [
+                  {
+                    "introduced": "1.0.0"
+                  },
+                  {
+                    "fixed": "1.0.1"
+                  }
+                ]
+              }
+            ],
+            "versions": [
+              "1.0.0"
+            ],
+            "severity": []
+          }
+        ],
+        "summary": "Embedded malware in ua-parser-js",
+        "modified": "2026-07-15T22:30:43.045853758Z",
+        "published": "2021-10-22T20:38:14Z",
+        "databaseSeverity": "HIGH"
+      }
+    ],
+    "pagesFetched": 1,
+    "limits": {
+      "timeoutMs": 12000,
+      "responseBytes": 1048576,
+      "pages": 3,
+      "advisories": 100
+    }
+  },
+  {
+    "schemaVersion": "1",
+    "source": "OSV",
+    "package": {
+      "name": "event-stream",
+      "version": "3.3.6",
+      "ecosystem": "npm"
+    },
+    "queriedAt": "2026-10-31T22:19:00.883Z",
+    "status": "found",
+    "complete": true,
+    "reasons": [],
+    "advisories": [
+      {
+        "id": "GHSA-mh6f-8j2x-4483",
+        "aliases": [],
+        "severitySource": "OSV-declaration",
+        "severity": [
+          {
+            "type": "CVSS_V3",
+            "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+          }
+        ],
+        "references": [
+          {
+            "type": "WEB",
+            "url": "https://github.com/dominictarr/event-stream/issues/116"
+          },
+          {
+            "type": "ADVISORY",
+            "url": "https://github.com/advisories/GHSA-mh6f-8j2x-4483"
+          },
+          {
+            "type": "PACKAGE",
+            "url": "https://github.com/dominictarr/event-stream"
+          }
+        ],
+        "affected": [
+          {
+            "package": {
+              "name": "event-stream",
+              "ecosystem": "npm",
+              "purl": "pkg:npm/event-stream"
+            },
+            "ranges": [
+              {
+                "type": "SEMVER",
+                "events": [
+                  {
+                    "introduced": "3.3.6"
+                  },
+                  {
+                    "fixed": "4.0.0"
+                  }
+                ]
+              }
+            ],
+            "versions": [
+              "3.3.6"
+            ],
+            "severity": []
+          },
+          {
+            "package": {
+              "name": "flatmap-stream",
+              "ecosystem": "npm",
+              "purl": "pkg:npm/flatmap-stream"
+            },
+            "ranges": [
+              {
+                "type": "SEMVER",
+                "events": [
+                  {
+                    "introduced": "0"
+                  }
+                ]
+              }
+            ],
+            "versions": [],
+            "severity": []
+          }
+        ],
+        "summary": "Critical severity vulnerability that affects event-stream and flatmap-stream",
+        "modified": "2021-09-15T20:08:26Z",
+        "published": "2018-11-26T23:58:21Z",
+        "databaseSeverity": "CRITICAL"
+      }
+    ],
+    "pagesFetched": 1,
+    "limits": {
+      "timeoutMs": 12000,
+      "responseBytes": 1048576,
+      "pages": 3,
+      "advisories": 100
+    }
+  },
+  {
+    "schemaVersion": "1",
+    "source": "OSV",
+    "package": {
+      "name": "node-ipc",
+      "version": "10.1.1",
+      "ecosystem": "npm"
+    },
+    "queriedAt": "2026-10-31T22:19:01.430Z",
+    "status": "found",
+    "complete": true,
+    "reasons": [],
+    "advisories": [
+      {
+        "id": "GHSA-97m3-w2cp-4xx6",
+        "aliases": [
+          "CVE-2022-23812"
+        ],
+        "severitySource": "OSV-declaration",
+        "severity": [
+          {
+            "type": "CVSS_V3",
+            "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+          }
+        ],
+        "references": [
+          {
+            "type": "ADVISORY",
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2022-23812"
+          },
+          {
+            "type": "WEB",
+            "url": "https://github.com/RIAEvangelist/node-ipc/issues/233"
+          },
+          {
+            "type": "WEB",
+            "url": "https://github.com/RIAEvangelist/node-ipc/issues/236"
+          },
+          {
+            "type": "WEB",
+            "url": "https://github.com/RIAEvangelist/node-ipc/commit/847047cf7f81ab08352038b2204f0e7633449580"
+          },
+          {
+            "type": "PACKAGE",
+            "url": "https://github.com/RIAEvangelist/node-ipc"
+          },
+          {
+            "type": "WEB",
+            "url": "https://github.com/RIAEvangelist/node-ipc/blob/847047cf7f81ab08352038b2204f0e7633449580/dao/ssl-geospec.js"
+          },
+          {
+            "type": "WEB",
+            "url": "https://security.netapp.com/advisory/ntap-20220407-0005"
+          },
+          {
+            "type": "WEB",
+            "url": "https://snyk.io/vuln/SNYK-JS-NODEIPC-2426370"
+          }
+        ],
+        "affected": [
+          {
+            "package": {
+              "name": "node-ipc",
+              "ecosystem": "npm",
+              "purl": "pkg:npm/node-ipc"
+            },
+            "ranges": [
+              {
+                "type": "SEMVER",
+                "events": [
+                  {
+                    "introduced": "10.1.1"
+                  },
+                  {
+                    "fixed": "10.1.3"
+                  }
+                ]
+              }
+            ],
+            "versions": [],
+            "severity": []
+          }
+        ],
+        "summary": "Embedded Malicious Code in node-ipc",
+        "modified": "2026-03-16T03:12:33.092894Z",
+        "published": "2022-03-16T23:54:32Z",
+        "databaseSeverity": "CRITICAL"
+      }
+    ],
+    "pagesFetched": 1,
+    "limits": {
+      "timeoutMs": 12000,
+      "responseBytes": 1048576,
+      "pages": 3,
+      "advisories": 100
+    }
+  }
+]

@@ -1,7 +1,8 @@
 import { readFile, stat } from "node:fs/promises";
 import { LocalInputError } from "../core/pipeline.mjs";
 import { checkHosted } from "./hosted.mjs";
-import { parseLockfile, unresolvedEdges } from "./lockfile.mjs";
+import { screenPlan } from "./install-guard.mjs";
+import { nameFromKey, parseLockfile, unresolvedEdges } from "./lockfile.mjs";
 
 export const PREFLIGHT_SCHEMA = "unmask-preflight-1";
 const MAX_LOCKFILE_BYTES = 32 * 1024 * 1024;
@@ -53,6 +54,7 @@ export function lockIdentities(text) {
     existing.paths.push(entry.key);
     existing.sources.add(JSON.stringify([entry.resolved, entry.integrity]));
     existing.integrities.add(entry.integrity);
+    existing.integrity ??= entry.integrity;
     existing.bound &&= entry.bound === true && existing.integrities.size === 1;
     identities.set(key, existing);
   }
@@ -130,10 +132,12 @@ export async function preflight({
   check = true,
   maxChecks = DEFAULT_MAX_CHECKS,
   checkPackage,
+  screenAdvisories,
   signal,
   onCheck = () => {},
 }) {
   const diff = lockDiff(baselineText, lockfileText);
+  const screening = check && typeof screenAdvisories === "function";
   const checks = [];
   for (const [index, item] of diff.added.entries()) {
     if (!check || index >= maxChecks || signal?.aborted) {
@@ -151,14 +155,47 @@ export async function preflight({
     checks.push(result);
     onCheck(result);
   }
+  const screenable = diff.added.filter((item) => item.bound);
+  if (screening && screenable.length && !signal?.aborted) {
+    let decisions = new Map();
+    try {
+      decisions = await screenAdvisories(screenable, { signal });
+    } catch {}
+    for (const [index, item] of diff.added.entries()) {
+      if (!item.bound) continue;
+      const found = decisions.get(`${item.name}@${item.version}`);
+      checks[index].advisory = found
+        ? {
+            decision: found.decision,
+            reasons: found.reasons,
+            advisories: found.advisories,
+          }
+        : {
+            decision: signal?.aborted ? "cancelled" : "unknown",
+            reasons: ["advisory-screening-unavailable"],
+            advisories: [],
+          };
+    }
+  }
+  const advisorySettled = (item) =>
+    !screening || ["allow", "warn", "block"].includes(item.advisory?.decision);
+  const advisoryScreened = checks.filter(
+    (item) => item.advisory && advisorySettled(item),
+  ).length;
   const checked = checks.filter(
-    (item) => item.status === "completed" && item.exitCode !== 2 && item.bound,
+    (item) =>
+      item.status === "completed" &&
+      item.exitCode !== 2 &&
+      item.bound &&
+      advisorySettled(item),
   ).length;
   const unbound = diff.added.filter((item) => !item.bound).length;
   const complete =
     diff.unsupported.length === 0 && checked === diff.added.length;
   const cancelled = checks.some((item) => item.status === "cancelled");
-  const findings = checks.some((item) => item.exitCode === 3);
+  const findings = checks.some(
+    (item) => item.exitCode === 3 || item.advisory?.decision === "block",
+  );
   const status = findings
     ? "findings"
     : cancelled
@@ -180,9 +217,11 @@ export async function preflight({
       required: diff.added.length,
       checked,
       unbound,
+      advisoryScreening: screening ? "strict-guard-policy" : "not-requested",
+      advisoryScreened,
       unsupported: diff.unsupported,
     },
-    note: "pass means no default-policy finding in checked changes; it does not mean safe.",
+    note: "pass means no default-policy finding or advisory block in checked changes; it does not mean safe.",
   };
 }
 
@@ -220,6 +259,49 @@ export function hostedChecker(runtime) {
     });
 }
 
+export function hostedScreener(runtime) {
+  return async (items, { signal } = {}) => {
+    const packages = { "": { name: "unmask-preflight", version: "0.0.0" } };
+    // Every identity keeps its own lockfile locations; alias-only identities get a private nested slot.
+    for (const [index, item] of items.entries()) {
+      const entry = {
+        version: item.version,
+        resolved: `https://registry.npmjs.org/${item.name}/-/${item.name.split("/").pop()}-${item.version}.tgz`,
+        integrity: item.integrity,
+      };
+      const keys = item.paths.filter((key) => nameFromKey(key) === item.name);
+      if (!keys.length)
+        keys.push(
+          `node_modules/unmask-preflight-slot-${index}/node_modules/${item.name}`,
+        );
+      for (const key of keys) packages[key] = entry;
+    }
+    const result = await screenPlan(
+      {
+        packages: items.map((item) => ({
+          id: `${item.name}@${item.version}`,
+          name: item.name,
+          version: item.version,
+          integrity: item.integrity,
+          binding: "registry-integrity",
+          paths: item.paths,
+        })),
+        lockBytes: Buffer.from(
+          JSON.stringify({ lockfileVersion: 3, packages }),
+        ),
+      },
+      {
+        source: "hosted",
+        policy: "strict",
+        fetchImpl: runtime.fetchImpl,
+        signal: signal ?? runtime.signal,
+        serverUrl: (runtime.env ?? process.env).UNMASK_SERVER_URL,
+      },
+    );
+    return new Map(result.decisions.map((decision) => [decision.id, decision]));
+  };
+}
+
 export function formatPreflight(result) {
   const lines = [
     `preflight ${result.status}: ${result.changes.added.length} changed, ${result.changes.removed.length} removed, ${result.coverage.checked}/${result.coverage.required} checked`,
@@ -229,7 +311,10 @@ export function formatPreflight(result) {
       item.status === "completed"
         ? `exit ${item.exitCode}${item.findings.length ? ` (${item.findings.join(", ")})` : ""}${item.bound ? "" : "; unbound: lockfile resolved/integrity not verified"}`
         : item.status + (item.reason ? ` (${item.reason})` : "");
-    lines.push(`  ${item.name}@${item.version}: ${detail}`);
+    const advisory = item.advisory
+      ? `; advisory ${item.advisory.decision}${item.advisory.reasons.length ? ` (${[...item.advisory.reasons, ...item.advisory.advisories].join(", ")})` : ""}`
+      : "";
+    lines.push(`  ${item.name}@${item.version}: ${detail}${advisory}`);
   }
   for (const item of result.coverage.unsupported)
     lines.push(`  ${item.path}: unsupported (${item.reason})`);
@@ -283,6 +368,7 @@ export async function preflightMain(argv, runtime = {}) {
       check: options.check,
       maxChecks: options.maxChecks,
       checkPackage: runtime.checkPackage ?? hostedChecker(runtime),
+      screenAdvisories: runtime.screenAdvisories ?? hostedScreener(runtime),
       signal: runtime.signal,
     });
     process.stdout.write(

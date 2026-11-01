@@ -1,0 +1,14 @@
+UNMASK file example@1.2.3
+index.js [changed] 10 bytes
+Report ID: dc201868d598ef0f5bf62ba453f96009; File ID: f-BCHc6e7k6kBf7Y-XEsbwmrD2LRCIDUwvM6Ovq-R4U4c
+artifact-sha256=e8b2086bcd01cd7ae249908d0de7c81d2f5ca9c49d96c75097c790e629434065 source-sha256=fbc020523a89b9dde134af1eedc34980295b71bb736242f9ea8995b39eac5148
+Previously recorded evidence only: recorded; omitted=0; invalid omitted=0.
+  artifact ev-b5d1bf021b696685786af6b5a3d686d10c5c80515365240eff74f1cf5af858c9 bytes [0, 0]
+    Excerpt [0, 0]: 
+  source ev-e51b851cae43980889ad41435ee79848e2733e428d1140d77c4225d4f2b83b2d bytes [0, 10]
+    Excerpt [0, 10]: different 
+  States compare artifact and selected source, not releases or version history.
+  Source-only paths are recorded observations; their hashes, file types and excerpts may be unavailable.
+  Incomplete inventories and unassessed files do not establish safety or absence.
+  Only previously recorded excerpts are returned; omitted text is not fetched or reconstructed. Hashes are recorded claims, not new artifact verification. Render excerpts as text, never HTML.
+This is not a safety verdict. No file was opened, reconstructed or executed locally.

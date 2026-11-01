@@ -14,12 +14,18 @@ const job = (name) => {
   return next < 0 ? rest : rest.slice(0, next + 1);
 };
 
-test("repository default deploys no version bump until a final release is configured", () => {
+test("repository declares an explicit final-release selection", () => {
   const config = JSON.parse(
     readFileSync(new URL("../../release.config.json", import.meta.url), "utf8"),
   );
   assert.ok(Object.hasOwn(config, "productionDeployVersion"));
-  assert.equal(config.productionDeployVersion, null);
+  assert.ok(
+    config.productionDeployVersion === null ||
+      (typeof config.productionDeployVersion === "string" &&
+        /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(
+          config.productionDeployVersion,
+        )),
+  );
 });
 
 test("readiness exports the final-release deploy decision", () => {

@@ -6,16 +6,21 @@ export const ADVISORY_LIMITS = Object.freeze({
   responseBytes: 1024 * 1024,
   pages: 3,
   advisories: 100,
+  retries: 1,
+  retryDelayMs: 250,
 });
+const TRANSIENT_STATUSES = [429, 500, 502, 503, 504];
 const systemClock = { now: Date.now, setTimeout, clearTimeout };
 class LookupFailure extends Error {
-  constructor(reason) {
+  constructor(reason, detail = {}) {
     super(reason);
     this.reason = reason;
+    this.httpStatus = detail.httpStatus;
+    this.retryable = detail.retryable === true;
   }
 }
-const fail = (reason) => {
-  throw new LookupFailure(reason);
+const fail = (reason, detail) => {
+  throw new LookupFailure(reason, detail);
 };
 const object = (value) =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -248,7 +253,41 @@ export async function lookupNpmAdvisories(
   const reasons = new Set();
   const records = new Map();
   const mark = (reason) => reasons.add(reason);
+  const provider = { requests: 0, retries: 0, failures: [] };
+  let timedOut = false,
+    active = true;
+  const recorded = new WeakSet();
+  function note(error) {
+    if (!active || recorded.has(error)) return;
+    recorded.add(error);
+    const reason =
+      error instanceof LookupFailure ? error.reason : "request-failed";
+    const last = provider.failures.at(-1);
+    if (last?.reason === reason && last.attempt === provider.requests) return;
+    provider.failures.push({
+      attempt: provider.requests,
+      reason,
+      ...(error?.httpStatus ? { httpStatus: error.httpStatus } : {}),
+    });
+  }
   function finish() {
+    result.diagnostics = {
+      provider: {
+        name: "OSV",
+        availability: !provider.requests
+          ? "not-queried"
+          : !result.pagesFetched
+            ? "unavailable"
+            : provider.failures.length
+              ? "degraded"
+              : "available",
+        requests: provider.requests,
+        retries: provider.retries,
+        timeouts: timedOut ? 1 : 0,
+        failures: provider.failures.map((failure) => ({ ...failure })),
+        durationMs: Math.max(0, clock.now() - started),
+      },
+    };
     result.advisories = [...records.values()].sort((a, b) =>
       a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
     );
@@ -277,7 +316,7 @@ export async function lookupNpmAdvisories(
       (key) =>
         !Object.hasOwn(ADVISORY_LIMITS, key) ||
         !Number.isSafeInteger(limits[key]) ||
-        limits[key] < 1 ||
+        limits[key] < (key === "retries" ? 0 : 1) ||
         limits[key] > ADVISORY_LIMITS[key],
     )
   ) {
@@ -293,13 +332,12 @@ export async function lookupNpmAdvisories(
   const combined = signal
     ? AbortSignal.any([signal, controller.signal])
     : controller.signal;
-  let timedOut = false,
-    active = true;
   const readers = new Set();
   const timer = clock.setTimeout(() => {
     timedOut = true;
     controller.abort();
   }, limits.timeoutMs);
+  const pauses = new Set();
   let interrupt;
   const interrupted = new Promise((_, reject) => {
     interrupt = () => {
@@ -318,22 +356,29 @@ export async function lookupNpmAdvisories(
   }
   async function page(token) {
     alive();
-    const response = await fetchImpl(ENDPOINT, {
-      method: "POST",
-      redirect: "manual",
-      credentials: "omit",
-      referrerPolicy: "no-referrer",
-      signal: combined,
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json",
-      },
-      body: JSON.stringify({
-        package: { name: claim.name, ecosystem: "npm" },
-        version: claim.version,
-        ...(token ? { page_token: token } : {}),
-      }),
-    });
+    provider.requests++;
+    let response;
+    try {
+      response = await fetchImpl(ENDPOINT, {
+        method: "POST",
+        redirect: "manual",
+        credentials: "omit",
+        referrerPolicy: "no-referrer",
+        signal: combined,
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json",
+        },
+        body: JSON.stringify({
+          package: { name: claim.name, ecosystem: "npm" },
+          version: claim.version,
+          ...(token ? { page_token: token } : {}),
+        }),
+      });
+    } catch {
+      alive();
+      fail("request-failed", { retryable: true });
+    }
     if (combined.aborted || !active) response.body?.cancel().catch(() => {});
     alive();
     if (
@@ -346,7 +391,16 @@ export async function lookupNpmAdvisories(
     }
     if (response.status !== 200) {
       response.body?.cancel().catch(() => {});
-      fail("http-error");
+      const status = Number.isSafeInteger(response.status)
+        ? response.status
+        : undefined;
+      const wait = response.headers.get("retry-after");
+      fail("http-error", {
+        httpStatus: status,
+        retryable:
+          TRANSIENT_STATUSES.includes(status) &&
+          (wait === null || /^[01]$/.test(wait.trim())),
+      });
     }
     if (
       !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
@@ -412,11 +466,32 @@ export async function lookupNpmAdvisories(
       fail("invalid-response");
     return parsed;
   }
+  async function attempt(token) {
+    for (;;) {
+      try {
+        return await page(token);
+      } catch (error) {
+        note(error);
+        if (!error?.retryable || provider.retries >= limits.retries)
+          throw error;
+        provider.retries++;
+        // Back off once for transient provider failures, still inside the lookup deadline.
+        await new Promise((resolve) => {
+          const id = clock.setTimeout(() => {
+            pauses.delete(id);
+            resolve();
+          }, limits.retryDelayMs);
+          pauses.add(id);
+        });
+        alive();
+      }
+    }
+  }
   async function query() {
     const tokens = new Set();
     let token;
     for (let i = 0; i < limits.pages; i++) {
-      const value = await page(token);
+      const value = await attempt(token);
       alive();
       result.pagesFetched++;
       for (const raw of value.vulns ?? []) {
@@ -446,10 +521,12 @@ export async function lookupNpmAdvisories(
   try {
     await Promise.race([query(), interrupted]);
   } catch (error) {
+    note(error);
     mark(error instanceof LookupFailure ? error.reason : "request-failed");
   } finally {
     active = false;
     clock.clearTimeout(timer);
+    for (const id of pauses) clock.clearTimeout(id);
     combined.removeEventListener("abort", interrupt);
     for (const reader of readers) reader.cancel().catch(() => {});
   }

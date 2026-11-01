@@ -1,6 +1,6 @@
 {
   "name": "@xagents_in/unmask",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": false,
   "description": "Evidence-based comparison of npm packages and their source archives",
   "license": "MIT",

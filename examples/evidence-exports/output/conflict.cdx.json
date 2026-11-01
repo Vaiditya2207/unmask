@@ -1,0 +1,254 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "metadata": {
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "unmask",
+          "version": "example"
+        }
+      ]
+    },
+    "component": {
+      "type": "library",
+      "bom-ref": "unmask:artifact",
+      "group": "@unmask-example",
+      "name": "declared",
+      "version": "2.0.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "8e3577c4e728d0fae8edc2dd8a02d20845d9f33d0379982a474f129e78183635"
+        },
+        {
+          "alg": "SHA-512",
+          "content": "986d7c92e32ea0115645aa67f9e2af7d1ba85dbefd48ad7ef6a71188fa97692a58fc60bc171a7e439b7ac520c6d691c211e93e35586ad36e1771c22cee9407ed"
+        }
+      ],
+      "properties": [
+        {
+          "name": "unmask:identity-status",
+          "value": "claim-conflicts-with-manifest"
+        },
+        {
+          "name": "unmask:manifest-status",
+          "value": "usable"
+        },
+        {
+          "name": "unmask:expected-integrity",
+          "value": "unavailable"
+        },
+        {
+          "name": "unmask:requested-identity",
+          "value": "@unmask-example/requested@1.0.0"
+        },
+        {
+          "name": "unmask:declared-identity",
+          "value": "@unmask-example/declared@2.0.0"
+        },
+        {
+          "name": "unmask:source-status",
+          "value": "unresolved"
+        },
+        {
+          "name": "unmask:source-method",
+          "value": "unresolved"
+        }
+      ]
+    },
+    "properties": [
+      {
+        "name": "unmask:sbom-scope",
+        "value": "observed-artifact-and-declared-direct-entries"
+      },
+      {
+        "name": "unmask:dependency-resolution",
+        "value": "not-performed"
+      },
+      {
+        "name": "unmask:transitive-dependencies",
+        "value": "not-assessed"
+      },
+      {
+        "name": "unmask:unresolved-dependencies",
+        "value": "3"
+      },
+      {
+        "name": "unmask:invalid-entries-omitted",
+        "value": "0"
+      },
+      {
+        "name": "unmask:components-omitted",
+        "value": "0"
+      },
+      {
+        "name": "unmask:vulnerabilities",
+        "value": "not-included"
+      },
+      {
+        "name": "unmask:signature",
+        "value": "unsigned"
+      },
+      {
+        "name": "unmask:inventory-complete",
+        "value": "true"
+      },
+      {
+        "name": "unmask:report-schema",
+        "value": "1"
+      },
+      {
+        "name": "unmask:analyzer-version",
+        "value": "0.0.0"
+      },
+      {
+        "name": "unmask:declared:dependencies",
+        "value": "declared"
+      },
+      {
+        "name": "unmask:declared:optionalDependencies",
+        "value": "not-declared"
+      },
+      {
+        "name": "unmask:declared:peerDependencies",
+        "value": "not-declared"
+      },
+      {
+        "name": "unmask:declared:devDependencies",
+        "value": "not-declared"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "unmask:declared:dependencies:@unmask-example/helper",
+      "group": "@unmask-example",
+      "name": "helper",
+      "scope": "required",
+      "properties": [
+        {
+          "name": "unmask:resolution",
+          "value": "unresolved"
+        },
+        {
+          "name": "unmask:evidence",
+          "value": "publisher-declared-manifest-entry"
+        },
+        {
+          "name": "unmask:declared-field",
+          "value": "dependencies"
+        },
+        {
+          "name": "unmask:declared-range",
+          "value": "^1.0.0"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "unmask:bundled:node_modules/inner",
+      "name": "inner",
+      "scope": "required",
+      "properties": [
+        {
+          "name": "unmask:resolution",
+          "value": "unresolved"
+        },
+        {
+          "name": "unmask:evidence",
+          "value": "observed-bundled-path-in-artifact"
+        },
+        {
+          "name": "unmask:bundled-path",
+          "value": "node_modules/inner"
+        },
+        {
+          "name": "unmask:bundled-location",
+          "value": "artifact-root-node-modules"
+        },
+        {
+          "name": "unmask:bundled-files",
+          "value": "2"
+        },
+        {
+          "name": "unmask:bundled-bytes",
+          "value": "40"
+        },
+        {
+          "name": "unmask:bundled-declared",
+          "value": "true"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "unmask:bundled:node_modules/inner/node_modules/deep",
+      "name": "deep",
+      "scope": "required",
+      "properties": [
+        {
+          "name": "unmask:resolution",
+          "value": "unresolved"
+        },
+        {
+          "name": "unmask:evidence",
+          "value": "observed-bundled-path-in-artifact"
+        },
+        {
+          "name": "unmask:bundled-path",
+          "value": "node_modules/inner/node_modules/deep"
+        },
+        {
+          "name": "unmask:bundled-location",
+          "value": "nested"
+        },
+        {
+          "name": "unmask:bundled-within",
+          "value": "node_modules/inner"
+        },
+        {
+          "name": "unmask:bundled-files",
+          "value": "1"
+        },
+        {
+          "name": "unmask:bundled-bytes",
+          "value": "20"
+        },
+        {
+          "name": "unmask:bundled-declared",
+          "value": "false"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "unmask:artifact",
+      "dependsOn": [
+        "unmask:declared:dependencies:@unmask-example/helper",
+        "unmask:bundled:node_modules/inner"
+      ]
+    }
+  ],
+  "compositions": [
+    {
+      "aggregate": "incomplete",
+      "dependencies": [
+        "unmask:artifact"
+      ]
+    },
+    {
+      "aggregate": "unknown",
+      "dependencies": [
+        "unmask:declared:dependencies:@unmask-example/helper",
+        "unmask:bundled:node_modules/inner",
+        "unmask:bundled:node_modules/inner/node_modules/deep"
+      ]
+    }
+  ]
+}

@@ -29,6 +29,8 @@ export interface Job {
   startedAt?: number;
   finishedAt?: number;
   reason?: string;
+  report?: Report;
+  advisoryResult?: unknown;
 }
 
 const STATUSES: JobStatus[] = [

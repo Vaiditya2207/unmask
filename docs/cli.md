@@ -12,20 +12,33 @@ public access, model usefulness or final installed-artifact acceptance; the rele
 owner verifies those through the deployed normal route before merging/releasing.
 
 ```bash
-unmask check package-name@1.2.3 --out OUTPUT
+unmask check package-name@1.2.3
 UNMASK_SERVER_URL=http://127.0.0.1:3000 unmask check package-name@1.2.3 --out OUTPUT
 ```
 
 The override must be a bare HTTPS origin; HTTP is accepted only for `localhost`,
 `127.0.0.1` or `[::1]` local testing. Credentials, paths, queries and fragments are
 rejected. Submission is one form `POST /check`, followed by same-origin
-`GET /r/ID.json` polling. The client sends no cookies or Authorization header and
+`GET /r/ID.json` polling, then one same-origin `GET /r/ID.details.json` for
+advisory facts; if details are unavailable the summary says advisories were not
+assessed. The client sends no cookies or Authorization header and
 never follows a transport redirect. The POST's 303 Location must identify a
 same-origin report. Hosted failure is visible; there is no local fallback.
 
-Hosted mode requires `--out`; `--cache-dir` is optional and unused. It validates
-the returned schema, requested name/version and policy against deterministic
-report evidence before creating `report.json` and escaped `report.html`. Writes
+Every check prints a terminal summary: result, coverage, findings, failures,
+known advisories, AI explanation status and next steps. Untrusted text is
+escaped so it cannot inject terminal control sequences. Progress goes to stderr:
+an animated, self-clearing status line on an interactive terminal, or one plain
+`unmask:` line per phase when stderr is not a TTY or `TERM=dumb`. Color is used
+only on a TTY and is disabled by any nonempty `NO_COLOR`. Errors print as
+`unmask error CODE: message`, with a hint where one applies. When the service
+could not analyze the registry artifact but returns an advisory-only result for
+the exact version, the terminal lists those advisories, states that the artifact
+and source were not inspected and that no verdict is claimed, and exits `2`. `--out` is optional and
+nothing is written without it; `--cache-dir` is optional and unused in hosted
+mode. Hosted mode validates the returned schema, requested name/version and
+policy against deterministic report evidence before printing or creating
+`report.json` and escaped `report.html`. Writes
 are exclusive: existing report files are preserved. Exit codes are `0` completed,
 `2` incomplete or request/configuration failure, `3` default policy finding, and
 `1` internal error. A failed transport produces no completed report. Exit `0`
@@ -47,7 +60,7 @@ unmask check --tarball PACKAGE.tgz --offline --cache-dir CACHE --out OUTPUT
 ```
 
 Offline mode keeps the existing archive/source options and requires both
-`--cache-dir` and `--out`. It does no acquisition. Optional `--allow-model` applies
+`--cache-dir`; `--out` is optional. It does no acquisition. Optional `--allow-model` applies
 only to this local mode and permits selected evidence to leave the machine when
 a local provider is configured. Without consent no local model client is built.
 Hosted mode rejects `--allow-model`: its model policy belongs to the selected
@@ -89,6 +102,14 @@ fetch without a locked entry; optional dependencies excluded) is listed as
 `invalid-dependencies`; both keep coverage incomplete. The baseline itself is
 not audited; use `unmask audit` for that.
 
+Unless `--no-check` is given, bound changed identities are also screened for
+known advisories through the same hosted dependency screening and strict policy
+as `unmask ci`, in one request. Each check then carries an `advisory` decision
+(`allow`, `warn`, `block` or `unknown`). A `block`, for example known malware,
+is a finding (exit `3`) even when the package report has none. An `unknown`
+screening, such as an unavailable or rate-limited service, keeps coverage
+incomplete (exit `2`). `coverage.advisoryScreened` counts settled screenings.
+
 The `unmask-preflight-1` JSON document has `status`, `exitCode`, `changes`
 (`added`, `removed`), per-identity `checks` (`completed` with policy exit and
 finding rule IDs, `unavailable` with an error code, `not-checked` with reason, or
@@ -101,3 +122,28 @@ hosted-incomplete checks) or the input is invalid, and `0` means every changed
 identity was bound and checked with no default-policy finding. Exit `0` does not mean safe:
 an advisory miss, a removed registry version or a hosted cache reuse can still
 hide malware.
+
+## Watch
+
+`unmask watch` is an explicit, opt-in foreground watcher for one project
+lockfile. It records the current valid lockfile as its baseline, then, after
+changes settle for the debounce period, runs the same exact-identity preflight
+against the last valid snapshot and prints each result. The baseline itself is
+not audited; run `unmask audit` for it.
+
+```bash
+unmask watch --lockfile package-lock.json [--debounce-ms 750] [--max-checks 6] [--no-check] [--json]
+```
+
+Duplicate file events and byte-identical rewrites do not start a run. An
+unreadable or invalid intermediate lockfile (for example a partial npm write) is
+reported and no check is run; the last valid baseline is kept. Runs never
+overlap: changes during a run are coalesced into one follow-up run. After each
+run without a cancelled check its lockfile becomes the new baseline, so a finding is reported
+once; rerun `unmask preflight` for a cumulative view. Ctrl-C cancels any
+in-progress hosted check, reports that run as `cancelled` without a result, and
+exits `130`. An unexpected run error is reported as `run-error`, claims no
+result and keeps the baseline; watching continues. A watcher failure exits `2`. `--json` prints only JSON events, one per line, on stdout: `watching`,
+`baseline`, `lockfile-invalid`, `lockfile-unreadable`, `result`, `run-error`,
+`watch-error` and a final `stopped` with `runs`, `interrupted` and `exitCode`.
+Watch never installs packages or runs package code.
