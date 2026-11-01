@@ -496,7 +496,7 @@ test("web workflow waits for completed publication and backend verification usin
     new URL("../../.github/workflows/release.yml", import.meta.url),
     "utf8",
   ).split("\n  deploy-web:\n")[1];
-  assert.match(workflow, /needs: \[publish, deploy\]/);
+  assert.match(workflow, /needs: \[readiness, publish, deploy\]/);
   assert.match(workflow, /needs\.publish\.outputs\.complete == 'true'/);
   assert.match(workflow, /needs\.deploy\.result == 'success'/);
   assert.match(workflow, /name: production/);

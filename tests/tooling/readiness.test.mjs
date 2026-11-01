@@ -7,6 +7,7 @@ import {
   readFileSync,
 } from "node:fs";
 import os from "node:os";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { test } from "node:test";
 import { buildProduct } from "../../scripts/build.mjs";
@@ -130,4 +131,59 @@ test("lockfile identity drift blocks the candidate", (t) => {
   const result = readiness(f.root, { built: true });
   assert.equal(result.ready, false);
   assert.match(result.reasons.join("\n"), /lockfile identity/);
+});
+
+test("production deploy is requested only for the configured final release version", (t) => {
+  const f = fixture(t);
+  assert.equal(readiness(f.root).productionDeployRequested, false);
+  f.config.productionDeployVersion = null;
+  f.save();
+  assert.equal(readiness(f.root).productionDeployRequested, false);
+  f.config.productionDeployVersion = "1.0.1";
+  f.save();
+  assert.equal(readiness(f.root).ready, true);
+  assert.equal(readiness(f.root).productionDeployRequested, false);
+  f.config.productionDeployVersion = "1.0.0";
+  f.save();
+  assert.equal(readiness(f.root).productionDeployRequested, true);
+  for (const invalid of ["latest", "1.0", 1, true, ""]) {
+    f.config.productionDeployVersion = invalid;
+    f.save();
+    const result = readiness(f.root);
+    assert.equal(result.ready, false);
+    assert.match(result.reasons.join("\n"), /productionDeployVersion/);
+  }
+});
+
+test("github output gates production deploy on readiness and the final version", (t) => {
+  const f = fixture(t);
+  const script = new URL("../../scripts/release-readiness.mjs", import.meta.url)
+    .pathname;
+  const emit = (name) => {
+    const output = path.join(f.root, name);
+    spawnSync(process.execPath, [script, "--github-output"], {
+      cwd: f.root,
+      env: { ...process.env, GITHUB_OUTPUT: output },
+    });
+    return readFileSync(output, "utf8");
+  };
+  assert.match(emit("absent"), /^ready=true$/m);
+  assert.match(emit("absent-again"), /^production_deploy=false$/m);
+  for (const [name, value] of [
+    ["mismatched", "1.0.1"],
+    ["malformed-range", "^1.0.0"],
+    ["malformed-type", 100],
+    ["explicit-null", null],
+  ]) {
+    f.config.productionDeployVersion = value;
+    f.save();
+    assert.match(emit(name), /^production_deploy=false$/m, name);
+  }
+  f.config.productionDeployVersion = "1.0.0";
+  f.save();
+  assert.match(emit("final"), /^ready=true$/m);
+  assert.match(emit("final-again"), /^production_deploy=true$/m);
+  f.pkg.private = true;
+  f.save();
+  assert.match(emit("blocked"), /^production_deploy=false$/m);
 });

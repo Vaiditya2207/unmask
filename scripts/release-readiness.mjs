@@ -124,12 +124,21 @@ export function readiness(root, { built = false, expectedSha } = {}) {
   }
   if (typeof pkg.bin?.unmask !== "string" || pkg.bin.unmask !== config.cli)
     reasons.push("npm bin.unmask must identify the CLI entrypoint");
+  const finalVersion = config.productionDeployVersion ?? null;
+  if (
+    finalVersion !== null &&
+    (typeof finalVersion !== "string" ||
+      !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(finalVersion))
+  )
+    reasons.push("productionDeployVersion must be null or a stable version");
   return {
     ready: reasons.length === 0,
     enabled: config.enabled === true,
     reasons,
     version: pkg.version,
     npmPublishEnabled: config.npmPublishEnabled === true,
+    productionDeployRequested:
+      typeof finalVersion === "string" && finalVersion === pkg.version,
   };
 }
 
@@ -160,7 +169,7 @@ if (
       throw new Error("GITHUB_OUTPUT is required");
     appendFileSync(
       process.env.GITHUB_OUTPUT,
-      `ready=${result.ready}\nnpm_publish=${result.npmPublishEnabled}\n`,
+      `ready=${result.ready}\nnpm_publish=${result.npmPublishEnabled}\nproduction_deploy=${result.ready && result.productionDeployRequested}\n`,
     );
     if (
       result.enabled &&

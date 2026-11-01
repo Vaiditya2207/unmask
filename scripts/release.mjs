@@ -347,7 +347,7 @@ if (mode === "prepare") {
       target_commitish: sha,
       name: plan.tag,
       draft: true,
-      body: `Commit: ${sha}\nImage: ${image}@${digest}\nChecks and candidate smoke: ${manifest.workflow}\nProduction deployment follows in this workflow after complete GitHub and verified npm publication. See release-manifest.json for artifact integrity and the deploy job for serving evidence.\n\n${commitNotes}`,
+      body: `Commit: ${sha}\nImage: ${image}@${digest}\nChecks and candidate smoke: ${manifest.workflow}\n${process.env.PRODUCTION_DEPLOY === "true" ? "Production deployment follows in this workflow after complete GitHub and verified npm publication. See release-manifest.json for artifact integrity and the deploy job for serving evidence." : "Production deployment deferred: API and web production were not changed by this release. Only the release whose version equals productionDeployVersion in release.config.json is deployed. See release-manifest.json for artifact integrity."}\n\n${commitNotes}`,
     },
   });
   for (const [name, content] of [
