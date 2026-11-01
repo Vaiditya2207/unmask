@@ -77,6 +77,7 @@ export async function fetchJob(id: string): Promise<Fetched> {
           finishedAt:
             typeof job.finishedAt === "number" ? job.finishedAt : undefined,
           reason: typeof job.reason === "string" ? job.reason : undefined,
+          advisoryResult: job.advisoryResult,
         },
       };
     return { ok: false, status: 502 };
@@ -94,6 +95,8 @@ export const MODEL_KEYS = [
   "configHash",
   "reason",
   "attempts",
+  "summary",
+  "assessment",
 ] as const;
 
 export function modelMetadata(report: Report): Record<string, unknown> {

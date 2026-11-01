@@ -1,6 +1,7 @@
 import "./home.css";
 import { Entrances } from "@/components/home/Entrances";
 import { Hero } from "@/components/home/Hero";
+import { PackageInput } from "@/components/home/PackageInput";
 import { Lookup } from "@/components/home/Lookup";
 import { Pipeline } from "@/components/home/Pipeline";
 import { ProofNames } from "@/components/home/ProofNames";
@@ -63,8 +64,6 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
       : checkError
         ? (checkErrors[checkError] ?? null)
         : null;
-  const sourceLabel = links.source.replace(/^https?:\/\//, "");
-  const cut = sourceLabel.lastIndexOf("/");
 
   return (
     <>
@@ -161,21 +160,19 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
           data-enter
         >
           <h2 id="questions-title" className="questions-title" data-part>
-            Questions
+            Good to know
           </h2>
-          <dl className="questions-list">
-            {questions.map((item, i) => (
-              <div
-                key={item.q}
-                className="question-row"
-                data-part
-                style={{ ["--part" as string]: i + 1 }}
-              >
-                <dt className="question">{item.q}</dt>
-                <dd className="answer">{item.a}</dd>
-              </div>
+          <div className="questions-list">
+            {questions.map((item) => (
+              <details key={item.q} className="question-row">
+                <summary className="question">
+                  {item.q}
+                  <span aria-hidden="true">+</span>
+                </summary>
+                <p className="answer">{item.a}</p>
+              </details>
             ))}
-          </dl>
+          </div>
         </section>
 
         <section
@@ -196,7 +193,7 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
               <label className="visually-hidden" htmlFor="check-package">
                 Package name and exact version
               </label>
-              <input
+              <PackageInput
                 id="check-package"
                 className="check-input"
                 name="package"
@@ -212,11 +209,8 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
                 }
                 aria-invalid={checkMessage ? true : undefined}
               />
-              <span className="check-comma" aria-hidden="true">
-                ,{" "}
-              </span>
               <button type="submit" className="check-submit">
-                check it.
+                Check package
               </button>
             </div>
           </form>
@@ -286,24 +280,7 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
             data-part
             style={{ ["--part" as string]: 1 }}
           >
-            <span className="footer-display-line">
-              {sourceLabel.slice(0, cut)}
-            </span>
-            <span className="footer-display-line">
-              {sourceLabel.slice(cut)}
-              <svg
-                className="footer-display-arrow"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  d="M5.5 18.5L17 7M7.5 5.5h11v11"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="4.6"
-                />
-              </svg>
-            </span>
+            Explore UNMASK on GitHub <span aria-hidden="true">↗</span>
           </a>
           <div
             className="footer-meta"
