@@ -103,6 +103,35 @@ test("deployment plan pins exact release digest and updates only the existing im
   assert.equal(JSON.stringify(plan).includes("runtime@"), false);
 });
 
+test("model secret rotation plan differs from the observed runtime only in the secret version", () => {
+  const f = fixture();
+  f.service.spec.template.spec.containers[0].env[1].valueFrom.secretKeyRef.name =
+    "unmask-gemini-api-key";
+  const unchanged = planCloudRunDeployment(f);
+  f.configuration = { ...f.configuration, modelSecretVersion: "7" };
+  const plan = planCloudRunDeployment(f);
+  assert.deepEqual(plan.updateArgs.slice(-5), [
+    "--no-traffic",
+    "--update-secrets",
+    "GEMINI_API_KEY=unmask-gemini-api-key:7",
+    "--quiet",
+    "--format=json",
+  ]);
+  assert.notEqual(plan.runtimeFingerprint, unchanged.runtimeFingerprint);
+  const rotated = structuredClone(f.service);
+  rotated.spec.template.spec.containers[0].env[1].valueFrom.secretKeyRef.key =
+    "7";
+  assert.equal(
+    planCloudRunDeployment({
+      ...f,
+      service: rotated,
+      configuration: { ...f.configuration, modelSecretVersion: undefined },
+    }).runtimeFingerprint,
+    plan.runtimeFingerprint,
+  );
+  assert.equal(JSON.stringify(plan).includes("plaintext"), false);
+});
+
 for (const [label, mutate] of [
   [
     "incomplete GitHub release",

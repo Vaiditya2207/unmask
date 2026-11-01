@@ -1,8 +1,12 @@
 import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
   deployCloudRun,
+  deploymentInputs,
   verifyPublicGhcrImage,
 } from "../../scripts/cloud-run-deploy.mjs";
 
@@ -483,4 +487,230 @@ test("cached rollback still rejects a different repository with the same digest"
     }),
     /rollback.*not.*verified|rollback.*failed/i,
   );
+});
+
+function rotationFixture(version = "4") {
+  const f = fixture();
+  for (const spec of [
+    f.before.spec.template.spec,
+    f.after.spec.template.spec,
+    f.revision.spec,
+    f.previousRevision.spec,
+  ])
+    spec.containers[0].env[0].valueFrom.secretKeyRef.name =
+      "unmask-gemini-api-key";
+  for (const spec of [f.after.spec.template.spec, f.revision.spec])
+    spec.containers[0].env[0].valueFrom.secretKeyRef.key = version;
+  f.env.CLOUD_RUN_MODEL_SECRET_VERSION = version;
+  return f;
+}
+const mutationsOf = (f) =>
+  f.calls.filter(
+    (call) =>
+      call.args.includes("update") || call.args.includes("update-traffic"),
+  );
+
+test("configured model secret version rotates atomically with the no-traffic image update", async () => {
+  const f = rotationFixture();
+  const result = await run(f);
+  const mutations = mutationsOf(f);
+  assert.equal(mutations.length, 2);
+  const update = mutations[0].args;
+  assert.ok(update.includes(f.env.RELEASE_IMAGE_DIGEST));
+  assert.ok(update.includes("--no-traffic"));
+  assert.equal(
+    update[update.indexOf("--update-secrets") + 1],
+    "GEMINI_API_KEY=unmask-gemini-api-key:4",
+  );
+  assert.equal(
+    mutations.some((call) =>
+      call.args.some((arg) =>
+        /env-vars|set-secrets|remove-secrets|clear-secrets|service-account/.test(
+          arg,
+        ),
+      ),
+    ),
+    false,
+  );
+  assert.equal(mutations[1].args.includes("--update-secrets"), false);
+  assert.deepEqual(result.modelSecretRotation, {
+    env: "GEMINI_API_KEY",
+    secret: "unmask-gemini-api-key",
+    fromVersion: "3",
+    toVersion: "4",
+  });
+});
+
+for (const [label, mutate] of [
+  [
+    "unrelated environment drift",
+    (f) =>
+      f.after.spec.template.spec.containers[0].env.push({
+        name: "EXTRA",
+        value: "on",
+      }),
+  ],
+  [
+    "unrelated secret drift",
+    (f) => {
+      f.before.spec.template.spec.containers[0].env.push({
+        name: "OTHER_KEY",
+        valueFrom: { secretKeyRef: { name: "other", key: "1" } },
+      });
+      f.after.spec.template.spec.containers[0].env.push({
+        name: "OTHER_KEY",
+        valueFrom: { secretKeyRef: { name: "other", key: "2" } },
+      });
+    },
+  ],
+  [
+    "runtime identity drift",
+    (f) => {
+      f.after.spec.template.spec.serviceAccountName =
+        "other@fixture-project.iam.gserviceaccount.com";
+    },
+  ],
+  [
+    "a rotation that did not apply the configured version",
+    (f) => {
+      f.after.spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key =
+        "3";
+    },
+  ],
+])
+  test(`secret rotation with ${label} receives no traffic`, async () => {
+    const f = rotationFixture();
+    mutate(f);
+    await assert.rejects(run(f), /config|secret|preserv|identity|digest/i);
+    assert.equal(
+      f.calls.some(
+        (call) =>
+          call.args.includes("update-traffic") &&
+          call.args.includes("unmask-new=100"),
+      ),
+      false,
+    );
+  });
+
+for (const [label, mutate] of [
+  [
+    "a missing binding",
+    (f) => (f.before.spec.template.spec.containers[0].env = []),
+  ],
+  [
+    "a plaintext key",
+    (f) =>
+      (f.before.spec.template.spec.containers[0].env = [
+        { name: "GEMINI_API_KEY", value: "plaintext" },
+      ]),
+  ],
+  [
+    "a binding without a secret reference",
+    (f) =>
+      (f.before.spec.template.spec.containers[0].env = [
+        { name: "GEMINI_API_KEY" },
+      ]),
+  ],
+  [
+    "a different secret name",
+    (f) =>
+      (f.before.spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name =
+        "other-key"),
+  ],
+  [
+    "a duplicate binding",
+    (f) =>
+      f.before.spec.template.spec.containers[0].env.push(
+        structuredClone(f.before.spec.template.spec.containers[0].env[0]),
+      ),
+  ],
+])
+  test(`secret rotation refuses ${label} before any Cloud Run mutation`, async () => {
+    const f = rotationFixture();
+    mutate(f);
+    await assert.rejects(run(f), /secret rotation requires/i);
+    assert.equal(mutationsOf(f).length, 0);
+  });
+
+for (const version of ["latest", "0", "04", "", "AIzaSyFixture"])
+  test(`model secret version ${JSON.stringify(version)} is rejected before cloud commands`, async () => {
+    const f = rotationFixture();
+    f.env.CLOUD_RUN_MODEL_SECRET_VERSION = version;
+    await assert.rejects(run(f), /configuration/i);
+    assert.equal(f.calls.length, 0);
+  });
+
+test("failed smoke after a secret rotation restores the previous revision traffic", async () => {
+  const f = rotationFixture();
+  let failure;
+  try {
+    await run(f, {
+      smoke: async () => {
+        throw new Error("model-smoke-failed");
+      },
+    });
+  } catch (error) {
+    failure = error;
+  }
+  assert.equal(f.traffic, "unmask-old");
+  assert.match(failure?.message ?? "", /restored.*verified/i);
+  const rollback = f.calls.find((call) => call.args.includes("unmask-old=100"));
+  assert.ok(rollback);
+  assert.equal(rollback.args.includes("--update-secrets"), false);
+  assert.equal(
+    f.previousRevision.spec.containers[0].env[0].valueFrom.secretKeyRef.key,
+    "3",
+  );
+});
+
+test("committed deployment config maps an explicit model secret version and stays absent by default", () => {
+  const committed = JSON.parse(
+    readFileSync(new URL("../../deployment.config.json", import.meta.url)),
+  );
+  assert.equal(Object.hasOwn(committed, "modelSecretVersion"), false);
+  const env = Object.fromEntries(
+    Object.entries(fixture().env).filter(
+      ([name]) =>
+        !name.startsWith("GCP_") &&
+        !["CLOUD_RUN_SMOKE_PACKAGE", "CLOUD_RUN_MODEL_EXPECTATIONS"].includes(
+          name,
+        ),
+    ),
+  );
+  const home = process.cwd();
+  const directory = mkdtempSync(
+    path.join(os.tmpdir(), "unmask-deploy-config-"),
+  );
+  try {
+    process.chdir(directory);
+    const config = (extra) =>
+      writeFileSync(
+        "deployment.config.json",
+        JSON.stringify({
+          project: "fixture-project",
+          region: "asia-south1",
+          service: "unmask",
+          serviceAccount: "deploy@fixture-project.iam.gserviceaccount.com",
+          runtimeServiceAccount:
+            "runtime@fixture-project.iam.gserviceaccount.com",
+          workloadIdentityProvider:
+            "projects/123456789/locations/global/workloadIdentityPools/fixture/providers/github",
+          smokePackage: "fixture@1.0.0",
+          modelExpectation: committed.modelExpectation,
+          ...extra,
+        }),
+      );
+    config({});
+    assert.equal(
+      Object.hasOwn(deploymentInputs(env).configuration, "modelSecretVersion"),
+      false,
+    );
+    config({ modelSecretVersion: "2" });
+    assert.equal(deploymentInputs(env).configuration.modelSecretVersion, "2");
+    config({ modelSecretVersion: "latest" });
+    assert.throws(() => deploymentInputs(env), /configuration/i);
+  } finally {
+    process.chdir(home);
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

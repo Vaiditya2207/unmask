@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto";
 
 const digest = (value) => /^sha256:[a-f0-9]{64}$/.test(value || "");
+export const MODEL_SECRET = Object.freeze({
+  env: "GEMINI_API_KEY",
+  secret: "unmask-gemini-api-key",
+});
+const secretVersion = (value) =>
+  typeof value === "string" && /^[1-9]\d{0,9}$/.test(value);
 const canonical = (value) =>
   JSON.stringify(value, (_, item) =>
     item && !Array.isArray(item) && typeof item === "object"
@@ -86,8 +92,36 @@ function configurationValid(configuration) {
     ) &&
     /^projects\/\d+\/locations\/global\/workloadIdentityPools\/[a-z0-9-]+\/providers\/[a-z0-9-]+$/.test(
       configuration.workloadIdentityProvider || "",
-    )
+    ) &&
+    (configuration.modelSecretVersion === undefined ||
+      secretVersion(configuration.modelSecretVersion))
   );
+}
+// A rotation may change only the version of the single existing model key secret reference.
+function rotatedService(service, version) {
+  const env = service.spec.template.spec.containers[0].env;
+  const bindings = Array.isArray(env)
+    ? env.filter((item) => item?.name === MODEL_SECRET.env)
+    : [];
+  const binding = bindings[0];
+  const reference = binding?.valueFrom?.secretKeyRef;
+  if (
+    bindings.length !== 1 ||
+    Object.keys(binding).some((key) => !["name", "valueFrom"].includes(key)) ||
+    !binding.valueFrom ||
+    typeof binding.valueFrom !== "object" ||
+    Object.keys(binding.valueFrom).length !== 1 ||
+    reference?.name !== MODEL_SECRET.secret ||
+    !(secretVersion(reference.key) || reference.key === "latest")
+  )
+    throw new Error(
+      `Model secret rotation requires exactly one ${MODEL_SECRET.env} reference to secret ${MODEL_SECRET.secret}`,
+    );
+  const expected = structuredClone(service);
+  expected.spec.template.spec.containers[0].env.find(
+    (item) => item?.name === MODEL_SECRET.env,
+  ).valueFrom.secretKeyRef.key = version;
+  return { expected, previousVersion: reference.key };
 }
 export function validateCloudRunInputs({
   release,
@@ -161,12 +195,21 @@ export function planCloudRunDeployment({
     throw new Error(
       "Existing service must have ready identity, instance-based CPU, one instance and1CPU/2Gi configuration",
     );
+  const version = configuration.modelSecretVersion;
+  const rotation =
+    version === undefined ? null : rotatedService(service, version);
   return {
     image: release.image,
     commit: release.commit,
     version: release.version,
     tarballSha256: release.tarballSha256,
-    runtimeFingerprint: fingerprint(service),
+    runtimeFingerprint: fingerprint(rotation?.expected ?? service),
+    modelSecretRotation: rotation && {
+      env: MODEL_SECRET.env,
+      secret: MODEL_SECRET.secret,
+      fromVersion: rotation.previousVersion,
+      toVersion: version,
+    },
     resolvedImageDigest: release.resolvedImageDigest ?? release.image,
     updateArgs: [
       "run",
@@ -180,6 +223,12 @@ export function planCloudRunDeployment({
       "--image",
       release.image,
       "--no-traffic",
+      ...(rotation
+        ? [
+            "--update-secrets",
+            `${MODEL_SECRET.env}=${MODEL_SECRET.secret}:${version}`,
+          ]
+        : []),
       "--quiet",
       "--format=json",
     ],
