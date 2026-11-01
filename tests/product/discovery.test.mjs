@@ -9,6 +9,7 @@ import {
   writeFile,
   rm,
   symlink,
+  chmod,
 } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -245,28 +246,44 @@ test("installed npm bin reports build metadata identity and help", async (t) => 
   });
   const install = path.join(temporary, "install");
   await mkdir(install);
-  await writeFile(
-    path.join(install, "package.json"),
-    JSON.stringify({
-      name: "discovery-consumer",
-      version: "1.0.0",
-      private: true,
-    }),
+  await cp(path.join(copy, "package.json"), path.join(install, "package.json"));
+  await cp(
+    path.join(copy, "package-lock.json"),
+    path.join(install, "package-lock.json"),
   );
   command(
     "npm",
     [
-      "install",
+      "ci",
       "--offline",
       "--ignore-scripts",
       "--omit=dev",
       "--no-audit",
       "--no-fund",
-      path.join(temporary, packed.filename),
     ],
     install,
   );
+  const installed = path.join(install, "node_modules", "@xagents_in/unmask");
+  await mkdir(installed, { recursive: true });
+  command(
+    "tar",
+    [
+      "-xzf",
+      path.join(temporary, packed.filename),
+      "--strip-components=1",
+      "-C",
+      installed,
+    ],
+    install,
+  );
+  await chmod(path.join(installed, "dist/cli/main.mjs"), 0o755);
+  const binDirectory = path.join(install, "node_modules/.bin");
+  await mkdir(binDirectory, { recursive: true });
   const bin = path.join(install, "node_modules/.bin/unmask");
+  await symlink(
+    path.relative(binDirectory, path.join(installed, "dist/cli/main.mjs")),
+    bin,
+  );
   const identity = JSON.parse(command(bin, ["--version", "--json"], install));
   assert.equal(identity.version, built.version);
   assert.equal(identity.build, "built");
@@ -283,7 +300,6 @@ test("installed npm bin reports build metadata identity and help", async (t) => 
     ),
   );
   const help = command(bin, ["--help"], install);
-  const installed = path.join(install, "node_modules", "@xagents_in/unmask");
   for (const item of commandCatalog()) {
     const present = expectedAvailable(path.join(installed, "dist/cli"), item);
     const [availableBlock] = help.split("Planned, not included");
