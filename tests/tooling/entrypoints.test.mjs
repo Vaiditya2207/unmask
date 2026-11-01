@@ -53,7 +53,7 @@ test("CLI readiness fails closed; report mode explicitly reports blocked", (t) =
   });
   assert.equal(
     readFileSync(output, "utf8"),
-    "ready=false\nnpm_publish=false\n",
+    "ready=false\nnpm_publish=false\nproduction_deploy=false\n",
   );
 });
 
