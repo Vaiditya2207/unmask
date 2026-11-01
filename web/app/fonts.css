@@ -1,30 +1,10 @@
 @font-face {
-  font-family: Libre Franklin;
+  font-family: Bricolage Grotesque;
   font-style: normal;
-  font-weight: 400;
+  font-weight: 200 800;
+  font-stretch: 100%;
   font-display: swap;
-  src: url(/fonts/128ffe37713ca4e5762f6ebb7030d03311042d80e3d4968a34219ab8519cf30c.woff2)
-    format("woff2");
-  unicode-range:
-    u+0460-052f, u+1c80-1c8a, u+20b4, u+2de0-2dff, u+a640-a69f, u+fe2e-fe2f;
-}
-
-@font-face {
-  font-family: Libre Franklin;
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(/fonts/382ef5fd8419d3fbe9e90a916153f1d6438b8d91f5421d535a6e087d10864c19.woff2)
-    format("woff2");
-  unicode-range: u+0301, u+0400-045f, u+0490-0491, u+04b0-04b1, u+2116;
-}
-
-@font-face {
-  font-family: Libre Franklin;
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(/fonts/dc9a3b19ffe2809e6de2389e5081f6d8d60764fdc764e4dae91e666686134496.woff2)
+  src: url(/fonts/7e13a14cb0bd5fcacf4907e47ac01fb4adb471540663987ecf356043612368c0.woff2)
     format("woff2");
   unicode-range:
     u+0102-0103, u+0110-0111, u+0128-0129, u+0168-0169, u+01a0-01a1,
@@ -33,11 +13,12 @@
 }
 
 @font-face {
-  font-family: Libre Franklin;
+  font-family: Bricolage Grotesque;
   font-style: normal;
-  font-weight: 400;
+  font-weight: 200 800;
+  font-stretch: 100%;
   font-display: swap;
-  src: url(/fonts/96176420d1e4d66b81149e47347c5d8c76c5be3d74671e0c87a661da69ea33ed.woff2)
+  src: url(/fonts/1d04719f1325400ea4267e630dba29b02af87eb094d7d71d2e4d80a05479d07a.woff2)
     format("woff2");
   unicode-range:
     u+0100-02ba, u+02bd-02c5, u+02c7-02cc, u+02ce-02d7, u+02dd-02ff, u+0304,
@@ -46,11 +27,12 @@
 }
 
 @font-face {
-  font-family: Libre Franklin;
+  font-family: Bricolage Grotesque;
   font-style: normal;
-  font-weight: 400;
+  font-weight: 200 800;
+  font-stretch: 100%;
   font-display: swap;
-  src: url(/fonts/d21d1545591ddfa2ce9c208879298e9086b1a8dba7c81d50b686c70a259e91e8.woff2)
+  src: url(/fonts/85f55a58a31e61a2e19e8bb25fed503181bf2a6b4cab76c589992cfaac377447.woff2)
     format("woff2");
   unicode-range:
     u+00??, u+0131, u+0152-0153, u+02bb-02bc, u+02c6, u+02da, u+02dc, u+0304,
@@ -59,232 +41,41 @@
 }
 
 @font-face {
-  font-family: Libre Franklin;
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url(/fonts/128ffe37713ca4e5762f6ebb7030d03311042d80e3d4968a34219ab8519cf30c.woff2)
-    format("woff2");
-  unicode-range:
-    u+0460-052f, u+1c80-1c8a, u+20b4, u+2de0-2dff, u+a640-a69f, u+fe2e-fe2f;
-}
-
-@font-face {
-  font-family: Libre Franklin;
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url(/fonts/382ef5fd8419d3fbe9e90a916153f1d6438b8d91f5421d535a6e087d10864c19.woff2)
-    format("woff2");
-  unicode-range: u+0301, u+0400-045f, u+0490-0491, u+04b0-04b1, u+2116;
-}
-
-@font-face {
-  font-family: Libre Franklin;
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url(/fonts/dc9a3b19ffe2809e6de2389e5081f6d8d60764fdc764e4dae91e666686134496.woff2)
-    format("woff2");
-  unicode-range:
-    u+0102-0103, u+0110-0111, u+0128-0129, u+0168-0169, u+01a0-01a1,
-    u+01af-01b0, u+0300-0301, u+0303-0304, u+0308-0309, u+0323, u+0329,
-    u+1ea0-1ef9, u+20ab;
-}
-
-@font-face {
-  font-family: Libre Franklin;
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url(/fonts/96176420d1e4d66b81149e47347c5d8c76c5be3d74671e0c87a661da69ea33ed.woff2)
-    format("woff2");
-  unicode-range:
-    u+0100-02ba, u+02bd-02c5, u+02c7-02cc, u+02ce-02d7, u+02dd-02ff, u+0304,
-    u+0308, u+0329, u+1d00-1dbf, u+1e00-1e9f, u+1ef2-1eff, u+2020, u+20a0-20ab,
-    u+20ad-20c4, u+2113, u+2c60-2c7f, u+a720-a7ff;
-}
-
-@font-face {
-  font-family: Libre Franklin;
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url(/fonts/d21d1545591ddfa2ce9c208879298e9086b1a8dba7c81d50b686c70a259e91e8.woff2)
-    format("woff2");
-  unicode-range:
-    u+00??, u+0131, u+0152-0153, u+02bb-02bc, u+02c6, u+02da, u+02dc, u+0304,
-    u+0308, u+0329, u+2000-206f, u+20ac, u+2122, u+2191, u+2193, u+2212, u+2215,
-    u+feff, u+fffd;
-}
-
-@font-face {
-  font-family: Libre Franklin;
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url(/fonts/128ffe37713ca4e5762f6ebb7030d03311042d80e3d4968a34219ab8519cf30c.woff2)
-    format("woff2");
-  unicode-range:
-    u+0460-052f, u+1c80-1c8a, u+20b4, u+2de0-2dff, u+a640-a69f, u+fe2e-fe2f;
-}
-
-@font-face {
-  font-family: Libre Franklin;
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url(/fonts/382ef5fd8419d3fbe9e90a916153f1d6438b8d91f5421d535a6e087d10864c19.woff2)
-    format("woff2");
-  unicode-range: u+0301, u+0400-045f, u+0490-0491, u+04b0-04b1, u+2116;
-}
-
-@font-face {
-  font-family: Libre Franklin;
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url(/fonts/dc9a3b19ffe2809e6de2389e5081f6d8d60764fdc764e4dae91e666686134496.woff2)
-    format("woff2");
-  unicode-range:
-    u+0102-0103, u+0110-0111, u+0128-0129, u+0168-0169, u+01a0-01a1,
-    u+01af-01b0, u+0300-0301, u+0303-0304, u+0308-0309, u+0323, u+0329,
-    u+1ea0-1ef9, u+20ab;
-}
-
-@font-face {
-  font-family: Libre Franklin;
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url(/fonts/96176420d1e4d66b81149e47347c5d8c76c5be3d74671e0c87a661da69ea33ed.woff2)
-    format("woff2");
-  unicode-range:
-    u+0100-02ba, u+02bd-02c5, u+02c7-02cc, u+02ce-02d7, u+02dd-02ff, u+0304,
-    u+0308, u+0329, u+1d00-1dbf, u+1e00-1e9f, u+1ef2-1eff, u+2020, u+20a0-20ab,
-    u+20ad-20c4, u+2113, u+2c60-2c7f, u+a720-a7ff;
-}
-
-@font-face {
-  font-family: Libre Franklin;
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url(/fonts/d21d1545591ddfa2ce9c208879298e9086b1a8dba7c81d50b686c70a259e91e8.woff2)
-    format("woff2");
-  unicode-range:
-    u+00??, u+0131, u+0152-0153, u+02bb-02bc, u+02c6, u+02da, u+02dc, u+0304,
-    u+0308, u+0329, u+2000-206f, u+20ac, u+2122, u+2191, u+2193, u+2212, u+2215,
-    u+feff, u+fffd;
-}
-
-@font-face {
-  font-family: Libre Franklin;
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url(/fonts/128ffe37713ca4e5762f6ebb7030d03311042d80e3d4968a34219ab8519cf30c.woff2)
-    format("woff2");
-  unicode-range:
-    u+0460-052f, u+1c80-1c8a, u+20b4, u+2de0-2dff, u+a640-a69f, u+fe2e-fe2f;
-}
-
-@font-face {
-  font-family: Libre Franklin;
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url(/fonts/382ef5fd8419d3fbe9e90a916153f1d6438b8d91f5421d535a6e087d10864c19.woff2)
-    format("woff2");
-  unicode-range: u+0301, u+0400-045f, u+0490-0491, u+04b0-04b1, u+2116;
-}
-
-@font-face {
-  font-family: Libre Franklin;
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url(/fonts/dc9a3b19ffe2809e6de2389e5081f6d8d60764fdc764e4dae91e666686134496.woff2)
-    format("woff2");
-  unicode-range:
-    u+0102-0103, u+0110-0111, u+0128-0129, u+0168-0169, u+01a0-01a1,
-    u+01af-01b0, u+0300-0301, u+0303-0304, u+0308-0309, u+0323, u+0329,
-    u+1ea0-1ef9, u+20ab;
-}
-
-@font-face {
-  font-family: Libre Franklin;
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url(/fonts/96176420d1e4d66b81149e47347c5d8c76c5be3d74671e0c87a661da69ea33ed.woff2)
-    format("woff2");
-  unicode-range:
-    u+0100-02ba, u+02bd-02c5, u+02c7-02cc, u+02ce-02d7, u+02dd-02ff, u+0304,
-    u+0308, u+0329, u+1d00-1dbf, u+1e00-1e9f, u+1ef2-1eff, u+2020, u+20a0-20ab,
-    u+20ad-20c4, u+2113, u+2c60-2c7f, u+a720-a7ff;
-}
-
-@font-face {
-  font-family: Libre Franklin;
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url(/fonts/d21d1545591ddfa2ce9c208879298e9086b1a8dba7c81d50b686c70a259e91e8.woff2)
-    format("woff2");
-  unicode-range:
-    u+00??, u+0131, u+0152-0153, u+02bb-02bc, u+02c6, u+02da, u+02dc, u+0304,
-    u+0308, u+0329, u+2000-206f, u+20ac, u+2122, u+2191, u+2193, u+2212, u+2215,
-    u+feff, u+fffd;
-}
-
-@font-face {
-  font-family: Libre Franklin Fallback;
+  font-family: Bricolage Grotesque Fallback;
   src: local("Arial");
-  ascent-override: 92.61%;
-  descent-override: 23.58%;
+  ascent-override: 88.21%;
+  descent-override: 25.61%;
   line-gap-override: 0%;
-  size-adjust: 104.31%;
+  size-adjust: 105.43%;
 }
 
 @font-face {
-  font-family: "Source Serif 4";
-  font-style: italic;
+  font-family: IBM Plex Mono;
+  font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url(/fonts/f8aaac46e6d197fd86953210c7b8ed0d7c3340f7c15c352a24fc1854d887fe6f.woff2)
+  src: url(/fonts/c6f09ee0e0a24b7c85ecb2a601eb99332f65b1f6b37c31e0bbe73fb307625eca.woff2)
     format("woff2");
   unicode-range:
     u+0460-052f, u+1c80-1c8a, u+20b4, u+2de0-2dff, u+a640-a69f, u+fe2e-fe2f;
 }
 
 @font-face {
-  font-family: "Source Serif 4";
-  font-style: italic;
+  font-family: IBM Plex Mono;
+  font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url(/fonts/151591aa1815c5ee1fed06b928a248973daf3b99cf6b2483e0335f543da30e4d.woff2)
+  src: url(/fonts/7b59d6bf7f8b8408ac28f27d01dca9a890abeae77045d343b1d8ccb089a92e54.woff2)
     format("woff2");
   unicode-range: u+0301, u+0400-045f, u+0490-0491, u+04b0-04b1, u+2116;
 }
 
 @font-face {
-  font-family: "Source Serif 4";
-  font-style: italic;
+  font-family: IBM Plex Mono;
+  font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url(/fonts/5e867cebca3a8f7f702aaaa31684c0a7d9f863670c46b70f182173b858262fc2.woff2)
-    format("woff2");
-  unicode-range:
-    u+0370-0377, u+037a-037f, u+0384-038a, u+038c, u+038e-03a1, u+03a3-03ff;
-}
-
-@font-face {
-  font-family: "Source Serif 4";
-  font-style: italic;
-  font-weight: 400;
-  font-display: swap;
-  src: url(/fonts/25f97f6bfa24dac3c3680d072a529e22d3f0ffd6b1767c87c65bb821889d8796.woff2)
+  src: url(/fonts/0a8b854cc18641bd1b8222afa7ec82a75e59bc6501f777744ec87db1b6cd7a2c.woff2)
     format("woff2");
   unicode-range:
     u+0102-0103, u+0110-0111, u+0128-0129, u+0168-0169, u+01a0-01a1,
@@ -293,11 +84,11 @@
 }
 
 @font-face {
-  font-family: "Source Serif 4";
-  font-style: italic;
+  font-family: IBM Plex Mono;
+  font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url(/fonts/fa851a3159c26f5c3eebbeb0c247d6499168feef25aec7d31e7c33195d26c83a.woff2)
+  src: url(/fonts/f1050dc5317b43434c0aeda599d4624c774ffc162e87a8cf204b949b6a85816d.woff2)
     format("woff2");
   unicode-range:
     u+0100-02ba, u+02bd-02c5, u+02c7-02cc, u+02ce-02d7, u+02dd-02ff, u+0304,
@@ -306,11 +97,11 @@
 }
 
 @font-face {
-  font-family: "Source Serif 4";
-  font-style: italic;
+  font-family: IBM Plex Mono;
+  font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url(/fonts/4dbf6638832394945c054a76dee4f9ced221d1c52a4ce6a29ecc4195232f966b.woff2)
+  src: url(/fonts/c36f509c0a8f9f85f29cb44bc8701d8a9e0b14c499e77a884f789ead7093a7ac.woff2)
     format("woff2");
   unicode-range:
     u+00??, u+0131, u+0152-0153, u+02bb-02bc, u+02c6, u+02da, u+02dc, u+0304,
@@ -319,43 +110,32 @@
 }
 
 @font-face {
-  font-family: "Source Serif 4";
-  font-style: italic;
-  font-weight: 600;
+  font-family: IBM Plex Mono;
+  font-style: normal;
+  font-weight: 500;
   font-display: swap;
-  src: url(/fonts/f8aaac46e6d197fd86953210c7b8ed0d7c3340f7c15c352a24fc1854d887fe6f.woff2)
+  src: url(/fonts/311098be73eac339128f0b5a6e33d72645b6f87488541fdf467c402152d297fd.woff2)
     format("woff2");
   unicode-range:
     u+0460-052f, u+1c80-1c8a, u+20b4, u+2de0-2dff, u+a640-a69f, u+fe2e-fe2f;
 }
 
 @font-face {
-  font-family: "Source Serif 4";
-  font-style: italic;
-  font-weight: 600;
+  font-family: IBM Plex Mono;
+  font-style: normal;
+  font-weight: 500;
   font-display: swap;
-  src: url(/fonts/151591aa1815c5ee1fed06b928a248973daf3b99cf6b2483e0335f543da30e4d.woff2)
+  src: url(/fonts/d524dc8ff6dbf7ed69772f3b2ff4affaf5a89b5762b270e36c3f21da0d4e39f5.woff2)
     format("woff2");
   unicode-range: u+0301, u+0400-045f, u+0490-0491, u+04b0-04b1, u+2116;
 }
 
 @font-face {
-  font-family: "Source Serif 4";
-  font-style: italic;
-  font-weight: 600;
+  font-family: IBM Plex Mono;
+  font-style: normal;
+  font-weight: 500;
   font-display: swap;
-  src: url(/fonts/5e867cebca3a8f7f702aaaa31684c0a7d9f863670c46b70f182173b858262fc2.woff2)
-    format("woff2");
-  unicode-range:
-    u+0370-0377, u+037a-037f, u+0384-038a, u+038c, u+038e-03a1, u+03a3-03ff;
-}
-
-@font-face {
-  font-family: "Source Serif 4";
-  font-style: italic;
-  font-weight: 600;
-  font-display: swap;
-  src: url(/fonts/25f97f6bfa24dac3c3680d072a529e22d3f0ffd6b1767c87c65bb821889d8796.woff2)
+  src: url(/fonts/b2529fba93fd07a50ffb8fc3d103eb04b0c298d4f6564d2833c44fde286de7e4.woff2)
     format("woff2");
   unicode-range:
     u+0102-0103, u+0110-0111, u+0128-0129, u+0168-0169, u+01a0-01a1,
@@ -364,11 +144,11 @@
 }
 
 @font-face {
-  font-family: "Source Serif 4";
-  font-style: italic;
-  font-weight: 600;
+  font-family: IBM Plex Mono;
+  font-style: normal;
+  font-weight: 500;
   font-display: swap;
-  src: url(/fonts/fa851a3159c26f5c3eebbeb0c247d6499168feef25aec7d31e7c33195d26c83a.woff2)
+  src: url(/fonts/77f03e26f981c582bdba3a7abed4baa2d3149211c01366bb3ab3ba7622ec4ae5.woff2)
     format("woff2");
   unicode-range:
     u+0100-02ba, u+02bd-02c5, u+02c7-02cc, u+02ce-02d7, u+02dd-02ff, u+0304,
@@ -377,11 +157,11 @@
 }
 
 @font-face {
-  font-family: "Source Serif 4";
-  font-style: italic;
-  font-weight: 600;
+  font-family: IBM Plex Mono;
+  font-style: normal;
+  font-weight: 500;
   font-display: swap;
-  src: url(/fonts/4dbf6638832394945c054a76dee4f9ced221d1c52a4ce6a29ecc4195232f966b.woff2)
+  src: url(/fonts/a76f53ca6612e7b3828eec2311098675b7f9849ae4169a8bcef6302aec02a6c0.woff2)
     format("woff2");
   unicode-range:
     u+00??, u+0131, u+0152-0153, u+02bb-02bc, u+02c6, u+02da, u+02dc, u+0304,
@@ -390,309 +170,15 @@
 }
 
 @font-face {
-  font-family: "Source Serif 4";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(/fonts/4d72739b0e43d64e6b2a086a66f62df1ef90f34d6f109b279c557a64eae5d23d.woff2)
-    format("woff2");
-  unicode-range:
-    u+0460-052f, u+1c80-1c8a, u+20b4, u+2de0-2dff, u+a640-a69f, u+fe2e-fe2f;
-}
-
-@font-face {
-  font-family: "Source Serif 4";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(/fonts/7683b72ed39c9fc64c626ae0ed611e7dc0121af71cde73fd060bd7a4a83c0d7c.woff2)
-    format("woff2");
-  unicode-range: u+0301, u+0400-045f, u+0490-0491, u+04b0-04b1, u+2116;
-}
-
-@font-face {
-  font-family: "Source Serif 4";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(/fonts/303d60869ffd404c141fa90d87ba574cd26ade348dd4659ea4b9caeadf72c183.woff2)
-    format("woff2");
-  unicode-range:
-    u+0370-0377, u+037a-037f, u+0384-038a, u+038c, u+038e-03a1, u+03a3-03ff;
-}
-
-@font-face {
-  font-family: "Source Serif 4";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(/fonts/752875b4c33f07a3dda7c8f0be846fef059cb0f4e85211b855aa93dd85d45a22.woff2)
-    format("woff2");
-  unicode-range:
-    u+0102-0103, u+0110-0111, u+0128-0129, u+0168-0169, u+01a0-01a1,
-    u+01af-01b0, u+0300-0301, u+0303-0304, u+0308-0309, u+0323, u+0329,
-    u+1ea0-1ef9, u+20ab;
-}
-
-@font-face {
-  font-family: "Source Serif 4";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(/fonts/231f594ad829d45f905a8a6cdce704f659615e00f1a9db2699320e6e315c1d1f.woff2)
-    format("woff2");
-  unicode-range:
-    u+0100-02ba, u+02bd-02c5, u+02c7-02cc, u+02ce-02d7, u+02dd-02ff, u+0304,
-    u+0308, u+0329, u+1d00-1dbf, u+1e00-1e9f, u+1ef2-1eff, u+2020, u+20a0-20ab,
-    u+20ad-20c4, u+2113, u+2c60-2c7f, u+a720-a7ff;
-}
-
-@font-face {
-  font-family: "Source Serif 4";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(/fonts/8e38e3fbd74dea20aabe0831ffef04c9f30bf6fc5b99b7a2649be0dd8c6d859c.woff2)
-    format("woff2");
-  unicode-range:
-    u+00??, u+0131, u+0152-0153, u+02bb-02bc, u+02c6, u+02da, u+02dc, u+0304,
-    u+0308, u+0329, u+2000-206f, u+20ac, u+2122, u+2191, u+2193, u+2212, u+2215,
-    u+feff, u+fffd;
-}
-
-@font-face {
-  font-family: "Source Serif 4";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url(/fonts/4d72739b0e43d64e6b2a086a66f62df1ef90f34d6f109b279c557a64eae5d23d.woff2)
-    format("woff2");
-  unicode-range:
-    u+0460-052f, u+1c80-1c8a, u+20b4, u+2de0-2dff, u+a640-a69f, u+fe2e-fe2f;
-}
-
-@font-face {
-  font-family: "Source Serif 4";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url(/fonts/7683b72ed39c9fc64c626ae0ed611e7dc0121af71cde73fd060bd7a4a83c0d7c.woff2)
-    format("woff2");
-  unicode-range: u+0301, u+0400-045f, u+0490-0491, u+04b0-04b1, u+2116;
-}
-
-@font-face {
-  font-family: "Source Serif 4";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url(/fonts/303d60869ffd404c141fa90d87ba574cd26ade348dd4659ea4b9caeadf72c183.woff2)
-    format("woff2");
-  unicode-range:
-    u+0370-0377, u+037a-037f, u+0384-038a, u+038c, u+038e-03a1, u+03a3-03ff;
-}
-
-@font-face {
-  font-family: "Source Serif 4";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url(/fonts/752875b4c33f07a3dda7c8f0be846fef059cb0f4e85211b855aa93dd85d45a22.woff2)
-    format("woff2");
-  unicode-range:
-    u+0102-0103, u+0110-0111, u+0128-0129, u+0168-0169, u+01a0-01a1,
-    u+01af-01b0, u+0300-0301, u+0303-0304, u+0308-0309, u+0323, u+0329,
-    u+1ea0-1ef9, u+20ab;
-}
-
-@font-face {
-  font-family: "Source Serif 4";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url(/fonts/231f594ad829d45f905a8a6cdce704f659615e00f1a9db2699320e6e315c1d1f.woff2)
-    format("woff2");
-  unicode-range:
-    u+0100-02ba, u+02bd-02c5, u+02c7-02cc, u+02ce-02d7, u+02dd-02ff, u+0304,
-    u+0308, u+0329, u+1d00-1dbf, u+1e00-1e9f, u+1ef2-1eff, u+2020, u+20a0-20ab,
-    u+20ad-20c4, u+2113, u+2c60-2c7f, u+a720-a7ff;
-}
-
-@font-face {
-  font-family: "Source Serif 4";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url(/fonts/8e38e3fbd74dea20aabe0831ffef04c9f30bf6fc5b99b7a2649be0dd8c6d859c.woff2)
-    format("woff2");
-  unicode-range:
-    u+00??, u+0131, u+0152-0153, u+02bb-02bc, u+02c6, u+02da, u+02dc, u+0304,
-    u+0308, u+0329, u+2000-206f, u+20ac, u+2122, u+2191, u+2193, u+2212, u+2215,
-    u+feff, u+fffd;
-}
-
-@font-face {
-  font-family: "Source Serif 4 Fallback";
-  src: local("Times New Roman");
-  ascent-override: 87.87%;
-  descent-override: 28.41%;
-  line-gap-override: 0%;
-  size-adjust: 117.91%;
-}
-
-@font-face {
-  font-family: JetBrains Mono;
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(/fonts/9343de2ca5d9549f792e7962375af8efb0f320c7643bfd36c884b5a30e5c396f.woff2)
-    format("woff2");
-  unicode-range:
-    u+0460-052f, u+1c80-1c8a, u+20b4, u+2de0-2dff, u+a640-a69f, u+fe2e-fe2f;
-}
-
-@font-face {
-  font-family: JetBrains Mono;
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(/fonts/4995a9a43ac659ec32fcd8b463755cd6a07b31a6e6b3894a6a153b661cf490e2.woff2)
-    format("woff2");
-  unicode-range: u+0301, u+0400-045f, u+0490-0491, u+04b0-04b1, u+2116;
-}
-
-@font-face {
-  font-family: JetBrains Mono;
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(/fonts/49c3da6c9a2b279b0f1f860f5cfb1f5dc38d88a5c7be9c9b1837bbc4e3db6111.woff2)
-    format("woff2");
-  unicode-range:
-    u+0370-0377, u+037a-037f, u+0384-038a, u+038c, u+038e-03a1, u+03a3-03ff;
-}
-
-@font-face {
-  font-family: JetBrains Mono;
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(/fonts/d44eb1936043a56038eb02dd70b243f379bef65783f94ec12f277550720411f1.woff2)
-    format("woff2");
-  unicode-range:
-    u+0102-0103, u+0110-0111, u+0128-0129, u+0168-0169, u+01a0-01a1,
-    u+01af-01b0, u+0300-0301, u+0303-0304, u+0308-0309, u+0323, u+0329,
-    u+1ea0-1ef9, u+20ab;
-}
-
-@font-face {
-  font-family: JetBrains Mono;
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(/fonts/9c38cb2d0d2d93c1ee6e21fa78db76f13ea7e15e15cc64214c7ca89b6aaa35c4.woff2)
-    format("woff2");
-  unicode-range:
-    u+0100-02ba, u+02bd-02c5, u+02c7-02cc, u+02ce-02d7, u+02dd-02ff, u+0304,
-    u+0308, u+0329, u+1d00-1dbf, u+1e00-1e9f, u+1ef2-1eff, u+2020, u+20a0-20ab,
-    u+20ad-20c4, u+2113, u+2c60-2c7f, u+a720-a7ff;
-}
-
-@font-face {
-  font-family: JetBrains Mono;
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(/fonts/2c32b9b3ee358c119e210f6f5195f9bd34894d78a785ff2e95d60e718e400af4.woff2)
-    format("woff2");
-  unicode-range:
-    u+00??, u+0131, u+0152-0153, u+02bb-02bc, u+02c6, u+02da, u+02dc, u+0304,
-    u+0308, u+0329, u+2000-206f, u+20ac, u+2122, u+2191, u+2193, u+2212, u+2215,
-    u+feff, u+fffd;
-}
-
-@font-face {
-  font-family: JetBrains Mono;
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url(/fonts/9343de2ca5d9549f792e7962375af8efb0f320c7643bfd36c884b5a30e5c396f.woff2)
-    format("woff2");
-  unicode-range:
-    u+0460-052f, u+1c80-1c8a, u+20b4, u+2de0-2dff, u+a640-a69f, u+fe2e-fe2f;
-}
-
-@font-face {
-  font-family: JetBrains Mono;
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url(/fonts/4995a9a43ac659ec32fcd8b463755cd6a07b31a6e6b3894a6a153b661cf490e2.woff2)
-    format("woff2");
-  unicode-range: u+0301, u+0400-045f, u+0490-0491, u+04b0-04b1, u+2116;
-}
-
-@font-face {
-  font-family: JetBrains Mono;
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url(/fonts/49c3da6c9a2b279b0f1f860f5cfb1f5dc38d88a5c7be9c9b1837bbc4e3db6111.woff2)
-    format("woff2");
-  unicode-range:
-    u+0370-0377, u+037a-037f, u+0384-038a, u+038c, u+038e-03a1, u+03a3-03ff;
-}
-
-@font-face {
-  font-family: JetBrains Mono;
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url(/fonts/d44eb1936043a56038eb02dd70b243f379bef65783f94ec12f277550720411f1.woff2)
-    format("woff2");
-  unicode-range:
-    u+0102-0103, u+0110-0111, u+0128-0129, u+0168-0169, u+01a0-01a1,
-    u+01af-01b0, u+0300-0301, u+0303-0304, u+0308-0309, u+0323, u+0329,
-    u+1ea0-1ef9, u+20ab;
-}
-
-@font-face {
-  font-family: JetBrains Mono;
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url(/fonts/9c38cb2d0d2d93c1ee6e21fa78db76f13ea7e15e15cc64214c7ca89b6aaa35c4.woff2)
-    format("woff2");
-  unicode-range:
-    u+0100-02ba, u+02bd-02c5, u+02c7-02cc, u+02ce-02d7, u+02dd-02ff, u+0304,
-    u+0308, u+0329, u+1d00-1dbf, u+1e00-1e9f, u+1ef2-1eff, u+2020, u+20a0-20ab,
-    u+20ad-20c4, u+2113, u+2c60-2c7f, u+a720-a7ff;
-}
-
-@font-face {
-  font-family: JetBrains Mono;
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url(/fonts/2c32b9b3ee358c119e210f6f5195f9bd34894d78a785ff2e95d60e718e400af4.woff2)
-    format("woff2");
-  unicode-range:
-    u+00??, u+0131, u+0152-0153, u+02bb-02bc, u+02c6, u+02da, u+02dc, u+0304,
-    u+0308, u+0329, u+2000-206f, u+20ac, u+2122, u+2191, u+2193, u+2212, u+2215,
-    u+feff, u+fffd;
-}
-
-@font-face {
-  font-family: JetBrains Mono Fallback;
+  font-family: IBM Plex Mono Fallback;
   src: local("Arial");
-  ascent-override: 75.79%;
-  descent-override: 22.29%;
+  ascent-override: 76.16%;
+  descent-override: 20.43%;
   line-gap-override: 0%;
   size-adjust: 134.59%;
 }
 
 :root {
-  --font-display: "Libre Franklin", "Libre Franklin Fallback";
-  --font-text: "Source Serif 4", "Source Serif 4 Fallback";
-  --font-code: "JetBrains Mono", "JetBrains Mono Fallback";
+  --font-sans: "Bricolage Grotesque", "Bricolage Grotesque Fallback";
+  --font-mono: "IBM Plex Mono", "IBM Plex Mono Fallback";
 }
