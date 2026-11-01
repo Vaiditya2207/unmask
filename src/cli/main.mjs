@@ -11,6 +11,7 @@ import { modelClientFromEnv } from "../model/config.mjs";
 import { checkHosted } from "./hosted.mjs";
 import { runScan } from "./scan.mjs";
 import { runBatch } from "./batch.mjs";
+import { runCompare } from "./compare.mjs";
 
 const names = {
   "--tarball": "tarballPath",
@@ -166,6 +167,7 @@ export async function main(argv = process.argv.slice(2), runtime = {}) {
   try {
     if (argv[0] === "scan") return await runScan(argv.slice(1), runtime);
     if (argv[0] === "batch") return await runBatch(argv.slice(1), runtime);
+    if (argv[0] === "compare") return await runCompare(argv.slice(1), runtime);
     const { out, offline, allowModel, registrySpec, ...options } = parse(argv);
     let report;
     if (registrySpec)
