@@ -88,7 +88,7 @@ async function readJson(response, maxBytes) {
     throw failure("hosted-response", "The hosted response is not valid JSON.");
   }
 }
-export async function checkHosted(
+async function runHosted(
   spec,
   {
     serverUrl = DEFAULT_SERVER_URL,
@@ -96,6 +96,7 @@ export async function checkHosted(
     signal,
     limits: overrides = {},
   } = {},
+  withDetails = false,
 ) {
   const claim = parsePackageSpec(spec);
   const origin = serverOrigin(serverUrl);
@@ -227,7 +228,28 @@ export async function checkHosted(
           return value;
         },
       );
-      if (result) return result;
+      if (result) {
+        if (!withDetails) return result;
+        const detailsUrl = reportUrl.replace(/\.json$/, ".details.json");
+        const details = await request(
+          detailsUrl,
+          { headers: { accept: "application/json" } },
+          async (response) => {
+            if (response.status !== 200)
+              throw failure(
+                "hosted-details-failed",
+                `Hosted package details are unavailable (HTTP ${response.status}).`,
+              );
+            const value = await readJson(
+              response,
+              Math.min(limits.maxBodyBytes, 4194304),
+            );
+            validateDetails(value, result);
+            return value;
+          },
+        );
+        return { report: result, details, reportUrl, detailsUrl };
+      }
       await delay(limits.pollMs, undefined, { signal: lifetime });
     }
   } catch (error) {
@@ -248,4 +270,77 @@ export async function checkHosted(
   } finally {
     clearTimeout(totalTimer);
   }
+}
+
+function validateDetails(value, report) {
+  const list = (entry) =>
+    entry &&
+    Array.isArray(entry.items) &&
+    entry.items.length <= 20000 &&
+    entry.items.every(
+      (item) =>
+        item !== null && typeof item === "object" && !Array.isArray(item),
+    ) &&
+    ["total", "returned", "omitted"].every(
+      (key) => Number.isSafeInteger(entry[key]) && entry[key] >= 0,
+    ) &&
+    entry.returned === entry.items.length &&
+    entry.total === entry.returned + entry.omitted;
+  const identity = value?.identity?.items?.[0];
+  if (
+    value?.detailsVersion !== "1" ||
+    value?.reportSchemaVersion !== report.schemaVersion ||
+    !list(value.identity) ||
+    identity?.requested?.name !== report.inputs.claim.name ||
+    identity?.requested?.version !== report.inputs.claim.version ||
+    identity?.artifactDigests?.sha256 !== report.inputs.artifact.sha256 ||
+    !list(value.declarations?.fields) ||
+    !list(value.scripts?.entries) ||
+    !Array.isArray(value.dependencies?.categories) ||
+    value.dependencies.categories.length > 6 ||
+    value.dependencies.categories.some(
+      (category) => !list(category?.entries),
+    ) ||
+    !list(value.provenance?.facts) ||
+    !list(value.inventory?.files)
+  )
+    throw failure(
+      "hosted-details-invalid",
+      "Hosted details failed version, identity or inventory validation.",
+    );
+  const check = value.vulnerabilityCheck;
+  if (
+    check &&
+    (check.source !== "OSV" ||
+      ![
+        "found",
+        "none-reported",
+        "incomplete",
+        "unavailable",
+        "not-assessed",
+      ].includes(check.status) ||
+      typeof check.complete !== "boolean" ||
+      !Array.isArray(check.advisories) ||
+      check.complete !== ["found", "none-reported"].includes(check.status) ||
+      (check.status === "found" && check.advisories.length === 0) ||
+      (check.status === "none-reported" && check.advisories.length !== 0) ||
+      (check.package &&
+        (check.package.ecosystem !== "npm" ||
+          check.package.name !== report.inputs.claim.name ||
+          check.package.version !== report.inputs.claim.version)) ||
+      (check.complete &&
+        (!check.package || !["found", "none-reported"].includes(check.status))))
+  )
+    throw failure(
+      "hosted-details-invalid",
+      "Hosted OSV details failed status or identity validation.",
+    );
+}
+
+export async function checkHosted(spec, options) {
+  return runHosted(spec, options);
+}
+
+export async function getHostedDetails(spec, options) {
+  return runHosted(spec, options, true);
 }
