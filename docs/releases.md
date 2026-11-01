@@ -1,15 +1,24 @@
 # CI, releases and automatic deployment
 
 The repository contains a CLI, HTTP server and website. The current source
-candidate is `0.1.3`, configured with `private: false`, public npm access, and
+candidate is `0.1.4`, configured with `private: false`, public npm access, and
 enabled release/npm publication gates. The latest published immutable GitHub
-release observed on 31 October 2026 is `v0.1.2`; that publication metadata does
-not establish acceptance of this candidate or its deployed runtime.
+release observed on 31 October 2026 is `v0.1.3`. Its npm package and API passed
+scripted checks; website promotion rolled back and remains unaccepted.
+Publication metadata does not establish acceptance of this candidate.
 
-Candidate `0.1.3` combines the first sprint wave: recorded report file inventory
-and evidence drilldown, source-labelled registry facts and release history, and
-pinned CLI scan and bounded batch checks. Publication and deployment acceptance
-are pending. Root must verify the final exact artifact through the normal route
+Candidate `0.1.4` combines the complete forty-feature sprint and the approved
+website redesign: package exploration, advisory and dependency checks, explicit
+guard controls, terminal and automation tools, evidence exports, and bounded AI
+assessment. It includes the release-publication, website-promotion, quota-alias,
+and explicit secret-version rotation repairs. Existing Google model IDs remain
+configured; no paid-provider substitution is part of this release.
+
+Only the explicitly selected final release deploys production. This candidate
+selects `0.1.4`; no intermediate version is planned. Replacement-key confirmation,
+exact-artifact model acceptance, publication, and final API/web deployment
+acceptance remain pending. The old-key model attempt failed and is not a passing
+runtime gate. Root must verify the final exact artifact through the normal route
 with the intended model/provider configuration before declaring release readiness,
 then verify serving identities and repeat the normal flow after rollout. Local
 tests and model-disabled diagnostics do not establish those results or general
@@ -248,7 +257,7 @@ See [Cloud Run deployment contract](cloud-run-deployment.md) for variable names,
 WIF constraints, runtime settings, receipts and remaining live verification gaps.
 The `deploy-web` job follows successful API verification and deploys the website
 from the same release commit. The dated runtime evidence is separate from the
-pending `0.1.3` candidate deployment. Temporal is not involved.
+pending `0.1.4` candidate deployment. Temporal is not involved.
 
 ## Official references
 
