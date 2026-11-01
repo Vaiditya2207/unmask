@@ -1,7 +1,7 @@
-import type { Report } from "./report.ts";
+import { isReport, type Report } from "./report.ts";
 
 // The analyzer service is separate from this site. Set UNMASK_API_URL to its
-// origin; without it the site serves the sample report and says so.
+// origin; without it the site serves the example reports and says so.
 export function analyzerUrl(): string | null {
   const value = process.env.UNMASK_API_URL?.trim();
   if (!value) return null;
@@ -17,14 +17,16 @@ export function analyzerUrl(): string | null {
 
 export const REPORT_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
-export type JobStatus =
-  "queued" | "running" | "incomplete" | "failed" | "completed";
+// Job states as src/server/queue.mjs writes them. A job that finished with a report is never served as a
+// job: GET /r/<id>.json returns the bare report instead.
+export type JobStatus = "queued" | "running" | "done" | "incomplete" | "failed";
 
 export interface Job {
   id: string;
   nameAtExactVersion: string;
   status: JobStatus;
   createdAt: number;
+  startedAt?: number;
   finishedAt?: number;
   reason?: string;
   report?: Report;
@@ -34,22 +36,14 @@ export interface Job {
 const STATUSES: JobStatus[] = [
   "queued",
   "running",
+  "done",
   "incomplete",
   "failed",
-  "completed",
 ];
 
-// Live schema-1 overviews use a separate details projection.
 export type Fetched =
   | { ok: true; kind: "job"; job: Job }
-  | {
-      ok: true;
-      kind: "report";
-      schemaVersion: string;
-      analyzer: string;
-      evidence: unknown;
-      modelMetadata: Record<string, unknown>;
-    }
+  | { ok: true; kind: "report"; report: Report }
   | { ok: false; status: number };
 
 export async function fetchJob(id: string): Promise<Fetched> {
@@ -61,44 +55,49 @@ export async function fetchJob(id: string): Promise<Fetched> {
       headers: { accept: "application/json" },
     });
     if (!response.ok) return { ok: false, status: response.status };
-    const body = (await response.json()) as Record<string, unknown>;
-    if (typeof body.schemaVersion === "string")
-      return {
-        ok: true,
-        kind: "report",
-        schemaVersion: body.schemaVersion,
-        analyzer: base,
-        evidence: body.evidence,
-        modelMetadata: Object.fromEntries(
-          [
-            "status",
-            "modelId",
-            "promptHash",
-            "configHash",
-            "reason",
-            "attempts",
-          ].map((key) => [
-            key,
-            body.model && typeof body.model === "object"
-              ? (body.model as Record<string, unknown>)[key]
-              : undefined,
-          ]),
-        ),
-      };
+    const body = (await response.json()) as unknown;
+    if (isReport(body)) return { ok: true, kind: "report", report: body };
+    const job = body as Record<string, unknown> | null;
     if (
-      typeof body.nameAtExactVersion === "string" &&
-      STATUSES.includes(body.status as JobStatus) &&
-      typeof body.createdAt === "number"
+      job &&
+      typeof job.nameAtExactVersion === "string" &&
+      STATUSES.includes(job.status as JobStatus) &&
+      typeof job.createdAt === "number"
     )
       return {
         ok: true,
         kind: "job",
-        job: { ...(body as unknown as Job), id },
+        job: {
+          id,
+          nameAtExactVersion: job.nameAtExactVersion,
+          status: job.status as JobStatus,
+          createdAt: job.createdAt,
+          startedAt:
+            typeof job.startedAt === "number" ? job.startedAt : undefined,
+          finishedAt:
+            typeof job.finishedAt === "number" ? job.finishedAt : undefined,
+          reason: typeof job.reason === "string" ? job.reason : undefined,
+        },
       };
     return { ok: false, status: 502 };
   } catch {
     return { ok: false, status: 502 };
   }
+}
+
+// The model fields the package details show when their projection omits its own model metadata. Only these
+// keys are read from the raw report; hypotheses stay with the details projection.
+export const MODEL_KEYS = [
+  "status",
+  "modelId",
+  "promptHash",
+  "configHash",
+  "reason",
+  "attempts",
+] as const;
+
+export function modelMetadata(report: Report): Record<string, unknown> {
+  return Object.fromEntries(MODEL_KEYS.map((key) => [key, report.model[key]]));
 }
 
 export const checkErrors: Record<string, string> = {

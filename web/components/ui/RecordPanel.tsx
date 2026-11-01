@@ -1,131 +1,107 @@
 import type { RegistryRecord } from "@/lib/registry.ts";
-import { formatBytes, formatCount, repoLabel, shortSha } from "@/lib/report.ts";
 
+const count = new Intl.NumberFormat("en-GB");
+const repoLabel = (url: string) =>
+  url.replace(/^https?:\/\//, "").replace(/\.git$/, "");
+
+// The registry's answer for one release, as the lookup shows it. Styles live in
+// app/home.css under .record.
 export function RecordPanel({
   record,
-  label = "npm registry",
-  compareCount,
-  files,
+  live,
 }: {
   record: RegistryRecord;
-  label?: string;
-  compareCount?: number;
-  files?: string[];
+  live: boolean;
 }) {
   const spec = `${record.name}@${record.version}`;
+  const source = `${live ? "live from" : "from"} registry.npmjs.org`;
+  const runs = [
+    ...record.installScripts.map((s) => `${s.hook}: ${s.command}`),
+    ...(record.native ? ["node-gyp rebuild"] : []),
+  ];
+
   return (
-    <div
-      className="ui ui-record"
-      data-ui
-      aria-label={`Registry record for ${spec}`}
-      role="group"
-    >
-      <div className="ui-head">
-        <span className="ui-title">
-          <code>{spec}</code>
-        </span>
-        <span className="ui-meta">{label}</span>
+    <article className="record" data-ui aria-label={`${spec}, ${source}`}>
+      <div className="record-head">
+        <span className="record-title">{spec}</span>
+        <span className="record-source">· {source}</span>
       </div>
-      <dl className="ui-kv">
-        <div>
-          <dt>Publisher</dt>
-          <dd>{record.publisher ?? <span className="ui-dash">–</span>}</dd>
+      <dl className="record-rows">
+        <div className="record-row">
+          <dt className="record-key">Publisher</dt>
+          <dd className="record-value">{record.publisher ?? "Not recorded"}</dd>
         </div>
-        <div>
-          <dt>Files in tarball</dt>
-          <dd className="num">
-            {record.fileCount === null ? "–" : formatCount(record.fileCount)}
+        <div className="record-row">
+          <dt className="record-key">Files in tarball</dt>
+          <dd className="record-value num">
+            {record.fileCount === null
+              ? "Not recorded"
+              : count.format(record.fileCount)}
           </dd>
         </div>
-        <div>
-          <dt>Unpacked</dt>
-          <dd className="num">
+        <div className="record-row">
+          <dt className="record-key">Unpacked</dt>
+          <dd className="record-value num">
             {record.unpackedSize === null
-              ? "–"
-              : formatBytes(record.unpackedSize)}
+              ? "Not recorded"
+              : `${count.format(record.unpackedSize)} B`}
           </dd>
         </div>
-        <div>
-          <dt>Integrity</dt>
-          <dd>
+        <div className="record-row">
+          <dt className="record-key">Integrity</dt>
+          <dd className="record-value">
             {record.integrity ? (
               <code title={record.integrity}>
                 {record.integrity.slice(0, 22)}…
               </code>
             ) : (
-              <span className="ui-dash">–</span>
+              "Not recorded"
             )}
           </dd>
         </div>
-        <div>
-          <dt>Runs on install</dt>
-          <dd>
-            {record.installScripts.length === 0 && !record.native ? (
+        <div className="record-row">
+          <dt className="record-key">Runs on install</dt>
+          <dd className="record-value">
+            {runs.length === 0 ? (
               "Nothing"
             ) : (
-              <span className="ui-flag">
-                {record.installScripts.map((s) => (
-                  <code key={s.hook}>
-                    {s.hook}: {s.command}
-                  </code>
+              <span className="record-flag">
+                {runs.map((line) => (
+                  <code key={line}>{line}</code>
                 ))}
-                {record.native ? <code>node-gyp rebuild</code> : null}
               </span>
             )}
           </dd>
         </div>
-        <div>
-          <dt>Provenance</dt>
-          <dd>
+        <div className="record-row">
+          <dt className="record-key">Provenance</dt>
+          <dd className="record-value">
             {record.provenance ? "Signed build statement" : "None published"}
           </dd>
         </div>
-      </dl>
-      <div className="ui-claim">
-        <p className="ui-claim-label">Claims to be built from</p>
-        {record.repository && record.gitHead ? (
-          <p className="ui-claim-value">
-            <a
-              href={`${record.repository}/tree/${record.gitHead}`}
-              rel="noreferrer"
-            >
-              <code>{repoLabel(record.repository)}</code>
-              <span className="ui-at">at</span>
-              <code>{shortSha(record.gitHead)}</code>
-            </a>
-          </p>
-        ) : record.repository ? (
-          <p className="ui-claim-value ui-warn">
-            <code>{repoLabel(record.repository)}</code>, no commit recorded. A
-            comparison would have to guess the revision and is marked uncertain.
-          </p>
-        ) : (
-          <p className="ui-claim-value ui-warn">
-            No repository listed. There is no source to compare against.
-          </p>
-        )}
-        {compareCount !== undefined && record.gitHead ? (
-          <p className="ui-claim-note">
-            {formatCount(record.fileCount ?? 0)} published files against{" "}
-            {formatCount(compareCount)} files at {shortSha(record.gitHead)}
-          </p>
-        ) : null}
-      </div>
-      {files ? (
-        <div className="ui-files">
-          <p className="ui-claim-label">Tarball contents</p>
-          <ul>
-            {files.map((path) => (
-              <li key={path}>
-                <code>
-                  <span className="ui-at">package/</span>
-                  {path}
-                </code>
-              </li>
-            ))}
-          </ul>
+        <div className="record-row">
+          <dt className="record-key">Claims to be built from</dt>
+          <dd className="record-value">
+            {record.repository && record.gitHead ? (
+              <a
+                className="record-link"
+                href={`${record.repository}/tree/${record.gitHead}`}
+                rel="noreferrer"
+              >
+                <code>{repoLabel(record.repository)}</code> at{" "}
+                <code>{record.gitHead.slice(0, 7)}</code>
+              </a>
+            ) : record.repository ? (
+              <>
+                <code>{repoLabel(record.repository)}</code>, with no commit
+                recorded
+              </>
+            ) : (
+              "No repository listed"
+            )}
+          </dd>
         </div>
-      ) : null}
-    </div>
+      </dl>
+    </article>
   );
 }

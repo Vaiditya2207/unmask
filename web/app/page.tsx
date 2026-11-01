@@ -1,15 +1,10 @@
-import "./ui.css";
 import "./home.css";
-import { HeroReel } from "@/components/home/HeroReel";
-import { HowItWorks } from "@/components/home/HowItWorks";
-import { FindingStates } from "@/components/home/FindingStates";
-import { Questions } from "@/components/home/Questions";
 import { Entrances } from "@/components/home/Entrances";
-import { RecordPanel } from "@/components/ui/RecordPanel";
-import { FileMap } from "@/components/ui/FileMap";
-import { EvidencePanel } from "@/components/ui/EvidencePanel";
-import { ReviewPanel } from "@/components/ui/ReviewPanel";
-import { sampleReport } from "@/lib/sample-report.ts";
+import { Hero } from "@/components/home/Hero";
+import { Lookup } from "@/components/home/Lookup";
+import { Pipeline } from "@/components/home/Pipeline";
+import { ProofNames } from "@/components/home/ProofNames";
+import { Wordmark } from "@/components/home/Wordmark";
 import {
   clsxRecord,
   lookupRelease,
@@ -17,162 +12,170 @@ import {
   type RegistryRecord,
 } from "@/lib/registry.ts";
 import { analyzerUrl, checkErrors } from "@/lib/analyzer.ts";
-import { incidents, questions, repositoryHref, team } from "@/lib/content.ts";
+import {
+  examples,
+  heroExample,
+  incidents,
+  legal,
+  links,
+  pipeline,
+  questions,
+} from "@/lib/content.ts";
 
 type Search = Promise<Record<string, string | string[] | undefined>>;
 
 const first = (value: string | string[] | undefined) =>
   (Array.isArray(value) ? value[0] : value) ?? "";
 
-async function initialLookup(
-  release: string,
-): Promise<{ record: RegistryRecord | null; error: string | null }> {
-  if (!release) return { record: clsxRecord, error: null };
-  const spec = parseSpec(release);
-  if (!spec.ok) return { record: clsxRecord, error: spec.error };
+const support =
+  "UNMASK compares a published npm release with the source it claims, byte by byte, and shows the evidence for every difference.";
+
+// The release the lookup opens on. Without ?release it is clsx@2.1.1, read live
+// when the registry answers in time and otherwise taken from the bundled record.
+async function initialLookup(release: string): Promise<{
+  record: RegistryRecord;
+  live: boolean;
+  error: string | null;
+}> {
+  const fallback = { record: clsxRecord, live: false };
+  const spec = parseSpec(release || `${clsxRecord.name}@${clsxRecord.version}`);
+  if (!spec.ok) return { ...fallback, error: spec.error };
   const result = await lookupRelease(spec.name, spec.version, {
-    next: { revalidate: 300 },
+    next: { revalidate: release ? 300 : 3600 },
+    signal: AbortSignal.timeout(2500),
   } as RequestInit);
-  return result.ok
-    ? { record: result.record, error: null }
-    : { record: clsxRecord, error: result.error };
+  if (result.ok) return { record: result.record, live: true, error: null };
+  return { ...fallback, error: release ? result.error : null };
 }
 
 export default async function Home({ searchParams }: { searchParams: Search }) {
   const params = await searchParams;
-  const release = first(params.release).slice(0, 300);
+  const release = first(params.release).trim().slice(0, 300);
   const checkValue = first(params.check).slice(0, 300);
   const checkError = first(params.error);
   const lookup = await initialLookup(release);
   const connected = analyzerUrl() !== null;
-  const finding = sampleReport.findings[0];
   const invalidMessage =
     checkError === "invalid" ? parseSpec(checkValue, { exact: true }) : null;
   const checkMessage =
     invalidMessage && !invalidMessage.ok
       ? invalidMessage.error
       : checkError
-        ? checkErrors[checkError]
+        ? (checkErrors[checkError] ?? null)
         : null;
-
-  const nav = (
-    <header className="nav">
-      <a className="wordmark" href="/" aria-label="UNMASK home">
-        UNMASK
-      </a>
-      <nav aria-label="Main" className="nav-links">
-        <a href="#how">How it works</a>
-        <a href="/r/sample">Sample report</a>
-        <a href="#questions">Questions</a>
-        <a className="button nav-action" href="#check">
-          Check a release
-        </a>
-      </nav>
-    </header>
-  );
-
-  const lead = (
-    <div className="hero-lead">
-      <p>
-        UNMASK compares a published npm release with the source commit it
-        claims, file by file, and shows the evidence for every difference.
-      </p>
-      <a className="button hero-action" href="#check">
-        Check a release
-      </a>
-    </div>
-  );
+  const sourceLabel = links.source.replace(/^https?:\/\//, "");
+  const cut = sourceLabel.lastIndexOf("/");
 
   return (
     <>
-      <a className="skip" href="#how">
+      <a className="skip" href="#main">
         Skip to content
       </a>
       <Entrances />
-      <HeroReel
-        nav={nav}
-        lead={lead}
-        frames={[
-          {
-            label: "Release",
-            node: (
-              <RecordPanel
-                record={clsxRecord}
-                compareCount={sampleReport.source.fileCount}
-                files={sampleReport.files.map((f) => f.path)}
-              />
-            ),
-          },
-          { label: "Files", node: <FileMap report={sampleReport} /> },
-          { label: "Evidence", node: <EvidencePanel finding={finding} /> },
-          { label: "Review", node: <ReviewPanel report={sampleReport} /> },
-        ]}
-      />
+
+      <header className="hero on-cobalt" id="top">
+        <nav className="site-nav" aria-label="Main">
+          <Wordmark href="/" />
+          <div className="site-nav-actions">
+            <ul className="site-nav-links">
+              <li>
+                <a className="site-nav-link" href="#how">
+                  How it works
+                </a>
+              </li>
+              <li>
+                <a className="site-nav-link" href={links.example}>
+                  Example report
+                </a>
+              </li>
+              <li>
+                <a className="site-nav-link" href={links.docs}>
+                  Docs
+                </a>
+              </li>
+            </ul>
+            <a className="button" href="#check">
+              Check a release
+            </a>
+          </div>
+        </nav>
+        <Hero
+          build={heroExample.build}
+          appended={heroExample.appended}
+          source={heroExample.source}
+          support={support}
+        />
+      </header>
 
       <main id="main">
         <section className="proof" aria-labelledby="proof-title" data-enter>
-          <h2 id="proof-title" className="proof-title" data-part>
-            Shipped, never committed:
-          </h2>
-          <ul className="proof-list">
-            {incidents.map((incident, i) => (
-              <li
-                key={incident.name}
-                data-part
-                style={{ ["--part" as string]: i + 1 }}
-              >
-                <a href={incident.href} rel="noreferrer">
-                  <span className="proof-name">{incident.name}</span>
-                  <span className="proof-what">
-                    {incident.year}. {incident.what}
-                  </span>
-                </a>
-              </li>
-            ))}
-          </ul>
+          <div className="proof-statement" data-part>
+            <h2 id="proof-title" className="proof-title">
+              Shipped, never committed:
+            </h2>{" "}
+            <ProofNames items={incidents} />
+          </div>
         </section>
 
         <section
           id="how"
-          className="how on-light"
+          className="how"
           aria-labelledby="how-title"
           data-enter
         >
           <h2 id="how-title" className="section-title" data-part>
-            How a check works
+            How a check runs
           </h2>
-          <HowItWorks
+          <p className="how-run" data-part style={{ ["--part" as string]: 1 }}>
+            {pipeline.release}, checked in {pipeline.seconds} seconds.
+          </p>
+          <Pipeline stages={pipeline.stages} />
+        </section>
+
+        <section
+          id="lookup"
+          className="lookup on-dark"
+          aria-labelledby="lookup-title"
+          data-enter
+        >
+          <h2 id="lookup-title" className="lookup-title" data-part>
+            <label htmlFor="lookup-release">Look up any release</label>
+          </h2>
+          <Lookup
             initialQuery={
-              lookup.record
-                ? `${lookup.record.name}@${lookup.record.version}`
-                : release
+              lookup.error && release
+                ? release
+                : `${lookup.record.name}@${lookup.record.version}`
             }
             initialRecord={lookup.record}
+            initialLive={lookup.live}
             initialError={lookup.error}
-            sourceCount={sampleReport.source.fileCount}
-            map={<FileMap report={sampleReport} compact />}
-            evidence={<EvidencePanel finding={finding} wide />}
+            examples={examples}
           />
         </section>
 
         <section
-          className="showcase on-light"
-          aria-labelledby="showcase-title"
-          data-enter
-        >
-          <h2 id="showcase-title" className="section-title" data-part>
-            One finding, three states
-          </h2>
-          <FindingStates finding={finding} />
-        </section>
-
-        <section
           id="questions"
-          className="faq on-light"
+          className="questions"
           aria-labelledby="questions-title"
           data-enter
         >
-          <Questions items={questions} />
+          <h2 id="questions-title" className="questions-title" data-part>
+            Questions
+          </h2>
+          <dl className="questions-list">
+            {questions.map((item, i) => (
+              <div
+                key={item.q}
+                className="question-row"
+                data-part
+                style={{ ["--part" as string]: i + 1 }}
+              >
+                <dt className="question">{item.q}</dt>
+                <dd className="answer">{item.a}</dd>
+              </div>
+            ))}
+          </dl>
         </section>
 
         <section
@@ -181,162 +184,165 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
           aria-labelledby="check-title"
           data-enter
         >
-          <div className="check-main">
-            <form
-              className="check-form"
-              action="/check"
-              method="post"
+          <form className="check-form" action="/check" method="post">
+            <h2 id="check-title" className="check-line" data-part>
+              Before you install
+            </h2>
+            <div
+              className="check-line check-fields"
               data-part
               style={{ ["--part" as string]: 1 }}
             >
-              <h2 id="check-title" className="check-sentence">
-                <span className="check-words">Before you install</span>{" "}
-                <label className="visually-hidden" htmlFor="check-package">
-                  Package name and exact version
-                </label>
-                <input
-                  id="check-package"
-                  className="check-input"
-                  name="package"
-                  defaultValue={checkValue}
-                  placeholder="clsx@2.1.1"
-                  required
-                  maxLength={300}
-                  autoComplete="off"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  aria-describedby={
-                    checkMessage ? "check-note check-error" : "check-note"
-                  }
-                  aria-invalid={checkMessage ? true : undefined}
-                />
-                <span className="check-comma">, </span>
-                <button type="submit" className="check-submit">
-                  check it.
-                </button>
-              </h2>
-            </form>
-            {checkMessage ? (
-              <p
-                className="check-error"
-                id="check-error"
-                role="alert"
-                data-part
-                style={{ ["--part" as string]: 2 }}
-              >
-                {checkMessage}
-              </p>
-            ) : null}
+              <label className="visually-hidden" htmlFor="check-package">
+                Package name and exact version
+              </label>
+              <input
+                id="check-package"
+                className="check-input"
+                name="package"
+                defaultValue={checkValue}
+                placeholder="clsx@2.1.1"
+                required
+                maxLength={300}
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                aria-describedby={
+                  checkMessage ? "check-note check-error" : "check-note"
+                }
+                aria-invalid={checkMessage ? true : undefined}
+              />
+              <span className="check-comma" aria-hidden="true">
+                ,{" "}
+              </span>
+              <button type="submit" className="check-submit">
+                check it.
+              </button>
+            </div>
+          </form>
+          {checkMessage ? (
             <p
-              className="check-note"
-              id="check-note"
+              className="check-error"
+              id="check-error"
+              role="alert"
               data-part
-              style={{ ["--part" as string]: 3 }}
+              style={{ ["--part" as string]: 2 }}
             >
-              {connected ? (
-                "A check sends the package name and version to the UNMASK server, which may send bounded public excerpts to Google for advisory explanations. Reports are kept for up to 30 minutes."
-              ) : (
-                <>
-                  The analyzer is not connected to this site yet. Until it is,
-                  the{" "}
-                  <a className="text-link" href="/r/sample">
-                    sample report
-                  </a>{" "}
-                  shows what a check returns.
-                </>
-              )}
+              {checkMessage}
             </p>
-          </div>
-          <figure
-            className="check-side"
+          ) : null}
+          <p
+            className="check-note"
+            id="check-note"
             data-part
-            style={{ ["--part" as string]: 2 }}
+            style={{ ["--part" as string]: 3 }}
           >
-            <ReviewPanel report={sampleReport} compact />
-            <figcaption>
-              What a check returns, shown for the sample release.
-            </figcaption>
-          </figure>
+            {connected ? (
+              "A check sends the package name and version to the UNMASK server, which may send bounded public package and source excerpts to Google for advisory explanations. Reports are kept for up to 30 minutes."
+            ) : (
+              <>
+                Checks run on the UNMASK analyzer, which this deployment does
+                not include. The{" "}
+                <a className="text-link" href={links.example}>
+                  example report
+                </a>{" "}
+                shows what a check returns.
+              </>
+            )}
+          </p>
         </section>
       </main>
 
-      <footer className="footer" data-enter>
-        <div className="tile tile-statement" data-part>
-          <p>
-            UNMASK shows evidence for review and never declares a package safe.
-          </p>
-          <p className="tile-small">MIT licence. Open source on GitHub.</p>
+      <footer className="site-footer on-dark" data-enter>
+        <div className="footer-top" data-part>
+          <Wordmark href="#top" />
+          <div className="footer-notes">
+            <p className="footer-note">
+              Evidence for every byte a release ships.
+            </p>
+            <p className="footer-note">Never a verdict of safe.</p>
+          </div>
+          <a className="footer-back" href="#top">
+            Back to top
+            <svg
+              className="footer-back-arrow"
+              viewBox="0 0 12 12"
+              aria-hidden="true"
+            >
+              <path
+                d="M6 10.5V2M2.5 5.5L6 2l3.5 3.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+              />
+            </svg>
+          </a>
         </div>
-        <nav
-          className="tile tile-nav"
-          aria-label="Footer"
-          data-part
-          style={{ ["--part" as string]: 1 }}
-        >
-          <ul>
-            <li>
-              <a href="#how">How it works</a>
-            </li>
-            <li>
-              <a href="/r/sample">Sample report</a>
-            </li>
-            <li>
-              <a href="#questions">Questions</a>
-            </li>
-            <li>
-              <a href={repositoryHref} rel="noreferrer">
-                Source code
-              </a>
-            </li>
-          </ul>
-        </nav>
-        <div
-          className="tile tile-place"
-          data-part
-          style={{ ["--part" as string]: 2 }}
-        >
-          <p>
-            Built at Hack Day Sonipat, Newton School of Technology, Rishihood
-            University.
-          </p>
-          <p className="tile-small">31 October – 1 November 2026</p>
+
+        <div className="footer-bottom">
+          <a
+            className="footer-display"
+            href={links.source}
+            data-part
+            style={{ ["--part" as string]: 1 }}
+          >
+            <span className="footer-display-line">
+              {sourceLabel.slice(0, cut)}
+            </span>
+            <span className="footer-display-line">
+              {sourceLabel.slice(cut)}
+              <svg
+                className="footer-display-arrow"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  d="M5.5 18.5L17 7M7.5 5.5h11v11"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="4.6"
+                />
+              </svg>
+            </span>
+          </a>
+          <div
+            className="footer-meta"
+            data-part
+            style={{ ["--part" as string]: 2 }}
+          >
+            <ul className="footer-links">
+              <li>
+                <a className="footer-link" href="#how">
+                  How it works
+                </a>
+              </li>
+              <li>
+                <a className="footer-link" href={links.example}>
+                  Example report
+                </a>
+              </li>
+              <li>
+                <a className="footer-link" href={links.docs}>
+                  Docs
+                </a>
+              </li>
+              <li>
+                <a className="footer-link" href={links.cli}>
+                  CLI
+                </a>
+              </li>
+              <li>
+                <a className="footer-link" href={links.issues}>
+                  Report an issue
+                </a>
+              </li>
+            </ul>
+            <p className="footer-legal">{legal}</p>
+            <a className="footer-link footer-open" href={links.source}>
+              Open source
+            </a>
+          </div>
         </div>
-        <div
-          className="tile tile-team"
-          data-part
-          style={{ ["--part" as string]: 3 }}
-        >
-          <p className="tile-small">Team Cappybara</p>
-          <ul>
-            {team.map((name) => (
-              <li key={name}>{name}</li>
-            ))}
-          </ul>
-        </div>
-        <p
-          className="tile tile-word"
-          aria-hidden="true"
-          data-part
-          style={{ ["--part" as string]: 4 }}
-        >
-          UNMASK
-        </p>
-        <a
-          className="tile tile-go"
-          href="#check"
-          data-part
-          style={{ ["--part" as string]: 5 }}
-        >
-          <span>Check a release</span>
-          <svg viewBox="0 0 48 48" width="48" height="48" aria-hidden="true">
-            <path
-              d="M8 40 40 8M16 8h24v24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-          </svg>
-        </a>
       </footer>
     </>
   );
