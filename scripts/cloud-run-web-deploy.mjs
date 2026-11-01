@@ -558,8 +558,9 @@ export async function deployWeb({
     preservedCandidate(current) &&
     Number(current.metadata.generation) === expectedGeneration &&
     canonical(routes(current)) === canonical([{ revisionName, percent: 100 }]);
+  let phase = "traffic promotion";
   try {
-    const promoted = json([
+    json([
       "run",
       "services",
       "update-traffic",
@@ -571,9 +572,9 @@ export async function deployWeb({
       "--quiet",
       ...suffix,
     ]);
-    if (Number(promoted.metadata?.generation) !== expectedGeneration)
-      throw new Error("Unexpected web promotion generation");
+    phase = "promoted route ownership";
     await until(describe, (current) => isReady(current) && owns(current));
+    phase = "public smoke";
     await smoke({
       baseURL: publicURL,
       commit: input.commit,
@@ -582,6 +583,7 @@ export async function deployWeb({
       phase: "public",
       fetchImpl,
     });
+    phase = "post-verification ownership";
     if (!owns(describe()))
       throw new Error("External web state changed after public verification");
   } catch {
@@ -589,7 +591,7 @@ export async function deployWeb({
     const current = describe();
     if (!owns(current))
       throw new Error(
-        "Web verification failed; rollback skipped because exact owned state was not observed",
+        `Web verification failed during ${phase}; rollback skipped because exact owned state was not observed`,
       );
 
     json([
@@ -606,7 +608,9 @@ export async function deployWeb({
       describe,
       (current) => canonical(routes(current)) === canonical(previous),
     );
-    throw new Error("Web verification failed; previous route restored");
+    throw new Error(
+      `Web verification failed during ${phase}; previous route restored`,
+    );
   }
   return {
     project,
