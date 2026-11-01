@@ -23,3 +23,6 @@ next-env.d.ts
 internal/
 research/
 *.internal.md
+
+# Private local UNMASK report snapshots
+.unmask-cache/
