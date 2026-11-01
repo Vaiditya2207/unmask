@@ -1,5 +1,6 @@
 "use client";
 
+import { PackageInput } from "./PackageInput";
 import { useRef, useState } from "react";
 import { RecordPanel } from "@/components/ui/RecordPanel";
 import {
@@ -81,7 +82,7 @@ export function Lookup({
           style={{ ["--chars" as string]: Math.max(10, query.length) }}
         >
           <span className="lookup-field" data-value={query || " "}>
-            <input
+            <PackageInput
               id="lookup-release"
               className="lookup-input"
               name="release"

@@ -12,5 +12,5 @@
   "web": "dist/viewer/shell.mjs",
   "dockerfile": "Dockerfile",
   "productTestDirectory": "tests/product",
-  "productionDeployVersion": "0.1.4"
+  "productionDeployVersion": "0.1.5"
 }

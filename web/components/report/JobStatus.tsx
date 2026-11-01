@@ -1,3 +1,4 @@
+import { parseAdvisoryResult } from "@/lib/advisory-result.ts";
 import type { Job } from "@/lib/analyzer.ts";
 import { formatUtc } from "@/lib/report.ts";
 import { AutoRefresh } from "@/components/report/AutoRefresh";
@@ -91,6 +92,44 @@ export function JobStatus({ job }: { job: Job }) {
       </>
     );
   }
+  const advisory = parseAdvisoryResult(
+    job.advisoryResult,
+    job.nameAtExactVersion,
+  );
+  if (advisory)
+    return (
+      <section className="report-card state-card advisory-recovery">
+        <header className="report-header">
+          <div className="report-header__text">
+            <h1 className="report-title">{job.nameAtExactVersion}</h1>
+            <p className="report-meta">
+              Advisory-only result · artifact not inspected
+            </p>
+          </div>
+        </header>
+        <h2 className="report-card__title">{advisory.headline}</h2>
+        <p>{advisory.detail}</p>
+        <ul>
+          {advisory.vulnerability.advisories.map((item, index) => (
+            <li key={index}>
+              <strong>
+                {typeof item.id === "string"
+                  ? item.id.slice(0, 160)
+                  : "Advisory"}
+              </strong>
+              {typeof item.summary === "string" ? (
+                <p>{item.summary.slice(0, 1200)}</p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+        <p className="report-foot__note">
+          Lookup status: {advisory.vulnerability.status}. Artifact:{" "}
+          {advisory.artifactReason}. Full retained data is available in{" "}
+          <a href={`/api/reports/${job.id}`}>the JSON download</a>.
+        </p>
+      </section>
+    );
   const copy = stopped[job.reason ?? ""] ?? stopped["analysis-failed"];
   const label = job.status === "incomplete" ? "Incomplete" : "Failed";
   return (

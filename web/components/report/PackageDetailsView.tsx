@@ -335,7 +335,7 @@ export function PackageDetailsView({
   const source = record(
     rows(d.provenance.facts).find((item) => item.field === "source")?.value,
   );
-  const model = record(d.ai.metadata.items[0] ?? rawModel);
+  const model = { ...record(rawModel), ...record(d.ai.metadata.items[0]) };
   const coverage = d.coverage.counters;
 
   // A published file carries the review signal on this sheet when it differs from the source and the
@@ -1465,6 +1465,24 @@ export function PackageDetailsView({
         title="AI advisory explanation"
         sub="Advice cannot change deterministic findings"
       >
+        {typeof model.summary === "string" && model.status === "complete" ? (
+          <div className="pkg-pad ai-summary">
+            <h3 className="pkg-subtitle">Summary</h3>
+            <p>{text(model.summary, 600)}</p>
+            {typeof record(model.assessment).uncertainty === "string" ? (
+              <p>
+                <strong>Uncertainty:</strong>{" "}
+                {text(record(model.assessment).uncertainty, 300)}
+              </p>
+            ) : null}
+            {typeof record(model.assessment).nextAction === "string" ? (
+              <p>
+                <strong>Next step:</strong>{" "}
+                {text(record(model.assessment).nextAction, 200)}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         <dl className="pkg-facts pkg-facts--five pkg-pad">
           <Fact label="Status">{status(model.status)}</Fact>
           <Fact label="Model">

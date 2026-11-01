@@ -100,7 +100,7 @@ export const questions = [
   },
   {
     q: "What does the model do?",
-    a: "When enabled, Gemma (gemma-4-26b-a4b-it, hosted by Google) explains bounded evidence as hypotheses with exact quotations. Every quotation is checked against the file, and model output never clears a difference. Without the model, every deterministic finding still stands.",
+    a: "AI explains selected evidence and suggests what to review next. Quotes are checked against the files. The report names the model used and shows when AI is unavailable; it never overrides the deterministic findings.",
   },
   {
     q: "How long is a report kept?",
